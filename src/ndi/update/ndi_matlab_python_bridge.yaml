@@ -19,7 +19,7 @@ functions:
   - name: check
     type: function
     matlab_path: "+ndi/+update/check.m"
-    matlab_last_sync_hash: "f9ced4bcd"
+    matlab_last_sync_hash: "a24f19076"
     python_path: "ndi/update/check.py"
     input_arguments:
       - name: IncludeDependencies
@@ -60,11 +60,15 @@ functions:
       NDI-matlab checks this same install. Adds CanInstall and InstalledAt
       (both from checkPython's result) and drops ReleaseUrl, MltbxUrl,
       BothInstalled and Python. NaN counts are None.
+      2026-10-19: NDI-matlab a24f19076: untracked files no longer count as the user's
+      modifications (git stash and pull leave them alone); only untracked files
+      at a path the update adds a file to are reported, as BlockingFiles
+      (replacing NewFiles), and they set HasModifications. Ported the same.
 
   - name: install
     type: function
     matlab_path: "+ndi/+update/install.m"
-    matlab_last_sync_hash: "f9ced4bcd"
+    matlab_last_sync_hash: "a24f19076"
     python_path: "ndi/update/install.py"
     input_arguments:
       - name: Confirm
@@ -98,6 +102,11 @@ functions:
       install-ndi.ps1 in its own window, waiting for this process to exit,
       because a running ndi.exe cannot be replaced. Clears caches afterwards,
       as MATLAB does. Ask stands in for MATLAB's input (tests).
+      2026-10-19: NDI-matlab a24f19076: untracked files no longer count as the user's
+      modifications (git stash and pull leave them alone); only untracked files
+      at a path the update adds a file to are reported, as BlockingFiles
+      (replacing NewFiles), and install stops before starting with
+      ndi:update:install:untrackedFilesInTheWay, even with AllowModified. Ported the same.
 
   - name: installType
     type: function
@@ -121,7 +130,7 @@ functions:
   - name: modificationSummary
     type: function
     matlab_path: "+ndi/+update/modificationSummary.m"
-    matlab_last_sync_hash: "f9ced4bcd"
+    matlab_last_sync_hash: "a24f19076"
     python_path: "ndi/update/modification_summary.py"
     input_arguments:
       - name: result
@@ -135,6 +144,10 @@ functions:
       Ported 2026-10-18 against NDI-matlab f9ced4bcd. Same layout. The closing
       sentence says changed files are put back after the update, because
       Python's git update restores the stash (see install).
+      2026-10-19: NDI-matlab a24f19076: untracked files no longer count as the user's
+      modifications (git stash and pull leave them alone); only untracked files
+      at a path the update adds a file to are reported, as BlockingFiles
+      (replacing NewFiles), and the summary lists them as "in the way". Ported the same.
 
   - name: checkOnStartup
     type: function

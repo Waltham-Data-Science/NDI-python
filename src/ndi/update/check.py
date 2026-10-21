@@ -96,8 +96,11 @@ def check(
         ``UpdateAvailable``, ``CurrentVersion``, ``LatestVersion``,
         ``Message``, ``Branch``, ``CommitsBehind``, ``CommitsAhead``,
         ``HasModifications``, ``Modifications`` (one dict per repository
-        with ``Name``, ``Path``, ``ChangedFiles``, ``NewFiles`` and
-        ``CommitsAhead``), ``Dependencies`` (``Name``, ``Path``, ``Status``,
+        where updating touches the user's work, with ``Name``, ``Path``,
+        ``ChangedFiles``, ``BlockingFiles`` -- untracked files at a path the
+        update adds a file to, which git will not overwrite -- and
+        ``CommitsAhead``; other untracked files are left alone and not
+        listed), ``Dependencies`` (``Name``, ``Path``, ``Status``,
         ``CommitsBehind``) and ``RepoRoot``.
 
     Python-specific Notes:
@@ -171,7 +174,9 @@ def _check_git(result: dict[str, Any], info: dict[str, Any], include_deps: bool)
     result["CommitsBehind"] = _to_int(behind)
     result["CommitsAhead"] = _to_int(ahead)
 
-    mods = _local_modifications("NDI-python", repo, result["CommitsAhead"])
+    mods = _local_modifications(
+        "NDI-python", repo, result["CommitsAhead"], _incoming_new_files(repo, "origin/main")
+    )
     if include_deps:
         tools = Path(info.get("NdiHome") or Path.home() / ".ndi") / "tools"
         deps, dep_mods = _check_dependencies(tools)
@@ -239,7 +244,12 @@ def _check_dependencies(tools: Path) -> tuple[list[dict[str, Any]], list[dict[st
         counted, behind = run_git(path, "rev-list", "--count", "HEAD..@{u}")
         ahead_status, ahead = run_git(path, "rev-list", "--count", "@{u}..HEAD")
         mods.extend(
-            _local_modifications(path.name, path, _to_int(ahead) if ahead_status == 0 else 0)
+            _local_modifications(
+                path.name,
+                path,
+                _to_int(ahead) if ahead_status == 0 else 0,
+                _incoming_new_files(path, "@{u}"),
+            )
         )
         if fetched == 0 and counted == 0:
             dep["CommitsBehind"] = _to_int(behind)
@@ -249,27 +259,43 @@ def _check_dependencies(tools: Path) -> tuple[list[dict[str, Any]], list[dict[st
 
 
 def _local_modifications(
-    name: str, repo: str | Path, commits_ahead: int | None
+    name: str, repo: str | Path, commits_ahead: int | None, incoming: list[str]
 ) -> list[dict[str, Any]]:
-    """A one-element list if REPO has edited, added or unpushed code, else []."""
-    status, out = run_git(repo, "status", "--porcelain")
+    """A one-element list if updating REPO would touch the user's work, else [].
+
+    That is: edited tracked files, commits not upstream, or untracked files
+    at a path the update adds a file to (``incoming``). Other untracked files
+    are not the update's business: git stash and git pull leave them alone.
+    """
+    # --untracked-files=all lists each file, not just an untracked folder, so
+    # an untracked file can be matched against the update's new paths.
+    status, out = run_git(repo, "status", "--porcelain", "--untracked-files=all")
     if status != 0:
         return []
     lines = [line for line in out.splitlines() if len(line) > 3]
     changed = [line[3:] for line in lines if not line.startswith("??")]
-    added = [line[3:] for line in lines if line.startswith("??")]
+    incoming_set = set(incoming)
+    blocking = [line[3:] for line in lines if line.startswith("??") and line[3:] in incoming_set]
     commits_ahead = commits_ahead or 0
-    if not changed and not added and commits_ahead == 0:
+    if not changed and not blocking and commits_ahead == 0:
         return []
     return [
         {
             "Name": name,
             "Path": str(repo),
             "ChangedFiles": changed,
-            "NewFiles": added,
+            "BlockingFiles": blocking,
             "CommitsAhead": commits_ahead,
         }
     ]
+
+
+def _incoming_new_files(repo: str | Path, upstream: str) -> list[str]:
+    """Paths that the update (HEAD -> UPSTREAM) adds as new files."""
+    status, out = run_git(repo, "diff", "--name-only", "--diff-filter=A", "HEAD", upstream)
+    if status != 0:
+        return []
+    return [line for line in out.splitlines() if line]
 
 
 # ---------------------------------------------------------------------------

@@ -61,9 +61,12 @@ def install(
       ``~/.ndi/tools`` and reinstalls NDI-python and its dependencies into
       this environment. Changed files are stashed for the pull and put back
       afterwards. The clone must be on main. If you have changed code
-      (edited or added files, or local commits) in NDI-python or a
+      (edited tracked files, or local commits) in NDI-python or a
       dependency, the changes are listed first and you are asked whether to
-      update anyway; the default answer is No.
+      update anyway; the default answer is No. Untracked files of your own
+      are left alone and need no answer, unless one is at a path the update
+      adds a file to: git will not overwrite it, so the update stops before
+      starting and asks you to move it.
     * **installer**: runs the NDI installer again (``install-ndi.sh --yes
       --no-path``), which reinstalls NDI-python and all its dependencies
       from main. On Windows the running ``ndi`` cannot be replaced while it
@@ -91,6 +94,7 @@ def install(
 
     Raises:
         UpdateError: ``ndi:update:install:notOnMain``,
+            ``ndi:update:install:untrackedFilesInTheWay``,
             ``ndi:update:install:localModifications``,
             ``ndi:update:install:noInstaller``,
             ``ndi:update:install:pullFailed``,
@@ -133,6 +137,20 @@ def _install_git(
             "ndi:update:install:notOnMain",
             f"NDI-python in {repo} is on branch '{result['Branch']}'. Updates come "
             "from main; run 'git checkout main' there first.",
+        )
+
+    blocking = [
+        str(Path(m["Path"]) / f) for m in result["Modifications"] for f in m["BlockingFiles"]
+    ]
+    if blocking:
+        # git pull would stop part-way rather than overwrite these, so no answer
+        # to "update anyway?" could make the update work.
+        raise UpdateError(
+            "ndi:update:install:untrackedFilesInTheWay",
+            "The update adds files at these paths, where you have untracked files "
+            "of your own. git will not overwrite them, so the update would stop "
+            "part-way. Move or rename them, then update again:\n"
+            + "\n".join(f"  {f}" for f in blocking),
         )
 
     if result["HasModifications"]:
