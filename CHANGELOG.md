@@ -115,6 +115,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   The viewer also now prints one `[lightsheet] tiles:` line per burst of reads
   showing where tile time goes (path lookup, queue wait, disk read, decode,
   and the burst's wall-clock span); `NDI_LIGHTSHEET_TIMING=0` turns it off.
+  The gene-expression pyramid viewer built its levels the same way and gets
+  the same fix.
 
 - **Saving preferences no longer drops NDI-matlab's own entries.**
   `~/.ndi/NDI_Preferences.json` is shared with NDI-matlab, and each side

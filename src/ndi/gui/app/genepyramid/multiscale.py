@@ -275,7 +275,9 @@ def levelArrays(session, pyr_doc, gene_rows=None, density: bool = True) -> list[
     Returns:
         A list of dask arrays, finest first.
     """
-    dask, da = _require_dask()
+    _dask, da = _require_dask()
+    from dask.base import tokenize
+
     levels, _frame = levelTable(session, pyr_doc)
     fetcher = _TileFetcher(session)
 
@@ -303,8 +305,7 @@ def levelArrays(session, pyr_doc, gene_rows=None, density: bool = True) -> list[
         # The block being lazy never helped, because the cost was already
         # paid by the time dask chose its blocks.
         def block(
-            r,
-            c,
+            block_info=None,
             _fetch=fetcher,
             _doc=tile_doc,
             _cols=cols,
@@ -315,6 +316,7 @@ def levelArrays(session, pyr_doc, gene_rows=None, density: bool = True) -> list[
             _name=tileFileName,
             _lv=lv_props,
         ):
+            r, c = block_info[None]["chunk-location"]
             name = _name(_lv, r * _cols + c)
             if name not in _stored:
                 return np.zeros((_th, _tw), np.float32)  # missing tile costs nothing
@@ -330,13 +332,24 @@ def levelArrays(session, pyr_doc, gene_rows=None, density: bool = True) -> list[
                 tile = readTileFile(_fetch.tilePath(_doc, name))
             return renderTile(tile, gene_rows, _th, _tw, binSize=_scale)
 
-        grid = [
-            [
-                da.from_delayed(dask.delayed(block)(r, c), shape=(th, tw), dtype=np.float32)
-                for c in range(cols)
-            ]
-            for r in range(rows)
-        ]
+        # ONE graph layer per level, one block per tile. Building the level
+        # as one from_delayed array per tile joined by da.block gave dask one
+        # layer per tile, and dask walks every layer each time napari
+        # computes a slice -- so drawing a view cost time in proportion to
+        # the whole level, not to the tiles on screen (seconds on a level of
+        # tens of thousands of tiles). The name is explicit: tokenizing the
+        # closure would hash the fetcher, and id(fetcher) keeps two viewers
+        # of the same pyramid from sharing keys.
+        token = tokenize(
+            getattr(tile_doc, "id", str(tile_doc)), b, gene_rows, density, th, tw, id(fetcher)
+        )
+        level = da.map_blocks(
+            block,
+            chunks=((th,) * rows, (tw,) * cols),
+            dtype=np.float32,
+            meta=np.empty((0, 0), np.float32),
+            name=f"ndi-genepyramid-level-{token}",
+        )
         # Crop to the level's TRUE size. The assembled grid is
         # rows*th by cols*tw, which overshoots whenever the level does not
         # divide evenly by the grid. Leaving the padding on makes a level
@@ -344,7 +357,7 @@ def levelArrays(session, pyr_doc, gene_rows=None, density: bool = True) -> list[
         # pyramid disagree about their own field of view and a viewer
         # registering them by shape ratio misaligns them -- worse at coarse
         # levels, where the rounding is proportionally larger.
-        out.append(da.block(grid)[:lh, :lw])
+        out.append(level[:lh, :lw])
 
     return out
 
