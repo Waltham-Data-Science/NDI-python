@@ -18,6 +18,7 @@ import numpy as np
 import pytest
 
 from ndi.fun.probe.export import (
+    AUTO_MULTIPLIER_SAMPLES,
     INTAN_MULTIPLIER,
     _colon,
     all_binary,
@@ -74,6 +75,35 @@ class FakeProbe:
 
     def getchanneldevinfo(self, epoch):  # noqa: ARG002
         return (None, None, "ai", list(range(1, self._channels + 1)))
+
+
+class DataProbe(FakeProbe):
+    """A probe whose samples come from ``datafcn(t)``, as MATLAB's MockDataProbe.
+
+    One 200 s epoch at 1000 Hz; ``datafcn`` gets the column of sample times
+    and returns the (samples x channels) block.
+    """
+
+    def __init__(self, datafcn, **kwargs):
+        kwargs.setdefault("epochs", (200.0,))
+        super().__init__(**kwargs)
+        self._datafcn = datafcn
+
+    def readtimeseries(self, timeref_or_epoch=None, t0=0.0, t1=0.0, timeref=None):  # noqa: ARG002
+        first = int(round(t0 * self._rate))
+        last = int(round(t1 * self._rate))
+        t = (np.arange(first, last + 1) / self._rate)[:, None]
+        return self._datafcn(t), t.ravel(), None
+
+
+def whole_number_counts(t):
+    """Raw ADC counts returned as double, as SpikeGLX gives them."""
+    return np.round(1000 * np.sin(1000 * t * np.array([1, 2])) + 600)
+
+
+def intan_microvolts(t):
+    """Floating-point physical data: int16 * 0.195, offset off the grid."""
+    return 0.195 * np.round(1000 * np.sin(1000 * t * np.array([1, 2]))) + 0.0975
 
 
 class FakeSession:
@@ -169,11 +199,72 @@ class TestBinary:
 
 
 class TestAutoMultiplier:
+    """MATLAB: tests/+ndi/+unittest/+fun/+probe/AutoMultiplierTest.m"""
+
     def test_integer_data_passes_through_unscaled(self):
         assert autoMultiplier(FakeProbe(dtype=np.int16)) == 1.0
 
+    def test_integer_class_data(self):
+        probe = DataProbe(lambda t: np.round(1000 * np.sin(t * np.array([1, 2]))).astype(np.int16))
+        assert autoMultiplier(probe) == 1.0
+
+    def test_whole_number_double_data_passes_through_unscaled(self):
+        """Raw counts returned as double (SpikeGLX) are counts, not microvolts."""
+        assert autoMultiplier(DataProbe(whole_number_counts)) == 1.0
+
     def test_floating_point_data_gets_the_intan_default(self):
-        assert autoMultiplier(FakeProbe(dtype=np.float64)) == pytest.approx(INTAN_MULTIPLIER)
+        assert autoMultiplier(DataProbe(intan_microvolts)) == pytest.approx(INTAN_MULTIPLIER)
+
+    def test_all_zero_data_is_inconclusive(self):
+        probe = DataProbe(lambda t: np.zeros((t.shape[0], 2)))
+        assert autoMultiplier(probe) == pytest.approx(INTAN_MULTIPLIER)
+
+    def test_non_finite_samples_are_ignored(self):
+        def counts_with_nan(t):
+            d = whole_number_counts(t)
+            d[0, 0] = np.nan
+            return d
+
+        assert autoMultiplier(DataProbe(counts_with_nan)) == 1.0
+
+    def test_a_stretch_is_examined_not_one_sample(self):
+        """A first sample that happens to be whole must not decide it."""
+        probe = DataProbe(lambda t: np.hstack([600 + 500 * t, 600 + 500 * t]))  # 600, 600.5, ...
+        assert autoMultiplier(probe) == pytest.approx(INTAN_MULTIPLIER)
+
+    def test_it_reads_at_most_the_first_hundred_samples(self):
+        seen = []
+
+        def record(t):
+            seen.append(t.shape[0])
+            return whole_number_counts(t)
+
+        autoMultiplier(DataProbe(record))
+        assert seen == [AUTO_MULTIPLIER_SAMPLES]
+
+    def test_a_short_epoch_is_read_to_its_end(self):
+        seen = []
+
+        def record(t):
+            seen.append(t.shape[0])
+            return whole_number_counts(t)
+
+        autoMultiplier(DataProbe(record, epochs=(0.009,)))
+        assert seen == [10]
+
+    def test_without_a_sample_rate_one_sample_is_examined(self):
+        seen = []
+
+        def record(t):
+            seen.append(t.shape[0])
+            return whole_number_counts(t)
+
+        class NoRate(DataProbe):
+            def samplerate(self, epoch_id):  # noqa: ARG002
+                raise RuntimeError("no rate")
+
+        assert autoMultiplier(NoRate(record)) == 1.0
+        assert seen == [1]
 
     def test_an_unsamplable_probe_keeps_the_default(self):
         class Broken(FakeProbe):
@@ -274,3 +365,60 @@ class TestAllBinary:
         probe = FakeProbe(epochs=(0.001,))
         export_all_binary(FakeSession(tmp_path, [probe]), kilosort_dir="ks", verbose=False)
         assert (tmp_path / "ks" / "ctx_-_1" / "kilosort.bin").is_file()
+
+
+class TestAllBinaryMultiplier:
+    """MATLAB: the multiplier tests of ExportAllBinaryTest.m.
+
+    The multiplier is read back from the ``.metadata`` sidecar, as MATLAB
+    reads it with ``vlt.file.loadStructArray``.
+    """
+
+    @staticmethod
+    def export_and_read_multiplier(tmp_path, probe, **kwargs):
+        from vlt.file import loadStructArray
+
+        all_binary(
+            FakeSession(tmp_path, [probe]),
+            verbose=0,
+            binary_dir="kilosort_mult_test",
+            noBinary=True,
+            **kwargs,
+        )
+        metafile = tmp_path / "kilosort_mult_test" / "ctx_-_1" / "kilosort.bin.metadata"
+        assert metafile.is_file()
+        return float(loadStructArray(str(metafile))[0]["multiplier"])
+
+    def test_floating_point_data_keep_the_intan_default(self, tmp_path):
+        mult = self.export_and_read_multiplier(tmp_path, DataProbe(intan_microvolts))
+        assert mult == pytest.approx(INTAN_MULTIPLIER, rel=1e-9)
+
+    def test_whole_number_counts_pass_through_unscaled(self, tmp_path):
+        mult = self.export_and_read_multiplier(tmp_path, DataProbe(whole_number_counts))
+        assert mult == 1.0
+
+    def test_an_explicit_multiplier_overrides(self, tmp_path):
+        mult = self.export_and_read_multiplier(
+            tmp_path, DataProbe(whole_number_counts), multiplier=2
+        )
+        assert mult == 2.0
+
+    def test_each_probe_gets_its_own_multiplier(self, tmp_path):
+        from vlt.file import loadStructArray
+
+        probes = [
+            DataProbe(whole_number_counts, reference=1),
+            DataProbe(intan_microvolts, reference=2),
+        ]
+        all_binary(FakeSession(tmp_path, probes), verbose=0, noBinary=True)
+
+        def mult(ref):
+            meta = tmp_path / "kilosort" / f"ctx_-_{ref}" / "kilosort.bin.metadata"
+            return float(loadStructArray(str(meta))[0]["multiplier"])
+
+        assert mult(1) == 1.0
+        assert mult(2) == pytest.approx(INTAN_MULTIPLIER)
+
+    def test_verbose_reports_the_multiplier_used(self, tmp_path, capsys):
+        all_binary(FakeSession(tmp_path, [DataProbe(intan_microvolts)]), verbose=1, noBinary=True)
+        assert "  Using multiplier 5.1282." in capsys.readouterr().out

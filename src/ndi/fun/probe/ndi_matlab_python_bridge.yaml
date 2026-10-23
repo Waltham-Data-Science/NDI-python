@@ -195,7 +195,7 @@ functions:
   - name: export.all_binary
     type: function
     matlab_path: "+ndi/+fun/+probe/+export/all_binary.m"
-    matlab_last_sync_hash: "1b99d29"
+    matlab_last_sync_hash: "deaacebc5"
     python_path: "ndi/fun/probe/export.py"
     input_arguments:
       - name: S
@@ -213,9 +213,9 @@ functions:
         type_python: "int | bool"
         default: "1"
       - name: multiplier
-        type_matlab: "double (1/0.195)"
-        type_python: "float"
-        default: "1/0.195"
+        type_matlab: "double ([] = auto, per probe)"
+        type_python: "float | None"
+        default: "None (autoMultiplier, per probe)"
       - name: noBinary
         type_python: "bool"
         default: "False"
@@ -225,10 +225,21 @@ functions:
       as MATLAB's do, so an existing legacy '|' folder is reused rather than
       duplicated; the earlier port built the name itself by replacing spaces.
 
+      2026-10-23: synced to NDI-matlab deaacebc5 (ece570c4a, then Code
+      Analyzer cleanups). The multiplier default is now MATLAB's [] -- None
+      here -- meaning autoMultiplier picks it SEPARATELY FOR EACH PROBE, so a
+      session mixing raw-count and microvolt probes exports each correctly; a
+      number still applies to every probe. Verbose output reports the
+      multiplier used per probe ("  Using multiplier 5.1282.", num2str's five
+      significant digits). The retained export_all_binary name above keeps
+      its fixed 1/0.195 default: it stands in for the removed MATLAB file,
+      which had one. MATLAB's ExportAllBinaryTest multiplier tests are ported
+      in tests/test_fun_probe_export.py.
+
   - name: export.autoMultiplier
     type: function
     matlab_path: "+ndi/+fun/+probe/+export/autoMultiplier.m"
-    matlab_last_sync_hash: "0e2caa0"
+    matlab_last_sync_hash: "deaacebc5"
     python_path: "ndi/fun/probe/export.py"
     input_arguments:
       - name: probe
@@ -241,10 +252,19 @@ functions:
       the default whenever the probe cannot be sampled. snake_case alias
       auto_multiplier.
 
+      2026-10-23: synced to NDI-matlab deaacebc5 (b2dcdd29d, then Code
+      Analyzer cleanups). Reads up to 100 samples (AUTO_MULTIPLIER_SAMPLES)
+      from the start of the first epoch rather than one -- a single sample
+      when the probe has no sample rate -- and also returns 1 when the
+      finite values are all whole numbers and not all zero, i.e. raw counts
+      returned as floating point (SpikeGLX). An all-zero stretch is
+      inconclusive and keeps 1/0.195. MATLAB's AutoMultiplierTest is ported
+      in tests/test_fun_probe_export.py.
+
   - name: export.oneProbe
     type: function
     matlab_path: "+ndi/+fun/+probe/+export/oneProbe.m"
-    matlab_last_sync_hash: "1b99d29"
+    matlab_last_sync_hash: "ece570c4a"
     python_path: "ndi/fun/probe/export.py"
     input_arguments:
       - name: S
@@ -283,6 +303,11 @@ functions:
       kept, as SessionApp.list's records do. hadGeometry is the caller's cue
       that the channel map is a default linear placeholder rather than the
       probe's real layout. snake_case alias one_probe.
+
+      2026-10-23: synced to NDI-matlab ece570c4a. Help text only (the
+      auto-multiplier now also recognizes whole-number doubles as counts,
+      which oneProbe inherits from autoMultiplier); the docstring says the
+      same. No code change.
 
 # =========================================================================
 # ndi.fun.probe.geometry  (MATLAB +ndi/+fun/+probe/+geometry/)
@@ -887,3 +912,11 @@ functions:
       and the one that introduced the whole JRCLUST pipeline. Still writes a
       .prm file at [S.path]/.JRCLUST/[element string]/jrclust.prm. Deferral
       unchanged: Python still has no reason to run JRCLUST.
+
+      2026-10-23: re-examined at NDI-matlab 3cb19a85f (file unchanged since
+      a3765c9e5) for the probe-export sync. Still not portable on its own:
+      it first requires ndi.fun.probe.import.jrclust.install() to find
+      JRCLUST's NDI fork in MATLAB, and the .prm itself is written by
+      JRCLUST's jrclust.Config.save, whose full parameter set and file
+      layout live in JRCLUST, not here. Only the geometry step
+      (geometry.toKilosortMap) is already in Python.

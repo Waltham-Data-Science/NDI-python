@@ -852,7 +852,7 @@ ported_late:
       The JRCLUST spike-sorting app. Same class of gap as kiasort and
       vhNDISpikeSorter above: the underlying sorter is a MATLAB package
       with no Python distribution, and ndi.fun.probe.import.jrclust is
-      recorded not_yet_ported in src/ndi/fun/probe/ for that reason.
+      recorded porting_deferred in src/ndi/fun/probe/ for that reason.
       Lands after JRCLUST itself is reachable from Python, not before.
       Noted in #204.
 
