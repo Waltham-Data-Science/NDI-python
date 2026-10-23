@@ -260,8 +260,11 @@ def _download_session():
     connection across sibling ``getFile`` calls. Every tile of a
     pyramid goes to the same S3 host, so a shared Session amortises
     the TLS handshake (~100-500ms) across N chunks. Thread-safe for
-    GET; the default pool holds 10 connections which is comfortable
-    for the lightsheet fetcher's 8 workers.
+    GET. The pool holds ``_DOWNLOAD_POOL_SIZE`` connections per host:
+    the lightsheet fetcher runs up to ``ndi.pyramid.multiscale.MAX_WORKERS``
+    (64) downloads at once, and with requests' default of 10 every
+    download past the tenth opened a connection of its own and threw it
+    away afterwards ("Connection pool is full, discarding connection").
 
     A previous version opened a fresh connection per call
     (``requests.get(url, ...)``) which added handshake latency to
@@ -271,9 +274,21 @@ def _download_session():
 
     session = getattr(_download_session, "_session", None)
     if session is None:
+        from requests.adapters import HTTPAdapter
+
         session = requests.Session()
+        adapter = HTTPAdapter(
+            pool_connections=_DOWNLOAD_POOL_SIZE, pool_maxsize=_DOWNLOAD_POOL_SIZE
+        )
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
         _download_session._session = session
     return session
+
+
+#: Connections kept per host by the download session; matches the most
+#: downloads ndi.pyramid.multiscale.MAX_WORKERS runs at once.
+_DOWNLOAD_POOL_SIZE = 64
 
 
 def getFile(

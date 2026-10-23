@@ -368,3 +368,15 @@ def test_a_member_already_in_the_cache_is_not_added_twice(monkeypatch, tmp_path)
     assert not second.exists()
     names, _sizes, _ = cache.file_list()
     assert names == [uid]
+
+
+def test_the_download_session_pools_a_connection_per_worker():
+    # Up to MAX_WORKERS tiles download at once through one Session. A pool
+    # smaller than that makes every extra download open, then discard, a
+    # connection of its own ("Connection pool is full").
+    from ndi.cloud.api import files as files_api
+
+    session = files_api._download_session()
+    adapter = session.get_adapter("https://example.s3.amazonaws.com/x")
+    assert files_api._DOWNLOAD_POOL_SIZE >= multiscale.MAX_WORKERS
+    assert adapter._pool_maxsize >= multiscale.MAX_WORKERS
