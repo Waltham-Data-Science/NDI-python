@@ -172,6 +172,19 @@ def fake_dataset(tmp_path):
     return FakeDataset(tmp_path)
 
 
+@_pytest.fixture
+def serial_document_upload(monkeypatch):
+    """Make uploadDocumentCollection send documents one at a time.
+
+    uploadDocumentCollection uploads in bulk (zipped JSON batches) unless
+    ``NDI_CLOUD_UPLOAD_NO_ZIP`` is ``'true'``, as in MATLAB. Tests of the sync
+    logic built on it model the transport by patching ``addDocument`` -- to
+    see each document sent, or to fail one -- so they run on the serial path.
+    The bulk path has its own tests in tests/test_cloud_upload_bulk_documents.py.
+    """
+    monkeypatch.setenv("NDI_CLOUD_UPLOAD_NO_ZIP", "true")
+
+
 # ---------------------------------------------------------------------------
 # Isolate DID's machine-global file cache for the whole test session.
 #

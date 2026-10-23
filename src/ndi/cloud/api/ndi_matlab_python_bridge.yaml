@@ -554,6 +554,49 @@ functions:
     decision_log: >
       Exact match. MATLAB also has documentCount.m which is a duplicate/alias.
 
+  - name: waitForDocumentCount
+    matlab_path: "+ndi/+cloud/+api/+documents/waitForDocumentCount.m"
+    matlab_last_sync_hash: "004585c"
+    python_path: "ndi/cloud/api/documents.py"
+    input_arguments:
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: expected_count
+        type_matlab: "double"
+        type_python: "int"
+      - name: timeout
+        type_matlab: "double"
+        type_python: "float"
+        default: "300.0"
+      - name: initial_interval
+        type_matlab: "double"
+        type_python: "float"
+        default: "1.0"
+      - name: max_interval
+        type_matlab: "double"
+        type_python: "float"
+        default: "10.0"
+      - name: backoff_factor
+        type_matlab: "double"
+        type_python: "float"
+        default: "2.0"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
+    decision_log: >
+      Ported from VH-Lab/NDI-matlab#1047 (matlab 004585c). Polls
+      countDocuments at exponentially growing intervals until the count is at
+      least expected_count or the timeout elapses; a failed poll is retried,
+      not fatal. Returns MATLAB's ANSWER struct (state 'complete' | 'timeout',
+      count -- nan if no poll succeeded -- expectedCount, elapsed); MATLAB's
+      leading b flag is state == 'complete', the same convention
+      waitForFileTierJob follows. WaitForDocumentCountMockTest ports over as
+      TestWaitForDocumentCount in tests/test_cloud_upload_bulk_documents.py.
+
   - name: bulkUpload
     matlab_path: "N/A"
     python_path: "ndi/cloud/api/documents.py"

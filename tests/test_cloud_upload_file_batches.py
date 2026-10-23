@@ -354,6 +354,7 @@ class TestDocumentCountsComeFromPreferences:
             download.downloadDocumentCollection(CLOUD_ID, ["d1", "d2", "d3"], client=_Client())
         assert chunks == [["d1", "d2"], ["d3"]]
 
+    @pytest.mark.usefixtures("serial_document_upload")
     def test_upload_chunk_defaults_to_the_preference(self, monkeypatch):
         from ndi.cloud.api import documents as docs_api
 

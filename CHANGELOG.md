@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Bulk document upload, and waiting for it to be ingested** (mirroring
+  VH-Lab/NDI-matlab#1047). `ndi.cloud.upload.uploadDocumentCollection` now
+  uploads documents in bulk, as NDI-matlab does: each chunk
+  (`Cloud.Upload.Max_Document_Batch_Count`) is one zipped JSON array
+  (new `zip_documents_for_upload`) PUT to `getBulkUploadURL`, instead of one
+  `addDocument` request per document, which for a dataset of 100,000
+  documents took hours. `NDI_CLOUD_UPLOAD_NO_ZIP=true` keeps the
+  one-at-a-time path. A bulk upload returns before the server has ingested
+  the zip and has no job to wait on, so afterwards it waits, with the new
+  `ndi.cloud.api.documents.waitForDocumentCount`, for the dataset to list the
+  uploaded documents (`wait_for_ingestion`, `ingestion_timeout`, default
+  300 s; a timeout is a warning, and the result is in `report["ingestion"]`).
+  `upload_type` now says `'batch'` or `'serial'` truthfully.
+
 - **Checking for, and installing, a newer NDI-python** (mirroring
   VH-Lab/NDI-matlab#1038). New `ndi.update`: `check()` compares this copy with
   the latest commit on main -- a git clone through `git fetch` (plus the
