@@ -80,6 +80,142 @@ class _Job:
         self.callbacks: list = []
 
 
+class _TileTiming:
+    """Where each tile's time goes, printed as one line per burst of reads.
+
+    Every chunk napari reads passes through :func:`_read_chunk_from_fetcher`,
+    which reports four phases here: finding the chunk's local path (a memo
+    hit, or a trip through the fetcher queue -- which also covers a disk
+    lookup or a cloud download), reading the bytes, decoding them, and the
+    whole tile. Once a burst of reads goes quiet, or every few seconds
+    during a long one, one ``[lightsheet] tiles:`` line goes to stderr.
+
+    ``span`` is the wall time from the first tile starting to the last one
+    finishing. If span is much larger than the per-tile times can explain,
+    the time is going somewhere other than our reader (dask scheduling,
+    napari). ``NDI_LIGHTSHEET_TIMING=0`` turns the lines off.
+    """
+
+    _QUIET_S = 0.5  # a burst ends after this long with no tile finishing
+    _MAX_S = 5.0  # a long burst still reports this often
+
+    def __init__(self, fetcher):
+        self._fetcher = fetcher
+        self._lock = threading.Lock()
+        self._on = os.environ.get("NDI_LIGHTSHEET_TIMING", "1").strip().lower() not in (
+            "0",
+            "false",
+            "off",
+        )
+        self._reset()
+        self._timer = None
+
+    def _reset(self):
+        self.n = 0
+        self.memo = 0
+        self.queued = 0
+        self.queued_s = 0.0
+        self.queued_max = 0.0
+        self.missing = 0
+        self.read_s = 0.0
+        self.read_bytes = 0
+        self.decode_s = 0.0
+        self.tile_s = 0.0
+        self.tile_max = 0.0
+        self.first = None
+        self.last = None
+        self.worker_base = self._workerCounts()
+
+    def _workerCounts(self):
+        f = self._fetcher
+        return (
+            getattr(f, "_direct_hits", 0),
+            getattr(f, "_direct_fetches", 0),
+            getattr(f, "_fallbacks", 0),
+            getattr(f, "_stale_released", 0),
+        )
+
+    def record(self, t0, memo_hit, path_s, found, read_s, nbytes, decode_s):
+        if not self._on:
+            return
+        now = time.monotonic()
+        with self._lock:
+            if self.first is None:
+                self.first = t0
+            self.last = now
+            self.n += 1
+            if memo_hit:
+                self.memo += 1
+            else:
+                self.queued += 1
+                self.queued_s += path_s
+                self.queued_max = max(self.queued_max, path_s)
+            if not found:
+                self.missing += 1
+            self.read_s += read_s
+            self.read_bytes += nbytes
+            self.decode_s += decode_s
+            tile = now - t0
+            self.tile_s += tile
+            self.tile_max = max(self.tile_max, tile)
+            if now - self.first >= self._MAX_S:
+                line = self._lineLocked()
+            else:
+                line = None
+                self._armLocked()
+        if line:
+            _printTiming(line)
+
+    def _armLocked(self):
+        # One quiet-period timer at a time; it re-checks on firing.
+        if self._timer is None:
+            self._timer = threading.Timer(self._QUIET_S, self._quiet)
+            self._timer.daemon = True
+            self._timer.start()
+
+    def _quiet(self):
+        with self._lock:
+            self._timer = None
+            if self.n == 0:
+                return
+            if time.monotonic() - self.last < self._QUIET_S:
+                self._armLocked()
+                return
+            line = self._lineLocked()
+        _printTiming(line)
+
+    def _lineLocked(self) -> str:
+        n = self.n
+        hits, fetches, fallbacks, stale = (
+            a - b for a, b in zip(self._workerCounts(), self.worker_base)
+        )
+        span = self.last - self.first
+        mb = self.read_bytes / 1e6
+        rate = f", {mb / self.read_s:.0f} MB/s" if self.read_s > 0 else ""
+        q_mean = 1000.0 * self.queued_s / self.queued if self.queued else 0.0
+        line = (
+            f"tiles: {n} in {span:.2f}s span | "
+            f"path: {self.memo} memo, {self.queued} via queue "
+            f"(mean {q_mean:.1f}ms, max {1000.0 * self.queued_max:.0f}ms; "
+            f"workers did {hits} disk hits, {fetches} cloud fetches, "
+            f"{fallbacks} via session, {stale} stale) | "
+            f"read {1000.0 * self.read_s / n:.1f}ms/tile ({mb:.1f} MB{rate}) | "
+            f"decode {1000.0 * self.decode_s / n:.1f}ms/tile | "
+            f"tile mean {1000.0 * self.tile_s / n:.1f}ms, max {1000.0 * self.tile_max:.0f}ms"
+            + (f" | {self.missing} not found" if self.missing else "")
+        )
+        self._reset()
+        return line
+
+
+def _printTiming(line: str) -> None:
+    import sys
+    from datetime import datetime
+
+    stamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+    print(f"{stamp} [lightsheet] {line}", file=sys.stderr, flush=True)
+
+
 # ---------------------------------------------------------------------------
 # depends_on / doc discovery
 
@@ -282,6 +418,7 @@ class _ChunkFetcher:
         self._direct_hits = 0
         self._direct_fetches = 0
         self._fallbacks = 0
+        self.timing = _TileTiming(self)
 
     @staticmethod
     def _fileDir(session) -> str | None:
@@ -1053,7 +1190,6 @@ def levelArrays(
     label per step.
     """
     import dask.array as da
-    from dask import delayed
 
     from ndi.gui.app.lightsheetZarr import progress
 
@@ -1119,21 +1255,21 @@ def levelArrays(
             fallback_reader = _makeFallbackReader(p, fallback_context)
 
         with progress.stage(f"preparing level {i} ({n_blocks:,} tiles, shape={list(shape)})"):
-            nested = _build_block_grid(
-                fetcher,
-                doc,
-                shape,
-                chunks,
-                chunk_grid,
-                dtype,
-                fill,
-                codec,
-                stored,
-                delayed,
-                da,
-                fallback_reader=fallback_reader,
+            arrays.append(
+                _build_level_array(
+                    fetcher,
+                    doc,
+                    shape,
+                    chunks,
+                    chunk_grid,
+                    dtype,
+                    fill,
+                    codec,
+                    stored,
+                    da,
+                    fallback_reader=fallback_reader,
+                )
             )
-            arrays.append(da.block(nested))
 
     return arrays, fetcher
 
@@ -1171,7 +1307,7 @@ def _prepFallbackContext(docs: list) -> dict | None:
 def _makeFallbackReader(fine_props: dict, ctx: dict):
     """Return a closure over the fallback context for one fine level.
 
-    The closure has the signature ``_build_block_grid`` expects for
+    The closure has the signature ``_build_level_array`` expects for
     ``fallback_reader``: ``(fetcher, doc, filename, indices, chunks,
     block_shape, dtype, fill, codec)``. It reads the current refresh
     hint from ``ctx["refresh_hint_slot"][0]`` per call, so a hint
@@ -1487,7 +1623,7 @@ def _linear_chunk_index(indices: tuple, chunk_grid: tuple) -> int:
     return linear + 1
 
 
-def _build_block_grid(
+def _build_level_array(
     fetcher,
     doc,
     shape,
@@ -1497,19 +1633,29 @@ def _build_block_grid(
     fill,
     codec,
     stored,
-    delayed,
     da,
     *,
     fallback_reader=None,
 ):
-    """Recursively build a nested list of dask blocks matching chunk_grid.
+    """One lazy dask array for a level, one block per chunk file.
 
-    Chunk paths are resolved LAZILY, inside each delayed task, through
-    the shared :class:`_ChunkFetcher`. That is what makes the reader
-    stream on a cloud-backed session: nothing is fetched until dask asks
-    for a specific block, and each block goes through fetcher threads
-    that own their own session handle (dodging DID's thread-owned
-    SQLite connection).
+    The whole level is ONE graph layer (``da.map_blocks`` with no input
+    arrays; each block learns its chunk position from ``block_info``).
+    An earlier version built one ``from_delayed`` array per chunk and
+    joined them with ``da.block``: every chunk became its own graph
+    layer, and dask walks every layer each time a slice is computed. A
+    view of 16 cached chunks then cost ~1.4 s on a 16k-chunk level and
+    ~26 s on a 131k-chunk one, against ~15 ms to read the 16 files --
+    the cost grew with the size of the level, not of the view. A single
+    layer costs only for the blocks a slice touches, and the level is
+    built in microseconds rather than seconds.
+
+    Chunk paths are resolved LAZILY, inside each block, through the
+    shared :class:`_ChunkFetcher`. That is what makes the reader stream
+    on a cloud-backed session: nothing is fetched until dask asks for a
+    specific block, and each block goes through fetcher threads that own
+    their own session handle (dodging DID's thread-owned SQLite
+    connection).
 
     STORED (a set of ``chunk.bin_#`` names, or None) short-circuits the
     fetcher for chunks the level document doesn't list. On a sparse
@@ -1517,7 +1663,7 @@ def _build_block_grid(
     network call at all. None means the level document has no file
     list, and the reader falls back to attempting every position.
 
-    ``fallback_reader`` swaps the delayed body from
+    ``fallback_reader`` swaps the block body from
     :func:`_read_chunk_from_fetcher` to a wrapper that shows
     coarser-level data (upsampled) when the fine chunk is not on disk
     yet, so unfinished tiles do not draw as black holes. Its signature
@@ -1526,35 +1672,41 @@ def _build_block_grid(
     per-axis 0-based multi-index, which the wrapper needs to compute
     the covering coarse region.
     """
+    import numpy as np
+    from dask.base import tokenize
 
-    def one_block(indices: tuple):
-        idx_1 = _linear_chunk_index(indices, chunk_grid)
-        # Edge blocks are smaller along one or more axes.
-        block_shape = tuple(
-            min(chunks[a], shape[a] - indices[a] * chunks[a]) for a in range(len(indices))
-        )
-        name = f"chunk.bin_{idx_1:d}"
-        # Short-circuit missing chunks BEFORE they reach a dask task, so
-        # sparse regions don't even schedule work.
+    chunks = tuple(int(c) for c in chunks)
+    chunk_grid = tuple(int(g) for g in chunk_grid)
+    block_chunks = tuple(
+        tuple(min(chunks[a], shape[a] - i * chunks[a]) for i in range(chunk_grid[a]))
+        for a in range(len(chunk_grid))
+    )
+
+    def read_block(block_info=None):
+        info = block_info[None]
+        indices = tuple(int(i) for i in info["chunk-location"])
+        block_shape = tuple(int(n) for n in info["chunk-shape"])
+        name = f"chunk.bin_{_linear_chunk_index(indices, chunk_grid):d}"
         if stored is not None and name not in stored:
-            d = delayed(_zero_block)(block_shape, dtype, fill)
-        elif fallback_reader is not None:
-            d = delayed(fallback_reader)(
+            return _zero_block(block_shape, dtype, fill)
+        if fallback_reader is not None:
+            return fallback_reader(
                 fetcher, doc, name, indices, chunks, block_shape, dtype, fill, codec
             )
-        else:
-            d = delayed(_read_chunk_from_fetcher)(
-                fetcher, doc, name, chunks, block_shape, dtype, fill, codec
-            )
-        return da.from_delayed(d, shape=block_shape, dtype=dtype)
+        return _read_chunk_from_fetcher(fetcher, doc, name, chunks, block_shape, dtype, fill, codec)
 
-    def recurse(prefix: list) -> list:
-        axis = len(prefix)
-        if axis == len(chunk_grid):
-            return one_block(tuple(prefix))
-        return [recurse(prefix + [i]) for i in range(chunk_grid[axis])]
-
-    return recurse([])
+    # An explicit name: tokenizing the closure would hash the fetcher.
+    # id(fetcher) keeps two viewers on the same level from sharing keys.
+    token = tokenize(
+        getattr(doc, "id", str(doc)), shape, chunks, str(dtype), fill, codec, id(fetcher)
+    )
+    return da.map_blocks(
+        read_block,
+        chunks=block_chunks,
+        dtype=dtype,
+        meta=np.empty((0,) * len(block_chunks), dtype=dtype),
+        name=f"ndi-lightsheet-level-{token}",
+    )
 
 
 def _zero_block(block_shape, dtype, fill):
@@ -1579,9 +1731,17 @@ def _read_chunk_from_fetcher(fetcher, doc, filename, chunks_full, block_shape, d
     """
     import numpy as np
 
+    t0 = time.monotonic()
+    key = (getattr(doc, "id", str(doc)), filename)
+    paths = getattr(fetcher, "_paths", None)
+    memo_hit = paths is not None and key in paths
     path = fetcher.chunkPath(doc, filename)
+    t_path = time.monotonic()
     n_expected = int(np.prod(chunks_full)) * dtype.itemsize
+    timing = getattr(fetcher, "timing", None)
     if path is None:
+        if timing is not None:
+            timing.record(t0, memo_hit, t_path - t0, False, 0.0, 0, 0.0)
         return np.full(block_shape, fill, dtype=dtype)
     try:
         raw = _readAll(path)
@@ -1594,6 +1754,8 @@ def _read_chunk_from_fetcher(fetcher, doc, filename, chunks_full, block_shape, d
             raw = _readAll(path)
         except OSError:
             return np.full(block_shape, fill, dtype=dtype)
+    t_read = time.monotonic()
+    nbytes = len(raw)
 
     if codec == "blosc-zstd":
         from numcodecs import Blosc
@@ -1605,6 +1767,10 @@ def _read_chunk_from_fetcher(fetcher, doc, filename, chunks_full, block_shape, d
     arr = np.frombuffer(raw[:n_expected], dtype=dtype).reshape(chunks_full)
     if block_shape != chunks_full:
         arr = arr[tuple(slice(0, s) for s in block_shape)]
+    if timing is not None:
+        timing.record(
+            t0, memo_hit, t_path - t0, True, t_read - t_path, nbytes, time.monotonic() - t_read
+        )
     return arr
 
 

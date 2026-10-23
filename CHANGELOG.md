@@ -104,6 +104,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Lightsheet viewer: slow tiles from the local cache.** Each pyramid level was
+  built as one dask graph layer per chunk (`from_delayed` + `da.block`), and
+  dask walks every layer each time napari computes a slice, so the cost grew
+  with the size of the level rather than the view: 16 cached chunks took ~1.4 s
+  to show on a 16k-chunk level and ~26 s on a 131k-chunk one, against ~15 ms to
+  read the files. This is the "Loading view 50/112" with nothing in flight.
+  A level is now a single `map_blocks` layer: the same view takes ~20 ms at
+  any level size, and building the level at open time is ~20x faster.
+  The viewer also now prints one `[lightsheet] tiles:` line per burst of reads
+  showing where tile time goes (path lookup, queue wait, disk read, decode,
+  and the burst's wall-clock span); `NDI_LIGHTSHEET_TIMING=0` turns it off.
+
 - **Saving preferences no longer drops NDI-matlab's own entries.**
   `~/.ndi/NDI_Preferences.json` is shared with NDI-matlab, and each side
   rewrote it with only the preferences it registers, so saving from Python
