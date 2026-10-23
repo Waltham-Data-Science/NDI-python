@@ -29,7 +29,7 @@ Scope of this first cut:
   black" not "publication quality".
 
 On by default; opt out with ``NDI_LIGHTSHEET_UPSAMPLE_FALLBACK=0``.
-When on, the reader path in :func:`multiscale._build_block_grid`
+When on, the reader path in :func:`multiscale._build_level_array`
 routes each block through :func:`readChunkWithFallback` instead of
 :func:`multiscale._read_chunk_from_fetcher`. Reader also fires an
 asynchronous fine-chunk fetch (via ``fetcher.prefetchAsync``) so a

@@ -295,3 +295,88 @@ def test_level_arrays_start_max_threads_with_default_limit(monkeypatch):
     assert multiscale._default_workers() == 16
     assert set(multiscale.WORKER_CHOICES) >= {8, 16, 32, 64}
     assert multiscale.MAX_WORKERS >= max(multiscale.WORKER_CHOICES)
+
+
+def test_fetched_members_from_many_threads_all_land_in_the_cache(monkeypatch, tmp_path):
+    # Dozens of download threads finish together and each adds its member
+    # to DID's one, process-wide file cache. Every member must land, and
+    # the add must not ask the index whether the file is there (a row-by-
+    # row scan) when one stat of the disk answers it.
+    import did.common
+    from did.file import FileCache
+
+    cache_dir = tmp_path / "filecache"
+    cache_dir.mkdir()
+    cache = FileCache(str(cache_dir), 33)
+    monkeypatch.setattr(did.common, "get_cache", lambda *a, **k: cache)
+
+    def no_index_scan(self, name):
+        raise AssertionError("is_file scans the index; check the disk instead")
+
+    monkeypatch.setattr(FileCache, "is_file", no_index_scan)
+
+    fetcher = _ChunkFetcher(object())
+    n = 16
+    uids = [f"{i:033d}" for i in range(n)]
+    scratches = []
+    for i, uid in enumerate(uids):
+        p = tmp_path / f"{uid}.part"
+        p.write_bytes(_content(i))
+        scratches.append(str(p))
+    start = threading.Barrier(n)
+    results, errors = {}, []
+
+    def keep(i):
+        try:
+            start.wait()
+            results[i] = fetcher._keepFetched(scratches[i], uids[i])
+        except Exception as exc:  # noqa: BLE001 - reported below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=keep, args=(i,)) for i in range(n)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert errors == []
+    for i, uid in enumerate(uids):
+        assert results[i] == cache.full_path(uid)
+        with open(results[i], "rb") as f:
+            assert f.read() == _content(i)
+        assert not os.path.exists(scratches[i])
+    names, _sizes, _ = cache.file_list()
+    assert sorted(names) == uids
+
+
+def test_a_member_already_in_the_cache_is_not_added_twice(monkeypatch, tmp_path):
+    import did.common
+    from did.file import FileCache
+
+    cache_dir = tmp_path / "filecache"
+    cache_dir.mkdir()
+    cache = FileCache(str(cache_dir), 33)
+    monkeypatch.setattr(did.common, "get_cache", lambda *a, **k: cache)
+    uid = "1" * 33
+    first = tmp_path / "first.part"
+    first.write_bytes(b"same bytes")
+    fetcher = _ChunkFetcher(object())
+    path = fetcher._keepFetched(str(first), uid)
+    second = tmp_path / "second.part"
+    second.write_bytes(b"same bytes")
+    assert fetcher._keepFetched(str(second), uid) == path
+    assert not second.exists()
+    names, _sizes, _ = cache.file_list()
+    assert names == [uid]
+
+
+def test_the_download_session_pools_a_connection_per_worker():
+    # Up to MAX_WORKERS tiles download at once through one Session. A pool
+    # smaller than that makes every extra download open, then discard, a
+    # connection of its own ("Connection pool is full").
+    from ndi.cloud.api import files as files_api
+
+    session = files_api._download_session()
+    adapter = session.get_adapter("https://example.s3.amazonaws.com/x")
+    assert files_api._DOWNLOAD_POOL_SIZE >= multiscale.MAX_WORKERS
+    assert adapter._pool_maxsize >= multiscale.MAX_WORKERS
