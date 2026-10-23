@@ -58,6 +58,14 @@ class StaleChunkRead(Exception):
     """
 
 
+# One fetcher thread at a time adds to DID's file cache. The cache is one
+# object per process with one lock, and DID-python before VH-Lab/DID-python#89
+# let a second thread through that lock unguarded (its has_lock flag is
+# shared) and made a thread that did meet it sleep a whole second per retry;
+# with dozens of download threads finishing together, adding a tile took
+# about a minute. Waiting here costs only the add itself.
+_CACHE_ADD_LOCK = threading.Lock()
+
 # Returned by _ChunkFetcher._resolveDirect when the session-free path cannot
 # answer (no manifest on disk yet, no cloud location, not a series member) and
 # the caller should go through the session's database_openbinarydoc instead.
@@ -645,6 +653,7 @@ class _ChunkFetcher:
         import time as _time
 
         t0 = _time.monotonic()
+        self._local.keep_s = None
         if self._direct:
             try:
                 direct = self._resolveDirect(doc, filename)
@@ -737,6 +746,9 @@ class _ChunkFetcher:
                     f"({'batch' if t.get('batch') else 'per-file'}), "
                     f"transfer {xfer:.2f}s, {size / 1e6:.2f} MB{rate}"
                 )
+                keep = getattr(self._local, "keep_s", None)
+                if keep is not None:
+                    detail += f", cache add {keep:.2f}s"
             else:
                 detail = "no cloud timing recorded"
             print(
@@ -868,7 +880,11 @@ class _ChunkFetcher:
                 raise FileNotFoundError(
                     f"the cloud handler produced no file for {filename} (uid {member_uid})"
                 )
-            return self._keepFetched(scratch, member_uid)
+            t_keep = time.monotonic()
+            try:
+                return self._keepFetched(scratch, member_uid)
+            finally:
+                self._local.keep_s = time.monotonic() - t_keep
         except BaseException:
             try:
                 os.remove(scratch)
@@ -885,17 +901,20 @@ class _ChunkFetcher:
 
             cache = get_cache()
             if len(member_uid) == cache.file_name_characters:
-                if cache.is_file(member_uid):
-                    existing = cache.full_path(member_uid)
-                    if os.path.isfile(existing):
-                        # Another fetch of the same uid won the race; same bytes.
-                        os.remove(scratch)
-                        return existing
-                    cache.remove_file(member_uid)
-                cache.add_file(scratch, member_uid)
+                existing = cache.full_path(member_uid)
+                # On disk is what counts, and checking the disk is one stat;
+                # asking the cache's index (is_file) scanned it row by row.
+                # add_file itself drops an index row whose file is gone.
+                if os.path.isfile(existing):
+                    # Another fetch of the same uid won the race; same bytes.
+                    os.remove(scratch)
+                    return existing
+                with _CACHE_ADD_LOCK:
+                    if not os.path.isfile(existing):
+                        cache.add_file(scratch, member_uid)
                 if os.path.exists(scratch):
                     os.remove(scratch)
-                return cache.full_path(member_uid)
+                return existing
         except (OSError, ValueError, struct.error):
             pass
         if self._file_dir:

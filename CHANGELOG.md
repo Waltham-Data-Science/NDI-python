@@ -117,6 +117,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   and the burst's wall-clock span); `NDI_LIGHTSHEET_TIMING=0` turns it off.
   The gene-expression pyramid viewer built its levels the same way and gets
   the same fix.
+  Downloaded tiles also took about a minute each to be stored in DID's file
+  cache: with dozens of download threads finishing together, each scanned the
+  cache's index row by row and waited on its lock a second at a time. The
+  viewer now checks the disk instead of the index and lets one thread at a
+  time add to the cache; the debug fetch line reports the add as
+  `cache add Xs`. The underlying cache fixes are VH-Lab/DID-python#89 and
+  VH-Lab/DID-matlab#221.
 
 - **Saving preferences no longer drops NDI-matlab's own entries.**
   `~/.ndi/NDI_Preferences.json` is shared with NDI-matlab, and each side
