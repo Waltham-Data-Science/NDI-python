@@ -333,6 +333,43 @@ def clear_mock_docs(session: Any) -> None:
         session.database_rm(docs)
 
 
+def _numeric_array(value: Any) -> np.ndarray | None:
+    """*value* as a NumPy array if it is numeric or boolean, else None.
+
+    MATLAB's ``isnumeric(v) || islogical(v)``: Python numbers and booleans,
+    NumPy arrays and scalars, and (nested) lists of them, as a document's
+    JSON holds them. Text and ragged or mixed lists are not numeric.
+    """
+    if isinstance(value, str) or value is None:
+        return None
+    try:
+        arr = np.asarray(value)
+    except (ValueError, TypeError):
+        return None
+    if arr.dtype.kind not in "biuf":
+        return None
+    return arr
+
+
+def _mat2str(arr: np.ndarray) -> str:
+    """MATLAB's ``mat2str(arr, 6)`` for a numeric or boolean array of at most 2-D."""
+
+    def one(x: Any) -> str:
+        if arr.dtype.kind == "b":
+            return "true" if x else "false"
+        return f"{x:.6g}"
+
+    if arr.ndim == 0:
+        return one(arr.item())
+    if arr.ndim == 1:
+        arr = arr.reshape(1, -1)
+    if arr.size == 1:
+        return one(arr.item())
+    if arr.size == 0:
+        return f"zeros({arr.shape[0]},{arr.shape[1]})"
+    return "[" + ";".join(" ".join(one(x) for x in row) for row in arr.tolist()) + "]"
+
+
 class ndi_mock_ctest:
     """Base class for calculator testing framework.
 
@@ -404,7 +441,19 @@ class ndi_mock_ctest:
         if scope.lower() == "highsnr" and isinstance(docCompare, DocComparison):
             result = docCompare.compare(actual, expected)
             failures = [r for r in result.get("results", []) if not r.get("passed")]
-            report = [{"name": r["field"], **r} for r in failures]
+            # compare(actual, expected): value1 is the actual value, value2 the
+            # expected one. Named as MATLAB's docComparison report names them,
+            # so reportSummary can say how far out of tolerance each field was.
+            report = [
+                {
+                    "name": r["field"],
+                    **r,
+                    "actualValue": r.get("value1"),
+                    "expectedValue": r.get("value2"),
+                    "comment": r.get("detail", ""),
+                }
+                for r in failures
+            ]
             return bool(result["equal"]), report
 
         from ndi.fun.doc import diff
@@ -475,18 +524,70 @@ class ndi_mock_ctest:
         MATLAB equivalent: the static ``ndi.mock.ctest.reportSummary``.
         Returns a LEADING-SPACE sentence, or ``''`` when there is nothing to
         say, so it can be appended to a message directly.
+
+        When the report carries the compared values (``actualValue`` and
+        ``expectedValue``), each field is followed by a line giving the actual
+        value, the expected value, their absolute difference, and the
+        comparison's own ``comment``, so that a failure on CI says how far out
+        of tolerance it was and not only that it was.
         """
         if not report:
             return ""
         if isinstance(report, str):
             return " " + report
-        if isinstance(report, dict) and "name" in report:
-            return f" Out of tolerance: {report['name']}."
-        if isinstance(report, (list, tuple)) and all(
-            isinstance(r, dict) and "name" in r for r in report
+        if isinstance(report, dict):
+            report = [report]
+        if not (
+            isinstance(report, (list, tuple))
+            and all(isinstance(r, dict) and "name" in r for r in report)
         ):
-            return " Out of tolerance: " + ", ".join(r["name"] for r in report) + "."
-        return ""
+            return ""
+        text = " Out of tolerance: " + ", ".join(str(r["name"]) for r in report) + "."
+        if not all("actualValue" in r and "expectedValue" in r for r in report):
+            return text
+        for r in report:
+            actual = r["actualValue"]
+            expected = r["expectedValue"]
+            text += (
+                f"\n    {r['name']}: actual {ndi_mock_ctest.valueString(actual)}"
+                f", expected {ndi_mock_ctest.valueString(expected)}"
+            )
+            a, e = _numeric_array(actual), _numeric_array(expected)
+            if a is not None and e is not None and a.shape == e.shape:
+                difference = np.abs(a.astype(float) - e.astype(float))
+                text += f", abs difference {ndi_mock_ctest.valueString(difference)}"
+            if r.get("comment"):
+                text += f" ({r['comment']})"
+        return text
+
+    @staticmethod
+    def valueString(value: Any) -> str:
+        """Render a compared value compactly for a failure message.
+
+        MATLAB equivalent: the static ``ndi.mock.ctest.valueString``.
+
+        Numbers and booleans (scalars, lists, NumPy arrays) are written as
+        MATLAB's ``mat2str`` at 6 significant digits writes them -- ``3.14159``,
+        ``true``, ``[1 2;3 4]`` -- with arrays of more than two dimensions as a
+        row. Text is quoted, and anything else is shown as its size and type
+        (``[2 list]``, ``[dict]``). Renderings longer than 200 characters are
+        cut, since some compared fields hold whole fitted curves.
+        """
+        max_length = 200
+        arr = _numeric_array(value)
+        if arr is not None:
+            if arr.ndim > 2:
+                arr = arr.reshape(1, -1)
+            text = _mat2str(arr)
+        elif isinstance(value, str):
+            text = f"'{value}'"
+        elif hasattr(value, "__len__"):
+            text = f"[{len(value)} {type(value).__name__}]"
+        else:
+            text = f"[{type(value).__name__}]"
+        if len(text) > max_length:
+            text = text[:max_length] + " ..."
+        return text
 
     def load_mock_expected_output(self, number: int) -> dict | None:
         """Load expected output from file."""

@@ -33,6 +33,9 @@ from ndi.cloud.sync.mode import SyncMode, SyncOptions
 
 from .conftest import FakeDataset, make_document
 
+# These tests model the upload transport by patching addDocument.
+pytestmark = pytest.mark.usefixtures("serial_document_upload")
+
 CLOUD_ID = "65a1b2c3d4e5f60718293a4b"
 ALL_MODES = ["uploadNew", "downloadNew", "mirrorToRemote", "mirrorFromRemote", "twoWaySync"]
 

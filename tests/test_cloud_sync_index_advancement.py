@@ -18,6 +18,9 @@ from ndi.cloud.sync.mode import SyncOptions
 
 from .conftest import FakeDataset, make_document
 
+# These tests model the upload transport by patching addDocument.
+pytestmark = pytest.mark.usefixtures("serial_document_upload")
+
 
 @pytest.fixture(autouse=True)
 def _no_bulk_settling(monkeypatch):

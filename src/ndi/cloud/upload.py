@@ -49,9 +49,19 @@ def uploadDocumentCollection(
     only_missing: bool = True,
     max_chunk: int | None = None,
     *,
+    wait_for_ingestion: bool = True,
+    ingestion_timeout: float = 300.0,
     client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """Upload a list of document dicts to the cloud.
+
+    MATLAB equivalent: +ndi/+cloud/+upload/uploadDocumentCollection.m
+
+    By default the documents go up in bulk: each chunk is written as one
+    JSON array, zipped (:func:`zip_documents_for_upload`) and PUT to the URL
+    from :func:`ndi.cloud.api.documents.getBulkUploadURL`. If the environment
+    variable ``NDI_CLOUD_UPLOAD_NO_ZIP`` is ``'true'``, they are sent one at
+    a time with :func:`ndi.cloud.api.documents.addDocument` instead.
 
     Args:
         dataset_id: Cloud dataset ID.
@@ -60,15 +70,32 @@ def uploadDocumentCollection(
         max_chunk: Maximum documents per chunk. ``None`` (default) reads the
             preference ``Cloud.Upload.Max_Document_Batch_Count``; ``0`` or a
             negative value means all at once.
+        wait_for_ingestion: If True (default), a bulk upload does not return
+            until the server lists the uploaded documents, or until
+            *ingestion_timeout* elapses. A bulk upload returns once each zip
+            is stored, before the server has ingested it, so without this a
+            listing made straight afterwards can miss documents. Serial
+            uploads are not affected.
+        ingestion_timeout: Seconds to wait for ingestion. Default 300. A
+            timeout is logged as a warning and does not change ``status``.
         client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
-        Report dict with ``upload_type``, ``manifest``, ``status``.
+        Report dict with ``upload_type`` (``'batch'`` or ``'serial'``),
+        ``total``, ``uploaded``, ``skipped``, ``manifest`` (ids of the
+        documents sent), ``status`` (``'ok'`` or ``'partial'``) and, on a
+        failure, ``errors``. When a bulk upload waited for ingestion,
+        ``ingestion`` holds the result of
+        :func:`ndi.cloud.api.documents.waitForDocumentCount`.
     """
+    import os
+
     from .api import documents as docs_api
 
+    serial = os.environ.get("NDI_CLOUD_UPLOAD_NO_ZIP", "").lower() in ("true", "1", "yes")
+
     report: dict[str, Any] = {
-        "upload_type": "batch",
+        "upload_type": "serial" if serial else "batch",
         "total": len(documents),
         "uploaded": 0,
         "skipped": 0,
@@ -108,19 +135,123 @@ def uploadDocumentCollection(
     if max_chunk and max_chunk > 0:
         chunks = [documents[i : i + max_chunk] for i in range(0, len(documents), max_chunk)]
 
-    for chunk in chunks:
-        for doc in chunk:
-            try:
-                docs_api.addDocument(dataset_id, doc, client=client)
-                report["uploaded"] += 1
-                report["manifest"].append(document_id(doc))
-            except Exception as exc:
-                report["status"] = "partial"
-                if report.get("errors") is None:
-                    report["errors"] = []
-                report["errors"].append(str(exc))
+    def _fail(message: str) -> None:
+        report["status"] = "partial"
+        report.setdefault("errors", []).append(message)
+
+    if serial:
+        for chunk in chunks:
+            for doc in chunk:
+                try:
+                    docs_api.addDocument(dataset_id, doc, client=client)
+                    report["uploaded"] += 1
+                    report["manifest"].append(document_id(doc))
+                except Exception as exc:
+                    _fail(str(exc))
+        return report
+
+    from .api import files as files_api
+
+    # The server's count before this upload, so the ingestion wait below
+    # knows what count to expect. None skips the wait.
+    count_before: int | None = None
+    if wait_for_ingestion:
+        try:
+            count_before = int(docs_api.countDocuments(dataset_id, client=client))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Could not read the document count of %s (%s); not waiting for ingestion",
+                dataset_id,
+                exc,
+            )
+
+    for n, chunk in enumerate(chunks, start=1):
+        zip_path: Path | None = None
+        try:
+            zip_path, id_manifest = zip_documents_for_upload(chunk, dataset_id)
+            url = docs_api.getBulkUploadURL(dataset_id, client=client)
+            if not url:
+                raise RuntimeError("no bulk upload URL returned")
+            files_api.putFiles(url, str(zip_path))
+            report["uploaded"] += len(id_manifest)
+            report["manifest"].extend(id_manifest)
+        except Exception as exc:  # noqa: BLE001 - reported per batch
+            _fail(f"Batch {n} ({len(chunk)} documents): {exc}")
+        finally:
+            if zip_path is not None and zip_path.exists():
+                zip_path.unlink()
+
+    # A stored zip is not yet an ingested one, and bulk document uploads have
+    # no job to wait on, so wait for the server's document count to take in
+    # every document from the batches that were stored. The server adds a new
+    # document for each one uploaded, even one whose id it already lists, so
+    # the count grows by exactly that many.
+    if count_before is not None and report["uploaded"] > 0:
+        expected = count_before + report["uploaded"]
+        try:
+            ingestion = docs_api.waitForDocumentCount(
+                dataset_id, expected, timeout=ingestion_timeout, client=client
+            )
+        except Exception as exc:  # noqa: BLE001
+            ingestion = {
+                "state": "error",
+                "count": float("nan"),
+                "expectedCount": expected,
+                "elapsed": float("nan"),
+                "message": str(exc),
+            }
+        report["ingestion"] = ingestion
+        if ingestion.get("state") != "complete":
+            logger.warning(
+                "Dataset %s lists %s of the %d documents expected after this upload "
+                "(state: %s). The upload succeeded; the server may still be ingesting "
+                "the rest.",
+                dataset_id,
+                ingestion.get("count"),
+                expected,
+                ingestion.get("state"),
+            )
 
     return report
+
+
+def zip_documents_for_upload(
+    documents: list[dict[str, Any]],
+    dataset_id: str,
+    *,
+    target_folder: str | Path | None = None,
+) -> tuple[Path, list[str]]:
+    """Write documents as one JSON array and zip it for a bulk upload.
+
+    MATLAB equivalent: +ndi/+cloud/+upload/+internal/zip_documents_for_upload.m
+
+    The archive holds a single ``.json`` file: the documents' properties as a
+    JSON array, encoded with :func:`did.datastructures.json_encode_nan` so NaN
+    and Infinity survive, as MATLAB's ``did.datastructures.jsonencodenan``
+    does. The zip is named ``<dataset_id>.<random>.zip`` so concurrent uploads
+    do not collide.
+
+    Args:
+        documents: Document property dicts.
+        dataset_id: Cloud dataset ID (used in the zip's name).
+        target_folder: Where to write the zip. Defaults to the system's
+            temporary folder.
+
+    Returns:
+        ``(zip_path, id_manifest)``: the zip's path, which the caller must
+        delete, and the ids of the documents in it, in order.
+    """
+    import uuid
+
+    from did.datastructures import json_encode_nan
+
+    folder = Path(target_folder) if target_folder is not None else Path(tempfile.gettempdir())
+    json_text = json_encode_nan(list(documents))
+    id_manifest = [document_id(doc) for doc in documents]
+    zip_path = folder / f"{dataset_id}.{uuid.uuid4().hex}.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(f"{uuid.uuid4().hex}.json", json_text)
+    return zip_path, id_manifest
 
 
 def zipForUpload(

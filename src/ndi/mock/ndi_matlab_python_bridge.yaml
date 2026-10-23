@@ -262,10 +262,24 @@ classes:
   - name: ctest
     type: class
     matlab_path: "src/ndi/+ndi/+mock/ctest.m"
-    matlab_last_sync_hash: "0bdc0ac79"
+    matlab_last_sync_hash: "0374dd2"
     python_path: "ndi/mock/__init__.py"
     python_class: "ndi_mock_ctest"
     decision_log: >
+      2026-10-23: synchronized with NDI-matlab 0374dd2 (VH-Lab/NDI-matlab#1046).
+      reportSummary now follows each out-of-tolerance field with a line giving
+      the actual value, the expected value, their absolute difference (when
+      both are numeric and the same shape) and the comparison's comment, so a
+      failure says how far out it was; the mock data are unseeded and a failing
+      run cannot be reproduced. New static valueString renders a value as
+      mat2str(v,6) does (>2-D as a row), text quoted, anything else as its size
+      and type, cut at 200 characters. Python's DocComparison results name the
+      values value1/value2/detail; compare_mock_docs now also carries them as
+      MATLAB's actualValue/expectedValue/comment, which reportSummary reads.
+      For a non-numeric value Python prints [<len> <type>] ("[2 list]") where
+      MATLAB prints [<size> <class>] ("[1x2 cell]"). TestCtestReportSummary.m
+      ports over as TestReportSummarySaysHowFarOut in
+      tests/test_mock_against_matlab.py.
       Examined against NDI-matlab 0bdc0ac79, the file's last-touching commit.
       Six of MATLAB's methods had no counterpart, and the ones that did looked
       in the wrong place. PORTED: calc_path (MATLAB's is which(class(obj)) --
@@ -461,6 +475,20 @@ classes:
         decision_log: >
           DISCREPANCY NOTED: Not implemented in Python.
           Not critical for current testing infrastructure.
+
+      - name: valueString
+        kind: static
+        input_arguments:
+          - name: value
+            type_matlab: "any"
+            type_python: "Any"
+        output_arguments:
+          - name: str
+            type_python: "str"
+        decision_log: >
+          Ported from NDI-matlab 0374dd2 (VH-Lab/NDI-matlab#1046). See the
+          class decision_log for the one difference in how non-numeric values
+          are named.
 
     not_applicable:
       - name: plot

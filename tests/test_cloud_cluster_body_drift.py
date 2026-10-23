@@ -7,6 +7,8 @@ left with a result that looks complete and is not.
 
 from __future__ import annotations
 
+import pytest
+
 
 class _Doc:
     def __init__(self, props):
@@ -164,6 +166,7 @@ class TestAShortDownloadIsAnnounced:
         assert len(caplog.text.splitlines()) == 1
 
 
+@pytest.mark.usefixtures("serial_document_upload")
 class TestAFailedRemoteListingExplainsItself:
     """MATLAB counterpart: ``uploadDocumentCollection.m``, NDI-matlab ``e96801dee``.
 
