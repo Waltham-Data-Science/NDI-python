@@ -90,7 +90,7 @@ functions:
   # --- auth.py functions ---
   - name: authenticate
     matlab_path: "+ndi/+cloud/authenticate.m"
-    matlab_last_sync_hash: "293ec411"
+    matlab_last_sync_hash: "3cb19a85f"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: config
@@ -103,6 +103,14 @@ functions:
       - name: organizationID
         type_python: "str"
     decision_log: >
+      2026-10-23: synchronized with NDI-matlab 3cb19a85f (VH-Lab/NDI-matlab#1049).
+      MATLAB tried the Vault before NDI_CLOUD_USERNAME / NDI_CLOUD_PASSWORD
+      and, with no UserName, logged in as whoever the Vault held, so setting
+      those variables (or switchProfile) did not switch account. When both are
+      set, they now pick the user a new login uses; the Vault is used only for
+      that same email. Python already had this order -- an existing token,
+      then the environment's credentials, then the saved profile -- so
+      nothing changes here; the two now agree.
       2026-10-18: synchronized with NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037). A user may belong
       to several organizations, so login no longer picks the first: it caches
       the whole list (ndi.cloud.internal.setOrganizations) and a cached login
@@ -116,7 +124,7 @@ functions:
 
   - name: testLogin
     matlab_path: "+ndi/+cloud/testLogin.m"
-    matlab_last_sync_hash: "293ec411"
+    matlab_last_sync_hash: "3cb19a85f"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: user_name
@@ -135,6 +143,11 @@ functions:
       - name: is_good
         type_python: "bool"
     decision_log: >
+      2026-10-23: NDI-matlab 3cb19a85f (VH-Lab/NDI-matlab#1049) changed only
+      the help text: the silent re-login in step 3 uses the Vault only when it
+      holds the same user as NDI_CLOUD_USERNAME (see authenticate). Python's
+      step 2 logs in with the environment's credentials directly; nothing to
+      follow.
       2026-10-18: NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037) changed only the Verbose token-state
       report, which now prints the cached organization list instead of
       NDI_CLOUD_ORGANIZATION_ID. Python's verbose output never printed the
@@ -1513,7 +1526,7 @@ functions:
   # --- profile.py (singleton manager for cloud login profiles) ---
   - name: profile
     matlab_path: "+ndi/+cloud/profile.m"
-    matlab_last_sync_hash: "e6a580b34"
+    matlab_last_sync_hash: "3cb19a85f"
     python_path: "ndi/cloud/profile.py"
     functions:
       - matlab: "ndi.cloud.profile.list()"
@@ -1591,6 +1604,11 @@ functions:
         python: "ndi.cloud.profile.reset()"
         returns: "None"
     decision_log: >
+      2026-10-23: synchronized with NDI-matlab 3cb19a85f (VH-Lab/NDI-matlab#1049),
+      which changed only switchProfile's help: the next login now uses the
+      profile's user even when the MATLAB Vault holds another (the fix is in
+      authenticate). Python's switch_profile already took effect that way,
+      because Python's authenticate puts the environment's credentials first.
       Ported from MATLAB main as of 2026-05-11 (matlab HEAD 2566fe4d,
       commit 970b6854b1). MATLAB exposes ndi.cloud.profile as a singleton
       classdef with static methods; Python ports the same surface as
