@@ -13,6 +13,7 @@ import math
 import tempfile
 from unittest.mock import MagicMock
 
+import numpy as np
 import pytest
 
 from ndi.mock import (
@@ -216,6 +217,82 @@ class TestCtestNewMethods:
         assert (
             ndi_mock_ctest.reportSummary(report)
             == " Out of tolerance: response.mean, response.stderr."
+        )
+
+
+def _failure_report(name, actual, expected, comment):
+    """One report entry as compare_mock_docs builds it (MATLAB's failureReport)."""
+    return {"name": name, "actualValue": actual, "expectedValue": expected, "comment": comment}
+
+
+class TestReportSummarySaysHowFarOut:
+    """Port of NDI-matlab TestCtestReportSummary.m (VH-Lab/NDI-matlab#1046).
+
+    The failure message must say how far out of tolerance each field was, not
+    only that it was: mock data are not seeded, so a failing run cannot be
+    reproduced afterwards.
+    """
+
+    def test_values_and_difference_are_reported(self):
+        s = ndi_mock_ctest.reportSummary(
+            _failure_report("fit.p", [1, 2, 30], [1, 2, 10], "Abs difference > tolerance matrix")
+        )
+        assert " Out of tolerance: fit.p." in s
+        assert "fit.p: actual [1 2 30], expected [1 2 10]" in s
+        assert "abs difference [0 0 20]" in s
+        assert "(Abs difference > tolerance matrix)" in s
+
+    def test_each_failing_field_gets_its_own_line(self):
+        lines = ndi_mock_ctest.reportSummary(
+            [_failure_report("x", 1, 2, "m1"), _failure_report("y", 3, 5, "m2")]
+        ).splitlines()
+        assert len(lines) == 3
+        assert "x: actual 1, expected 2, abs difference 1 (m1)" in lines[1]
+        assert "y: actual 3, expected 5, abs difference 2 (m2)" in lines[2]
+
+    def test_no_difference_when_sizes_differ(self):
+        s = ndi_mock_ctest.reportSummary(
+            _failure_report("v", [1, 2], [1, 2, 3], "Dimension mismatch")
+        )
+        assert "v: actual [1 2], expected [1 2 3]" in s
+        assert "abs difference" not in s
+
+    def test_no_difference_for_text(self):
+        s = ndi_mock_ctest.reportSummary(_failure_report("t", "abc", "abd", "Strings differ"))
+        assert "t: actual 'abc', expected 'abd'" in s
+        assert "abs difference" not in s
+
+    def test_empty_comment_is_omitted(self):
+        s = ndi_mock_ctest.reportSummary(_failure_report("n", 1, 2, ""))
+        assert s.endswith("abs difference 1")
+
+    def test_value_string_formats(self):
+        vs = ndi_mock_ctest.valueString
+        assert vs(math.pi) == "3.14159"
+        assert vs(True) == "true"
+        assert vs(np.arange(1, 9).reshape(2, 2, 2)) == "[1 2 3 4 5 6 7 8]"
+        assert vs([[1, 2], [3, 4]]) == "[1 2;3 4]"
+        assert vs("s") == "'s'"
+        assert vs([1, "a"]) == "[2 list]"
+
+    def test_long_values_are_cut(self):
+        s = ndi_mock_ctest.valueString(list(range(1, 1001)))
+        assert len(s) == 204
+        assert s.endswith(" ...")
+
+    def test_compare_mock_docs_report_carries_the_values(self):
+        from ndi.doc_comparison import DocComparison
+
+        dc = DocComparison()
+        dc.add_comparison_parameter("response.mean", "abs_difference", tolerance=0.1)
+        expected = MagicMock()
+        expected.document_properties = {"response": {"mean": 1.0}}
+        actual = MagicMock()
+        actual.document_properties = {"response": {"mean": 2.0}}
+        match, report = ndi_mock_ctest().compare_mock_docs(expected, actual, "highSNR", dc)
+        assert match is False
+        assert "response.mean: actual 2, expected 1, abs difference 1" in (
+            ndi_mock_ctest.reportSummary(report)
         )
 
 

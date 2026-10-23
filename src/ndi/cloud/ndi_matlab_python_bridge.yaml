@@ -90,7 +90,7 @@ functions:
   # --- auth.py functions ---
   - name: authenticate
     matlab_path: "+ndi/+cloud/authenticate.m"
-    matlab_last_sync_hash: "293ec411"
+    matlab_last_sync_hash: "3cb19a85f"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: config
@@ -103,6 +103,14 @@ functions:
       - name: organizationID
         type_python: "str"
     decision_log: >
+      2026-10-23: synchronized with NDI-matlab 3cb19a85f (VH-Lab/NDI-matlab#1049).
+      MATLAB tried the Vault before NDI_CLOUD_USERNAME / NDI_CLOUD_PASSWORD
+      and, with no UserName, logged in as whoever the Vault held, so setting
+      those variables (or switchProfile) did not switch account. When both are
+      set, they now pick the user a new login uses; the Vault is used only for
+      that same email. Python already had this order -- an existing token,
+      then the environment's credentials, then the saved profile -- so
+      nothing changes here; the two now agree.
       2026-10-18: synchronized with NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037). A user may belong
       to several organizations, so login no longer picks the first: it caches
       the whole list (ndi.cloud.internal.setOrganizations) and a cached login
@@ -116,7 +124,7 @@ functions:
 
   - name: testLogin
     matlab_path: "+ndi/+cloud/testLogin.m"
-    matlab_last_sync_hash: "293ec411"
+    matlab_last_sync_hash: "3cb19a85f"
     python_path: "ndi/cloud/auth.py"
     input_arguments:
       - name: user_name
@@ -135,6 +143,11 @@ functions:
       - name: is_good
         type_python: "bool"
     decision_log: >
+      2026-10-23: NDI-matlab 3cb19a85f (VH-Lab/NDI-matlab#1049) changed only
+      the help text: the silent re-login in step 3 uses the Vault only when it
+      holds the same user as NDI_CLOUD_USERNAME (see authenticate). Python's
+      step 2 logs in with the environment's credentials directly; nothing to
+      follow.
       2026-10-18: NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037) changed only the Verbose token-state
       report, which now prints the cached organization list instead of
       NDI_CLOUD_ORGANIZATION_ID. Python's verbose output never printed the
@@ -884,7 +897,7 @@ functions:
   # --- upload.py functions ---
   - name: uploadDocumentCollection
     matlab_path: "+ndi/+cloud/+upload/uploadDocumentCollection.m"
-    matlab_last_sync_hash: "7180cc8"
+    matlab_last_sync_hash: "004585c"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: dataset_id
@@ -900,6 +913,14 @@ functions:
       - name: max_chunk
         type_python: "int | None"
         default: "None"
+      - name: wait_for_ingestion
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "True"
+      - name: ingestion_timeout
+        type_matlab: "double"
+        type_python: "float"
+        default: "300.0"
       - name: client
         type_python: "CloudClient | None"
         default: "None"
@@ -908,6 +929,24 @@ functions:
         type_python: "dict[str, Any]"
     decision_log: >
       Exact match.
+      2026-10-23: synchronized with NDI-matlab 004585c (VH-Lab/NDI-matlab#1047).
+      Until now this entry said "Exact match" but the port only had MATLAB's
+      SERIAL path: every document went up as its own addDocument request,
+      whatever NDI_CLOUD_UPLOAD_NO_ZIP said -- one request per document, hours
+      for a 100,000-document dataset. It now has MATLAB's default BATCH path:
+      each chunk is one JSON array zipped by zip_documents_for_upload and PUT
+      to getBulkUploadURL; NDI_CLOUD_UPLOAD_NO_ZIP=true keeps the serial path,
+      as in MATLAB. #1047's ingestion wait comes with it: a bulk upload
+      returns once the zip is stored, not ingested, and has no job id, so the
+      batch path reads countDocuments before uploading and afterwards calls
+      waitForDocumentCount for that count plus the documents in the stored
+      batches (wait_for_ingestion / ingestion_timeout mirror MATLAB's
+      waitForIngestion / ingestionTimeout). A timeout logs a warning and
+      leaves status alone; the result is in report["ingestion"].
+      upload_type now reports 'batch' or 'serial' truthfully. Tests that model
+      the transport by patching addDocument run on the serial path through the
+      serial_document_upload fixture; the batch path is tested in
+      tests/test_cloud_upload_bulk_documents.py.
       2026-10-17: NDI-matlab 7180cc8 (VH-Lab/NDI-matlab#1033) makes maxDocumentChunk default to the preference
       Cloud.Upload.Max_Document_Batch_Count (was Inf). max_chunk=None now
       reads the same preference; 0 or negative still means all at once.
@@ -1487,7 +1526,7 @@ functions:
   # --- profile.py (singleton manager for cloud login profiles) ---
   - name: profile
     matlab_path: "+ndi/+cloud/profile.m"
-    matlab_last_sync_hash: "e6a580b34"
+    matlab_last_sync_hash: "3cb19a85f"
     python_path: "ndi/cloud/profile.py"
     functions:
       - matlab: "ndi.cloud.profile.list()"
@@ -1565,6 +1604,11 @@ functions:
         python: "ndi.cloud.profile.reset()"
         returns: "None"
     decision_log: >
+      2026-10-23: synchronized with NDI-matlab 3cb19a85f (VH-Lab/NDI-matlab#1049),
+      which changed only switchProfile's help: the next login now uses the
+      profile's user even when the MATLAB Vault holds another (the fix is in
+      authenticate). Python's switch_profile already took effect that way,
+      because Python's authenticate puts the environment's credentials first.
       Ported from MATLAB main as of 2026-05-11 (matlab HEAD 2566fe4d,
       commit 970b6854b1). MATLAB exposes ndi.cloud.profile as a singleton
       classdef with static methods; Python ports the same surface as
@@ -1877,10 +1921,34 @@ porting_deferred:
   - name: zip_documents_for_upload
     matlab_path: "+ndi/+cloud/+upload/+internal/zip_documents_for_upload.m"
     matlab_last_sync_hash: "c6aef552"
-    status: ported_differently
+    python_path: "ndi/cloud/upload.py"
+    input_arguments:
+      - name: documents
+        type_matlab: "cell"
+        type_python: "list[dict[str, Any]]"
+      - name: dataset_id
+        type_matlab: "char"
+        type_python: "str"
+      - name: target_folder
+        type_matlab: "string"
+        type_python: "str | Path | None"
+        default: "None"
+    output_arguments:
+      - name: zip_path
+        type_python: "Path"
+      - name: id_manifest
+        type_python: "list[str]"
     decision_log: >
-      MATLAB internal helper. Python uses zipForUpload which handles
-      this internally with zipfile module.
+      2026-10-23: ported (was ported_differently). The old note said
+      zipForUpload covered this; it does not -- zipForUpload zips binary FILES
+      for getFileCollectionUploadURL, and nothing zipped DOCUMENTS, which is
+      why uploadDocumentCollection had no bulk path. Same archive as MATLAB:
+      one .json file holding the documents as a JSON array, encoded with
+      did.datastructures.json_encode_nan (MATLAB's jsonencodenan), the zip
+      named <dataset_id>.<random>.zip. Lives in ndi.cloud.upload rather than
+      an internal subpackage, next to its one caller. Python's own zip entry
+      name is random hex rather than ndi.file.temp_name's; the server reads
+      the archive's single .json, whatever it is called.
   # =======================================================================
   # +ndi/+cloud/+ui - MATLAB's cloud dialogs.
   #

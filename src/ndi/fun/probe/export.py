@@ -12,9 +12,10 @@ The multiplier is applied in the ENCODE direction::
 
 so it is the RECIPROCAL of the factor that decodes stored int16 back to
 physical units. Intan int16 decode to microvolts via ``uV = int16 * 0.195``,
-so the encode multiplier is ``1/0.195`` -- the default of :func:`all_binary`
-and of :func:`autoMultiplier` for floating-point data. For SpikeGLX volts it
-is ``(512*500)/0.6``, which has to be passed explicitly. Getting this
+so the encode multiplier is ``1/0.195`` -- what :func:`autoMultiplier`
+picks for floating-point data, and so what :func:`all_binary` and
+:func:`oneProbe` use for it by default (raw counts get 1). For SpikeGLX volts
+it is ``(512*500)/0.6``, which has to be passed explicitly. Getting this
 backwards does not raise: it writes a file whose spikes are 26x too small.
 
 THE METADATA SIDECAR IS THE MATLAB ONE
@@ -42,6 +43,7 @@ __all__ = [
     "one_probe",
     "INTAN_MULTIPLIER",
     "CHUNK_DURATION",
+    "AUTO_MULTIPLIER_SAMPLES",
 ]
 
 #: The Intan microvolt encode default: uV decode by ``int16 * 0.195``.
@@ -49,6 +51,9 @@ INTAN_MULTIPLIER = 1 / 0.195
 
 #: Seconds of data read and written at a time, as MATLAB reads them.
 CHUNK_DURATION = 100
+
+#: Samples :func:`autoMultiplier` examines at the start of the first epoch.
+AUTO_MULTIPLIER_SAMPLES = 100
 
 
 def binary(
@@ -165,15 +170,22 @@ def all_binary(
     binary_dir: str = "kilosort",
     binaryFileName: str = "kilosort.bin",  # noqa: N803 (MATLAB mirror)
     verbose: int | bool = 1,
-    multiplier: float = INTAN_MULTIPLIER,
+    multiplier: float | None = None,
     noBinary: bool = False,  # noqa: N803 (MATLAB mirror)
 ) -> None:
-    """Export every n-trode probe of session *S* with one fixed multiplier.
+    """Export every n-trode probe of session *S*.
 
     Creates ``<S.path>/<binary_dir>``, and inside it one folder per probe
     (named by :func:`ndi.fun.file.elementDirectory`, so a folder written by
     an older NDI is reused rather than duplicated) holding
     *binaryFileName*.
+
+    *multiplier* is the encode multiplier, ``int16 = multiplier * physical``.
+    ``None`` (MATLAB's ``[]``, the default) chooses it SEPARATELY FOR EACH
+    PROBE with :func:`autoMultiplier`: 1 for raw counts (an integer dtype,
+    or whole-number floats such as SpikeGLX counts), ``1/0.195`` otherwise,
+    which assumes Intan microvolts. For SpikeGLX data in volts pass
+    ``(512*500)/0.6``. A number given here applies to every probe.
 
     MATLAB equivalent: ``ndi.fun.probe.export.all_binary``.
     """
@@ -195,11 +207,14 @@ def all_binary(
             print(f"Now working on probe {probe.elementstring()}.")
         this_path = Path(elementDirectory(binary_path, probe)[0])
         this_path.mkdir(parents=True, exist_ok=True)
+        mult = autoMultiplier(probe) if multiplier is None else float(multiplier)
+        if verbose:
+            print(f"  Using multiplier {mult:.5g}.")
         binary(
             probe,
             this_path / binaryFileName,
             verbose=verbose,
-            multiplier=multiplier,
+            multiplier=mult,
             noBinary=noBinary,
         )
 
@@ -210,12 +225,23 @@ def all_binary(
 def autoMultiplier(probe: Any) -> float:  # noqa: N802 (MATLAB mirror)
     """Pick an int16 encode multiplier from what *probe* actually returns.
 
-    Integer-class samples are already int16-style counts, so 1 passes them
-    through losslessly. Anything else is floating-point physical units, and
-    gets the Intan microvolt default ``1/0.195``.
+    Looks at a short stretch -- up to :data:`AUTO_MULTIPLIER_SAMPLES`
+    samples -- at the start of the first epoch:
 
-    That default ASSUMES INTAN. SpikeGLX/Neuropixels data arrive in volts
-    and need ``multiplier=(512*500)/0.6`` passed explicitly; when in doubt,
+    * Raw ADC counts are already int16-style, so 1 passes them through
+      losslessly. Counts are recognized either by an integer dtype (int16,
+      say) or by floating-point values that are ALL WHOLE NUMBERS (SpikeGLX
+      counts returned as double, for instance).
+    * Anything else is floating-point physical units, and gets the Intan
+      microvolt default ``1/0.195``.
+
+    A stretch that is entirely zero is inconclusive and gets the
+    floating-point default, as does a probe that cannot be sampled at all.
+    Non-finite samples are ignored. Without a sample rate a single sample
+    is examined.
+
+    That default ASSUMES INTAN. SpikeGLX/Neuropixels data arriving in volts
+    need ``multiplier=(512*500)/0.6`` passed explicitly; when in doubt,
     read a sample and look at its class and magnitude.
 
     MATLAB equivalent: ``ndi.fun.probe.export.autoMultiplier``.
@@ -224,10 +250,19 @@ def autoMultiplier(probe: Any) -> float:  # noqa: N802 (MATLAB mirror)
         et, _ = probe.epochtable()
         if not et:
             return INTAN_MULTIPLIER
-        t0, _t1 = _epoch_t0_t1(et[0])
-        data, _t, _ref = probe.readtimeseries(et[0].get("epoch_id", 1), t0, t0)
-        if data is not None and np.issubdtype(np.asarray(data).dtype, np.integer):
-            return 1.0
+        epoch_id = et[0].get("epoch_id", 1)
+        t0, t_end = _epoch_t0_t1(et[0])
+        try:
+            t1 = min(t0 + (AUTO_MULTIPLIER_SAMPLES - 1) / float(probe.samplerate(epoch_id)), t_end)
+        except Exception:  # noqa: BLE001 - no sample rate: examine a single sample
+            t1 = t0
+        data, _t, _ref = probe.readtimeseries(epoch_id, t0, t1)
+        data = np.asarray(data)
+        if np.issubdtype(data.dtype, np.integer):
+            return 1.0  # already int16-style counts: pass through unchanged
+        data = data[np.isfinite(data)]
+        if data.size > 0 and np.any(data != 0) and np.all(data == np.round(data)):
+            return 1.0  # whole-number counts stored as floating point
     except Exception:  # noqa: BLE001 - an unsamplable probe keeps the default
         return INTAN_MULTIPLIER
     return INTAN_MULTIPLIER
@@ -252,6 +287,11 @@ def oneProbe(  # noqa: N802 (MATLAB mirror)
     with no geometry gets a DEFAULT SINGLE-COLUMN LINEAR map instead --
     enough to let a sorter run, and usually wrong for a real array, which is
     why the returned ``hadGeometry`` says which of the two happened.
+
+    The int16 encode multiplier defaults to :func:`autoMultiplier` (1 for raw
+    counts, whether an integer dtype or whole-number floats; ``1/0.195`` for
+    floating-point microvolts). Pass *multiplier* to override it, e.g.
+    ``(512*500)/0.6`` for SpikeGLX volts.
 
     Returns a dict with ``binaryFile``, ``multiplier``, ``channelMapFile``
     (``""`` when none was written) and ``hadGeometry`` -- MATLAB's STATUS

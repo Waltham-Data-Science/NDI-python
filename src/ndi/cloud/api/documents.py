@@ -10,10 +10,12 @@ MATLAB equivalents: +ndi/+cloud/+api/+documents/*.m,
 
 from __future__ import annotations
 
+import math
 import re
+import time
 from typing import Annotated, Any
 
-from pydantic import SkipValidation, validate_call
+from pydantic import Field, SkipValidation, validate_call
 
 from ..client import APIResponse, CloudClient, _auto_client
 from ._validators import VALIDATE_CONFIG, CloudId, FilePath, PageNumber, PageSize, Scope
@@ -180,6 +182,77 @@ def countDocuments(dataset_id: CloudId, *, client: _Client = None) -> int:
 
     ds = getDataset(dataset_id, client=client)
     return ds.get("documentCount", 0)
+
+
+@_auto_client
+@validate_call(config=VALIDATE_CONFIG)
+def waitForDocumentCount(
+    dataset_id: CloudId,
+    expected_count: Annotated[int, Field(ge=0)],
+    *,
+    timeout: float = 300.0,
+    initial_interval: float = 1.0,
+    max_interval: float = 10.0,
+    backoff_factor: float = 2.0,
+    client: _Client = None,
+) -> dict[str, Any]:
+    """Wait until a dataset lists at least *expected_count* documents.
+
+    Repeatedly calls :func:`countDocuments` at exponentially growing
+    intervals until the count is at least *expected_count* or the overall
+    timeout elapses. A failed poll is retried, not treated as the end of
+    the wait.
+
+    Use it after a bulk document upload: the upload returns once the zip is
+    stored, before the server has ingested the documents, so a listing made
+    straight away can miss some of them. Bulk document uploads have no job
+    id, so :func:`ndi.cloud.api.files.waitForAllBulkUploads` (which waits on
+    bulk FILE uploads) does not cover them.
+
+    Args:
+        dataset_id: Cloud dataset ID.
+        expected_count: The number of documents the dataset should list.
+        timeout: Overall deadline in seconds. Default 300.
+        initial_interval: First sleep between polls (s). Default 1.
+        max_interval: Cap on the per-poll sleep (s). Default 10.
+        backoff_factor: Multiplier applied after each poll. Default 2.
+
+    Returns:
+        Dict with ``state`` (``'complete'`` or ``'timeout'``), ``count``
+        (the last count read; ``nan`` if no poll succeeded),
+        ``expectedCount`` and ``elapsed`` (seconds). ``state == 'complete'``
+        is the success verdict.
+
+    MATLAB equivalent: +cloud/+api/+documents/waitForDocumentCount.m
+    """
+    start = time.monotonic()
+    interval = initial_interval
+    answer: dict[str, Any] = {
+        "state": "unknown",
+        "count": math.nan,
+        "expectedCount": expected_count,
+        "elapsed": 0.0,
+    }
+    while True:
+        try:
+            count = countDocuments(dataset_id, client=client)
+            if isinstance(count, (int, float)) and not isinstance(count, bool):
+                answer["count"] = count
+                if count >= expected_count:
+                    answer["state"] = "complete"
+                    answer["elapsed"] = time.monotonic() - start
+                    return answer
+        except Exception:
+            # A failed poll is transient: keep the last good count and try
+            # again rather than giving up on a gateway blip.
+            pass
+        elapsed = time.monotonic() - start
+        if elapsed >= timeout:
+            answer["state"] = "timeout"
+            answer["elapsed"] = elapsed
+            return answer
+        time.sleep(min(interval, max_interval, timeout - elapsed))
+        interval = min(interval * backoff_factor, max_interval)
 
 
 @_auto_client
