@@ -308,6 +308,9 @@ class ndi_session(ABC):
             v = v[:-1]
         return v in ("(.*)", ".*")
 
+    #: snake_case alias, as for every MATLAB-named method on this class.
+    is_match_all_regexp = isMatchAllRegexp
+
     def daqsystem_load(self, name: str | None = None, **kwargs) -> list[Any] | Any | None:
         """
         Load DAQ systems from the session.
