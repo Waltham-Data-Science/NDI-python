@@ -23,6 +23,7 @@ unblocks that pane ahead of the rest of the datasets work.
 
 from __future__ import annotations
 
+import keyword
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
@@ -33,6 +34,7 @@ __all__ = [
     "cloud_dataset_id_label",
     "first_field",
     "append_workspace_var_names",
+    "workspace_name_error",
     "dataset_menu_enable",
     "cloud_summary_message",
     "cloud_check_message",
@@ -193,6 +195,24 @@ def append_workspace_var_names(label: str, names: Sequence[str] | None) -> str:
         return label
     quoted = ", ".join(f'"{n}"' for n in names)
     return f"{label} {quoted}"
+
+
+def workspace_name_error(name: str) -> str:
+    """Why NAME cannot be a workspace variable, or ``""`` when it can.
+
+    MATLAB counterpart: ``ndi.gui.nav.datasetsPane.workspaceNameError``,
+    which uses ``isvarname``; the Python rule is an identifier that is not a
+    keyword.
+    """
+    name = str(name or "")
+    if not name:
+        return "A variable name is required."
+    if not name.isidentifier() or keyword.iskeyword(name):
+        return (
+            f'"{name}" is not a valid Python variable name. Use letters, digits '
+            "and underscores, not starting with a digit."
+        )
+    return ""
 
 
 def dataset_menu_enable(state: Any) -> tuple[bool, bool]:

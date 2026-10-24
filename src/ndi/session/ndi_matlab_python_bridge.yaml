@@ -33,7 +33,7 @@ classes:
   - name: session
     type: class
     matlab_path: "+ndi/session.m"
-    matlab_last_sync_hash: "629787865"
+    matlab_last_sync_hash: "10bad94"
     python_path: "ndi/session/session_base.py"
     python_class: "ndi_session"
 
@@ -106,7 +106,10 @@ classes:
         output_arguments:
           - name: ndi_session_obj
             type_python: "ndi_session"
-        decision_log: "Exact match."
+        decision_log: >
+          Exact match. 2026-10-24: fixed the Python body calling
+          dev.setsession, which ndi_daq_system does not have (its method is
+          set_session), so adding any DAQ system raised AttributeError.
 
       - name: daqsystem_rm
         input_arguments:
@@ -129,7 +132,22 @@ classes:
         output_arguments:
           - name: dev
             type_python: "list[Any] | Any | None"
-        decision_log: "MATLAB uses varargin name-value pairs; Python uses keyword arguments."
+        decision_log: >
+          MATLAB uses varargin name-value pairs; Python uses keyword arguments.
+          2026-10-24: synchronized with NDI-matlab 10bad94 (VH-Lab/NDI-matlab#1058):
+          a name that matches every name ('(.*)', '.*', optionally anchored) is
+          dropped from the query instead of being sent as a regexp, which is slow
+          on large databases; see isMatchAllRegexp.
+
+      - name: isMatchAllRegexp
+        input_arguments:
+          - name: value
+            type_matlab: "any"
+            type_python: "Any"
+        output_arguments:
+          - name: b
+            type_python: "bool"
+        decision_log: "Static method. Exact match."
 
       - name: daqsystem_clear
         input_arguments: []

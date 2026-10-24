@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Navigator: DAQ system browser, cloud dataset id, Assign to workspace,
+  and faster DAQ system loading** (mirroring VH-Lab/NDI-matlab#1058).
+  "Session > DAQ Systems..." opens the new `ndi.gui.nav.DaqSystemBrowser`, a
+  read-only list of a session's DAQ systems with, for the selected one, its
+  reader, file navigator and file patterns, epoch probe map class and
+  patterns, metadata readers, and -- on "Load epochs" -- an epoch's actual
+  files, the pattern each matches and which is the epoch probe map. "Check
+  Cloud status" now opens `ndi.gui.nav.CloudStatusDialog`, which shows the
+  NDI Cloud dataset id with a Copy button (disabled when the dataset is not
+  in the cloud). Dataset and session nodes gain "Assign to workspace...",
+  which binds the object to a variable in `__main__` and relabels the tree in
+  place. `session.daqsystem_load(name='(.*)')` (and any match-everything
+  name) no longer sends a regexp to the database -- on a ~100,000-document
+  database that halved the load time -- via the new
+  `ndi_session.isMatchAllRegexp`; probe epoch tables, `getprobes` and the sync
+  graph, which all load DAQ systems that way, benefit too.
+
 - **Bulk document upload, and waiting for it to be ingested** (mirroring
   VH-Lab/NDI-matlab#1047). `ndi.cloud.upload.uploadDocumentCollection` now
   uploads documents in bulk, as NDI-matlab does: each chunk
@@ -117,6 +134,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `fileInfo`. `listFiles` and `getFileDetails` already pass `crc32` through.
 
 ### Fixed
+
+- **`session.daqsystem_add` raised AttributeError for every DAQ system**: it
+  called `dev.setsession`, but `ndi_daq_system`'s method is `set_session`.
+
+- **Deleting a document left its dependents behind with current DID-python.**
+  `session.database_rm`'s cascade asked for `depends_on("", id)`, relying on
+  an empty name meaning "any"; DID's SQL `depends_on` search (DID-python#101)
+  treats only `'*'` as any, so nothing was found and, e.g., deleting neurons
+  in the spike sorter importer left them in the database. It now asks for
+  `'*'`, as MATLAB's `findalldependencies` does.
 
 - **Lightsheet viewer: slow tiles from the local cache.** Each pyramid level was
   built as one dask graph layer per chunk (`from_delayed` + `da.block`), and
