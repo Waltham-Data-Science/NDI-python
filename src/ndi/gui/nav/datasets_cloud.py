@@ -70,6 +70,9 @@ class CloudActionResult(NamedTuple):
     message: str
     icon: str = "info"
     state: str | None = None
+    #: The NDI Cloud dataset id, when the action learned it ("" otherwise).
+    #: Set by "Check Cloud status" so its dialog can show and copy the id.
+    cloud_dataset_id: str = ""
 
 
 #: The additive sync modes, mapping the pane's command to the sync function
@@ -158,12 +161,13 @@ def check_cloud_status(dataset: Any) -> CloudActionResult:
     try:
         answer = dataset.is_in_cloud()
         in_cloud = answer[0] if isinstance(answer, tuple) else answer
+        cloud_id = str(answer[1] or "") if isinstance(answer, tuple) and len(answer) > 1 else ""
     except Exception as exc:  # noqa: BLE001
         return CloudActionResult(False, title, str(exc), "error", None)
 
     if in_cloud:
         return CloudActionResult(
-            True, title, "This dataset is linked to NDI Cloud.", "success", "incloud"
+            True, title, "This dataset is linked to NDI Cloud.", "success", "incloud", cloud_id
         )
     return CloudActionResult(
         True,

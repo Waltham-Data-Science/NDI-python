@@ -55,6 +55,9 @@ __all__ = [
     "dataset_rows",
     "unaffiliated_rows",
     "check_all_cloud_status",
+    "unique_by_id",
+    "assign_workspace_var",
+    "workspace_has_var",
     "UNKNOWN_STATUS",
 ]
 
@@ -355,6 +358,8 @@ def dataset_session_rows(
             {
                 "label": decorate_with_workspace_vars(label, str(session_id or ""), index),
                 "node_data": session_node_data(None, dataset, session_id),
+                "base_label": label,
+                "id": str(session_id or ""),
             }
         )
     return rows
@@ -374,17 +379,64 @@ def dataset_rows(
     datasets = list(user_datasets or [])
     datasets += search_path_datasets()
     datasets += scan_workspace(dataset_class, namespace)
+    # A dataset can come from more than one source (added with "+" and also
+    # assigned to a variable), so each id is listed once.
+    datasets = unique_by_id(datasets)
 
     rows: list[dict[str, Any]] = []
     for ds in datasets:
+        base = dataset_label(ds)
         rows.append(
             {
-                "label": decorate_with_workspace_vars(dataset_label(ds), obj_id(ds), index),
+                "label": decorate_with_workspace_vars(base, obj_id(ds), index),
                 "node_data": dataset_node_data(ds),
                 "sessions": dataset_session_rows(ds, index),
+                "base_label": base,
+                "id": obj_id(ds),
             }
         )
     return rows
+
+
+def unique_by_id(objs: Sequence[Any]) -> list[Any]:
+    """OBJS with later objects dropped when their id was already seen.
+
+    MATLAB counterpart: ``ndi.gui.nav.datasetsPane/uniqueById``. Objects
+    whose id cannot be read are always kept: two objects that cannot say
+    who they are are not thereby the same object.
+    """
+    seen: set[str] = set()
+    out: list[Any] = []
+    for obj in objs:
+        key = obj_id(obj)
+        if key and key in seen:
+            continue
+        if key:
+            seen.add(key)
+        out.append(obj)
+    return out
+
+
+def assign_workspace_var(name: str, value: Any, namespace: Any = None) -> None:
+    """Bind NAME to VALUE in the user's workspace.
+
+    MATLAB counterpart: ``assignin('base', name, value)`` in
+    ``ndi.gui.nav.datasetsPane/assignToWorkspace``. The workspace is
+    :data:`WORKSPACE_MODULE`'s globals unless NAMESPACE (a mutable mapping)
+    is given, as everywhere in this module.
+    """
+    target = namespace
+    if target is None:
+        module = sys.modules.get(WORKSPACE_MODULE)
+        if module is None:
+            raise RuntimeError(f"There is no {WORKSPACE_MODULE} module to assign into.")
+        target = module.__dict__
+    target[name] = value
+
+
+def workspace_has_var(name: str, namespace: Mapping[str, Any] | None = None) -> bool:
+    """Whether the user's workspace already has a variable NAME."""
+    return name in workspace_namespace(namespace)
 
 
 def unaffiliated_rows(
@@ -393,10 +445,13 @@ def unaffiliated_rows(
     """One row per unaffiliated session: its label and its node payload."""
     rows: list[dict[str, Any]] = []
     for s in sessions or []:
+        base = session_label(s)
         rows.append(
             {
-                "label": decorate_with_workspace_vars(session_label(s), obj_id(s), index),
+                "label": decorate_with_workspace_vars(base, obj_id(s), index),
                 "node_data": session_node_data(s, None, ""),
+                "base_label": base,
+                "id": obj_id(s),
             }
         )
     return rows

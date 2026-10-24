@@ -225,7 +225,7 @@ class ndi_session(ABC):
             raise TypeError("dev must be an ndi.daq.ndi_daq_system")
 
         # Set the session on the DAQ system
-        dev = dev.setsession(self)
+        dev = dev.set_session(self)
 
         # Check if already exists
         sq = dev.searchquery()
@@ -287,6 +287,27 @@ class ndi_session(ABC):
 
         return self
 
+    @staticmethod
+    def isMatchAllRegexp(value: Any) -> bool:
+        """Does the regular expression VALUE match every string?
+
+        MATLAB equivalent: ``ndi.session.isMatchAllRegexp``
+
+        True for the patterns commonly used to mean "any value": ``'(.*)'``
+        and ``'.*'``, optionally anchored with ``'^'`` and/or ``'$'``. False
+        for anything else, including non-text values. Used by
+        :meth:`daqsystem_load` to drop a ``name`` search that would match
+        every DAQ system.
+        """
+        if not isinstance(value, str):
+            return False
+        v = value
+        if v.startswith("^"):
+            v = v[1:]
+        if v.endswith("$"):
+            v = v[:-1]
+        return v in ("(.*)", ".*")
+
     def daqsystem_load(self, name: str | None = None, **kwargs) -> list[Any] | Any | None:
         """
         Load DAQ systems from the session.
@@ -299,6 +320,13 @@ class ndi_session(ABC):
             List of ndi_daq_system objects, single ndi_daq_system if only one,
             or None if none found.
 
+        A ``name`` that matches every name, such as ``'(.*)'`` or ``'.*'``,
+        is dropped from the search rather than sent to the database as a
+        regular expression: every DAQ system has a name, so the result is the
+        same, and a regular-expression search is slow on large databases.
+        ``daqsystem_load(name='(.*)')`` is therefore the same search as
+        ``daqsystem_load()``. See :meth:`isMatchAllRegexp`.
+
         Example:
             >>> all_daqs = session.daqsystem_load(name='(.*)')
             >>> intan_daq = session.daqsystem_load(name='Intan')
@@ -308,8 +336,10 @@ class ndi_session(ABC):
         q = ndi_query("").isa("daqsystem")
         q = q & (ndi_query("base.session_id") == self.id())
 
-        # Add name filter (using regex match for compatibility)
-        if name is not None:
+        # Add name filter (using regex match for compatibility). A pattern
+        # that matches every name is skipped: it cannot narrow the result and
+        # a regexp search costs as much as the rest of the query again.
+        if name is not None and not self.isMatchAllRegexp(name):
             q = q & (ndi_query("base.name").match(name))
 
         # Add other filters

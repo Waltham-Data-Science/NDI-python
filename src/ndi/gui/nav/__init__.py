@@ -23,6 +23,8 @@ from __future__ import annotations
 
 from . import datasets_cloud, datasets_model, datasets_text
 from .cloud_pane import CloudPane
+from .cloud_status_dialog import CloudStatusDialog
+from .daq_system_browser import DaqSystemBrowser
 from .datasets_pane import DatasetsPane
 from .ndi_pane import NdiPane
 from .pane import NavPane
@@ -35,6 +37,8 @@ __all__ = [
     "datasets_model",
     "datasets_text",
     "CloudPane",
+    "CloudStatusDialog",
+    "DaqSystemBrowser",
     "DatasetsPane",
     "NavPane",
     "NdiPane",

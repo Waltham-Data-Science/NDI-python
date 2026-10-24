@@ -553,5 +553,34 @@ class TestDatasetIsInCloud:
         assert _DatasetBase().is_in_cloud() == (False, "")
 
 
+class TestUniqueByIdAndWorkspaceAssignment:
+    def test_unique_by_id_keeps_the_first_of_each_id(self):
+        from types import SimpleNamespace
+
+        from ndi.gui.nav.datasets_model import unique_by_id
+
+        a, b, a2 = (SimpleNamespace(id=i) for i in ("a", "b", "a"))
+        nameless = SimpleNamespace(id="")
+        assert unique_by_id([a, b, a2, nameless, nameless]) == [a, b, nameless, nameless]
+
+    def test_assign_into_a_namespace(self):
+        from ndi.gui.nav.datasets_model import assign_workspace_var, workspace_has_var
+
+        ns: dict = {}
+        assign_workspace_var("D", 5, ns)
+        assert ns == {"D": 5}
+        assert workspace_has_var("D", ns)
+        assert not workspace_has_var("S", ns)
+
+    def test_workspace_name_error(self):
+        from ndi.gui.nav.datasets_text import workspace_name_error
+
+        for good in ("D", "S", "my_dataset2"):
+            assert workspace_name_error(good) == ""
+        assert "required" in workspace_name_error("")
+        for bad in ("2D", "my dataset", "for"):
+            assert "not a valid Python variable name" in workspace_name_error(bad)
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

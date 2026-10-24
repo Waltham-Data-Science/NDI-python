@@ -48,6 +48,7 @@ from .datasets_text import (
     dataset_menu_enable,
     normalize_cloud_list,
     occupied_folder_message,
+    workspace_name_error,
 )
 from .pane import NavPane
 from .status_icon import status_icon
@@ -194,6 +195,10 @@ class DatasetsPane(NavPane):
         #: not garbage-collected out from under the user. See
         #: :meth:`launch_app`.
         self.launched_apps: list[Any] = []
+
+        #: Windows opened from this pane's menus (DAQ system browser, cloud
+        #: status dialog), held for the same reason as ``launched_apps``.
+        self.open_windows: list[Any] = []
 
     def has_body(self) -> bool:
         return True
@@ -434,7 +439,7 @@ class DatasetsPane(NavPane):
     def _parent_widget(self) -> Any:
         return getattr(self.navigator, "figure", None)
 
-    def _ask_text(self, prompt: str, title: str) -> str | None:
+    def _ask_text(self, prompt: str, title: str, default: str = "") -> str | None:
         """A one-line text prompt. None when cancelled, "" when left blank.
 
         The two are different and both callers act on the difference:
@@ -443,7 +448,9 @@ class DatasetsPane(NavPane):
         """
         from PySide6 import QtWidgets
 
-        text, ok = QtWidgets.QInputDialog.getText(self._parent_widget(), title, prompt)
+        text, ok = QtWidgets.QInputDialog.getText(
+            self._parent_widget(), title, prompt, QtWidgets.QLineEdit.EchoMode.Normal, default
+        )
         if not ok:
             return None
         return text.strip()
@@ -494,9 +501,11 @@ class DatasetsPane(NavPane):
         for row in rows:
             item = QtWidgets.QTreeWidgetItem([row["label"]])
             item.setData(0, _NODE_ROLE, row["node_data"])
+            _set_label_data(item, row)
             for child in row.get("children", ()):
                 sub = QtWidgets.QTreeWidgetItem([child["label"]])
                 sub.setData(0, _NODE_ROLE, child["node_data"])
+                _set_label_data(sub, child)
                 item.addChild(sub)
             self.tree.addTopLevelItem(item)
             item.setExpanded(True)
@@ -528,6 +537,8 @@ class DatasetsPane(NavPane):
                     "label": row["label"],
                     "node_data": row["node_data"],
                     "children": row["sessions"],
+                    "base_label": row["base_label"],
+                    "id": row["id"],
                 }
             )
         return rows
@@ -632,7 +643,8 @@ class DatasetsPane(NavPane):
 
         menu = QtWidgets.QMenu(self.tree)
 
-        # "Apps" then "Session", alphabetical, as MATLAB creates them.
+        # "Apps", "Assign to workspace..." then "Session", alphabetical, as
+        # MATLAB creates them.
         apps_root = menu.addMenu("Apps")
         for entry in _order_app_menu(session_apps()):
             if entry["kind"] == "app":
@@ -646,8 +658,11 @@ class DatasetsPane(NavPane):
                         lambda a=app, n=node: self.launch_app(a, n),
                     )
 
+        menu.addAction("Assign to workspace...", lambda: self.assign_session_to_workspace(node))
+
         session_root = menu.addMenu("Session")
         session_root.addAction("Clear Cache", lambda: self.clear_session_cache(node))
+        session_root.addAction("DAQ Systems...", lambda: self.show_daq_systems(node))
         session_root.addAction("Info...", lambda: self.show_session_info(node))
         session_root.addAction("Ingest", lambda: self.ingest_session_node(node))
         session_root.addAction("Ingestion Status", lambda: self.update_session_status(node))
@@ -666,6 +681,9 @@ class DatasetsPane(NavPane):
         from PySide6 import QtWidgets
 
         menu = QtWidgets.QMenu(self.tree)
+        menu.addAction(
+            "Assign to workspace...", lambda: self.assign_to_workspace(dataset, "D", node)
+        )
         cloud = menu.addMenu("Cloud")
 
         cloud.addAction(
@@ -730,8 +748,8 @@ class DatasetsPane(NavPane):
     # ------------------------------------------------------------------
     def _run_cloud(self, node: Any, action: str, dataset: Any) -> Any:
         if action == "check_status":
-            result = datasets_cloud.check_cloud_status(dataset)
-        elif action == "upload":
+            return self._report_cloud_status(node, datasets_cloud.check_cloud_status(dataset))
+        if action == "upload":
             result = datasets_cloud.upload_dataset(
                 dataset,
                 organization_chooser=lambda labels, prompt: self._ask_choice(
@@ -743,6 +761,32 @@ class DatasetsPane(NavPane):
         else:
             result = datasets_cloud.check_for_new(dataset, "local")
         return self._report(node, result)
+
+    def _report_cloud_status(self, node: Any, result: Any) -> Any:
+        """Show "Check Cloud status" in its own window, with the cloud id.
+
+        The window shows the NDI Cloud dataset id with a Copy button (disabled
+        when the dataset is not in the cloud). A failed check is reported as
+        an ordinary alert, since there is no status to show.
+        """
+        if not result.ok:
+            return self._report(node, result)
+        if result.state is not None and node is not None:
+            self.set_dataset_cloud_state(node, result.state)
+        from .cloud_status_dialog import CloudStatusDialog
+
+        try:
+            dialog = CloudStatusDialog(
+                result.state == "incloud",
+                result.cloud_dataset_id,
+                parent=self._parent_widget(),
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._alert(str(exc), result.title, success=False)
+            return result
+        self.open_windows.append(dialog)
+        dialog.show()
+        return result
 
     def _run_sync(self, node: Any, dataset: Any, mode: str) -> Any:
         return self._report(node, datasets_cloud.sync_dataset(dataset, mode))
@@ -809,6 +853,95 @@ class DatasetsPane(NavPane):
             return False
         self._alert("The session cache was cleared.", title, success=True)
         return True
+
+    def show_daq_systems(self, node: Any) -> Any:
+        """Open the DAQ system browser for NODE's session."""
+        title = "DAQ Systems"
+        session = self._resolve_or_report(node, title)
+        if session is None:
+            return None
+        from .daq_system_browser import DaqSystemBrowser
+
+        try:
+            browser = DaqSystemBrowser(session)
+        except Exception as exc:  # noqa: BLE001
+            self._alert(str(exc), title, success=False)
+            return None
+        self.open_windows.append(browser)
+        browser.show()
+        return browser
+
+    def assign_session_to_workspace(self, node: Any) -> str | None:
+        """Put NODE's session in a workspace variable (default ``S``).
+
+        A session inside a dataset is opened first.
+        """
+        session = self._resolve_or_report(node, "Assign to workspace")
+        if session is None:
+            return None
+        return self.assign_to_workspace(session, "S", node)
+
+    def assign_to_workspace(
+        self, value: Any, default_name: str, node: Any = None, name: str | None = None
+    ) -> str | None:
+        """Assign VALUE to a variable in the user's workspace.
+
+        MATLAB counterpart: ``assignToWorkspace``, which uses ``assignin('base',
+        ...)``; here the workspace is ``__main__``'s globals, the same
+        namespace the tree scans for its labels (see
+        :data:`ndi.gui.nav.datasets_model.WORKSPACE_MODULE`).
+
+        Asks for a name (DEFAULT_NAME, e.g. ``D`` or ``S``) unless NAME is
+        given, checks it is a valid variable name, confirms before replacing
+        an existing variable, and assigns. The tree labels are then updated
+        in place (:meth:`relabel_nodes`), which keeps expansion and badges.
+        Returns the name assigned, or None when nothing was.
+        """
+        title = "Assign to workspace"
+        if name is None:
+            name = self._ask_text("Workspace variable name:", title, default_name)
+            if name is None:
+                return None  # cancelled
+        message = workspace_name_error(name)
+        if message:
+            self._alert(message, title, success=False)
+            return None
+        if datasets_model.workspace_has_var(name) and not self._confirm(
+            title,
+            f'The workspace already has a variable "{name}". Replace it?',
+            accept="Replace",
+        ):
+            return None
+        try:
+            datasets_model.assign_workspace_var(name, value)
+        except Exception as exc:  # noqa: BLE001
+            self._alert(str(exc), title, success=False)
+            return None
+        self.relabel_nodes()
+        return name
+
+    def relabel_nodes(self) -> None:
+        """Refresh the workspace-variable names on every node's label.
+
+        Re-indexes the workspace and recomputes each label from the base
+        label and id stored on the node, without rebuilding the tree.
+        """
+        session_cls, dataset_cls = _model_classes()
+        self.ws_var_index = datasets_model.build_workspace_var_index((session_cls, dataset_cls))
+        if self.tree is None:
+            return
+        for i in range(self.tree.topLevelItemCount()):
+            top = self.tree.topLevelItem(i)
+            for item in [top] + [top.child(j) for j in range(top.childCount())]:
+                stored = item.data(0, _LABEL_ROLE)
+                if isinstance(stored, (list, tuple)) and len(stored) == 2:
+                    base, identifier = stored
+                    item.setText(
+                        0,
+                        datasets_model.decorate_with_workspace_vars(
+                            base, identifier, self.ws_var_index
+                        ),
+                    )
 
     def show_session_info(self, node: Any) -> Any:
         """Open the vital-statistics window for NODE's session."""
@@ -940,3 +1073,13 @@ def _model_classes() -> tuple[type, type]:
 #: literal avoids importing Qt just to name a constant in a module that is
 #: otherwise importable without a display.
 _NODE_ROLE = 32
+
+#: Qt item-data role holding a node's ``(base label, id)``, from which
+#: :meth:`DatasetsPane.relabel_nodes` recomputes the label in place.
+_LABEL_ROLE = 33
+
+
+def _set_label_data(item: Any, row: dict[str, Any]) -> None:
+    """Store ROW's base label and id on ITEM, when the row carries them."""
+    if "base_label" in row:
+        item.setData(0, _LABEL_ROLE, [str(row["base_label"]), str(row.get("id", "") or "")])

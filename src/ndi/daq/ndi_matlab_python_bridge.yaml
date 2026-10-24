@@ -756,10 +756,14 @@ classes:
   - name: system
     type: class
     matlab_path: "+ndi/+daq/system.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_last_sync_hash: "e066e8d"
     python_path: "ndi/daq/system.py"
     python_class: "ndi_daq_system"
     inherits: "ndi.ido"
+    decision_log: >
+      2026-10-24: NDI-matlab 989a620 added an optional prefetched-documents
+      input to the constructor and e066e8d reverted it (VH-Lab/NDI-matlab#1058);
+      the file is unchanged from fe64a9f5 in net, so nothing to follow.
 
     properties:
       - name: name

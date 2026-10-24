@@ -770,7 +770,7 @@ ported_late:
 
   - name: datasetsPane
     matlab_path: "+ndi/+gui/+nav/datasetsPane.m"
-    matlab_last_sync_hash: "293ec411"
+    matlab_last_sync_hash: "d2b5170"
     python_path: "ndi/gui/nav/datasets_pane.py"
     decision_log: >
       The navigator's elastic pane, ported across #103, #109, #110 and
@@ -782,6 +782,16 @@ ported_late:
       "[Org Name]" when there is more than one. Python's "Upload to Cloud"
       also passes its list dialog to uploadDataset, so a user in several
       organizations is asked which one, as MATLAB's navigator asks.
+      2026-10-24: synchronized with NDI-matlab d2b5170 (VH-Lab/NDI-matlab#1058):
+      "Check Cloud status" opens cloudStatusDialog (cloud dataset id + Copy)
+      instead of an alert; a "Session > DAQ Systems..." item opens
+      daqSystemBrowser; "Assign to workspace..." on dataset and session nodes
+      assigns the object to a workspace variable (Python: __main__'s globals,
+      the namespace the tree already scans) and relabels nodes in place;
+      datasets are listed once per id (uniqueById -> unique_by_id). As for the
+      rest of this pane, Python's names are snake_case (workspaceNameError ->
+      datasets_text.workspace_name_error, assignToWorkspace ->
+      assign_to_workspace, relabelNodes -> relabel_nodes).
 
   - name: cloudPane
     matlab_path: "+ndi/+gui/+nav/cloudPane.m"
@@ -801,9 +811,49 @@ ported_late:
 
   - name: sessionInfo
     matlab_path: "+ndi/+gui/+nav/sessionInfo.m"
-    matlab_last_sync_hash: "46672187"
+    matlab_last_sync_hash: "b1da61b"
     python_path: "ndi/gui/nav/session_info.py"
-    decision_log: "Ported in #103."
+    decision_log: >
+      Ported in #103. 2026-10-24: synchronized with NDI-matlab b1da61b
+      (VH-Lab/NDI-matlab#1058): DAQ systems are loaded with daqsystem_load()
+      and no name regexp, which is slow on large databases.
+
+  - name: daqSystemBrowser
+    matlab_path: "+ndi/+gui/+nav/daqSystemBrowser.m"
+    matlab_last_sync_hash: "f271efc"
+    python_path: "ndi/gui/nav/daq_system_browser.py"
+    decision_log: >
+      Read-only master-detail browser of a session's DAQ systems, with an
+      on-request example epoch. Ported with VH-Lab/NDI-matlab#1058. Named like
+      the rest of ndi.gui.nav (snake_case module and methods: loadEpochs ->
+      load_epochs, chooseEpoch -> choose_epoch, epochFileRows ->
+      epoch_file_rows, ...). select() takes a 0-based list position where
+      MATLAB's takes a 1-based one; epoch numbers stay 1-based. Class names
+      are MATLAB-style via ndi_matlab_classname so both languages show the
+      same names. File patterns are matched the way ndi.file.navigator's
+      find_file_groups matches them in Python. Class DaqSystemBrowser; like
+      the other ndi.gui.nav entries it names no python_class, because its
+      attributes are snake_case: Session/Figure/List/Daqs/Info/Epochs ->
+      session/figure/list/daqs/info/epochs, DetailPanel -> detail_panel
+      (DetailGrid's role is played by detail_area, a QScrollArea),
+      EpochDropdown/EpochButton/EpochTable -> epoch_dropdown/epoch_button/
+      epoch_table, EpochColumnNames -> module constant EPOCH_COLUMN_NAMES.
+
+  - name: cloudStatusDialog
+    matlab_path: "+ndi/+gui/+nav/cloudStatusDialog.m"
+    matlab_last_sync_hash: "a5b3690"
+    python_path: "ndi/gui/nav/cloud_status_dialog.py"
+    decision_log: >
+      The "Check Cloud status" result window: status, read-only cloud dataset
+      id, Copy (disabled when not in the cloud). Ported with
+      VH-Lab/NDI-matlab#1058; snake_case methods as in the rest of
+      ndi.gui.nav (copyEnable -> copy_enable, idText -> id_text, ...). Copy
+      uses the Qt clipboard. The cloud id reaches it through
+      datasets_cloud.CloudActionResult.cloud_dataset_id. Class
+      CloudStatusDialog; like the other ndi.gui.nav entries it names no
+      python_class, because its attributes are snake_case: InCloud/
+      CloudDatasetId/Figure/IdField/CopyButton -> in_cloud/cloud_dataset_id/
+      figure/id_field/copy_button.
 
   - name: statusIcon
     matlab_path: "+ndi/+gui/+nav/statusIcon.m"
