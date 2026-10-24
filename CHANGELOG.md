@@ -138,6 +138,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **`session.daqsystem_add` raised AttributeError for every DAQ system**: it
   called `dev.setsession`, but `ndi_daq_system`'s method is `set_session`.
 
+- **Deleting a document left its dependents behind with current DID-python.**
+  `session.database_rm`'s cascade asked for `depends_on("", id)`, relying on
+  an empty name meaning "any"; DID's SQL `depends_on` search (DID-python#101)
+  treats only `'*'` as any, so nothing was found and, e.g., deleting neurons
+  in the spike sorter importer left them in the database. It now asks for
+  `'*'`, as MATLAB's `findalldependencies` does.
+
 - **Lightsheet viewer: slow tiles from the local cache.** Each pyramid level was
   built as one dask graph layer per chunk (`from_delayed` + `da.block`), and
   dask walks every layer each time napari computes a slice, so the cost grew

@@ -1135,7 +1135,9 @@ class ndi_session(ABC):
         if self._database is None:
             return dependents
 
-        q = ndi_query("").depends_on("", document.id)
+        # '*' is "any dependency name", as MATLAB's findalldependencies asks.
+        # An empty name is not a wildcard in DID's depends_on search.
+        q = ndi_query("").depends_on("*", document.id)
         results = self.database_search(q)
 
         for doc in results:
