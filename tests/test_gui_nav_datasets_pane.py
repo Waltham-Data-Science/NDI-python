@@ -526,7 +526,11 @@ class TestMenusAreBuilt:
         pane.populate_tree()
         node = pane.tree.topLevelItem(0).child(0)
         menu = pane.build_node_menu(node)
-        assert [a.text() for a in menu.actions()] == ["Apps", "Session"]
+        assert [a.text() for a in menu.actions()] == [
+            "Apps",
+            "Assign to workspace...",
+            "Session",
+        ]
 
     def test_the_apps_menu_is_present_even_with_no_apps_to_offer(self, monkeypatch):
         """Empty says 'no apps found'. Omitting it would say 'sessions have
@@ -626,15 +630,22 @@ class TestMenusAreBuilt:
         pane.user_sessions = [FakeSession("a", path="/s/a")]
         pane.populate_tree()
         menu = pane.build_node_menu(pane.tree.topLevelItem(0).child(0))
-        items = [a.text() for a in menu.actions()[1].menu().actions()]
-        assert items == ["Clear Cache", "Info...", "Ingest", "Ingestion Status"]
+        items = [a.text() for a in menu.actions()[2].menu().actions()]
+        assert items == [
+            "Clear Cache",
+            "DAQ Systems...",
+            "Info...",
+            "Ingest",
+            "Ingestion Status",
+        ]
 
     def test_a_dataset_node_gets_the_cloud_menu_in_matlabs_order(self):
         _qt_or_skip()
         nav, pane = _built_pane(user_datasets=[FakeDataset("d")])
         pane.populate_tree()
         menu = pane.build_node_menu(pane.dataset_nodes()[0])
-        cloud = menu.actions()[0].menu()
+        assert [a.text() for a in menu.actions()] == ["Assign to workspace...", "Cloud"]
+        cloud = menu.actions()[1].menu()
         labels = [a.text() for a in cloud.actions() if a.text()]
         assert labels == [
             "Check Cloud status",
@@ -1008,6 +1019,103 @@ class TestFetchCloudDatasets:
 
         monkeypatch.setattr(api, "getPublished", lambda *a, **k: {"datasets": []})
         assert fetch_cloud_datasets(True) == ([], [])
+
+
+class TestAssignToWorkspace:
+    """ "Assign to workspace..." on dataset and session nodes.
+
+    The workspace is a throwaway module standing in for ``__main__``, and the
+    classes the workspace scan looks for are the fakes, so the labels can be
+    checked without a real session.
+    """
+
+    @pytest.fixture
+    def workspace(self, monkeypatch):
+        import sys
+        import types
+
+        from ndi.gui.nav import datasets_model
+
+        module = types.ModuleType("_ndi_test_workspace")
+        monkeypatch.setitem(sys.modules, module.__name__, module)
+        monkeypatch.setattr(datasets_model, "WORKSPACE_MODULE", module.__name__)
+        monkeypatch.setattr(
+            "ndi.gui.nav.datasets_pane._model_classes", lambda: (FakeSession, FakeDataset)
+        )
+        return module.__dict__
+
+    def test_assigns_a_dataset_and_relabels_in_place(self, workspace):
+        _qt_or_skip()
+        ds = FakeDataset("d", sessions=[("refA", "idA")])
+        nav, pane = _built_pane(user_datasets=[ds])
+        pane.populate_tree()
+        node = pane.dataset_nodes()[0]
+        assert pane.assign_to_workspace(ds, "D", node, name="D") == "D"
+        assert workspace["D"] is ds
+        assert node.text(0) == 'ds-d "D"'
+
+    def test_assigns_a_session_opened_from_its_dataset(self, workspace, monkeypatch):
+        _qt_or_skip()
+        ds = FakeDataset("d", sessions=[("refA", "idA")])
+        nav, pane = _built_pane(user_datasets=[ds])
+        pane.populate_tree()
+        child = pane.dataset_nodes()[0].child(0)
+        monkeypatch.setattr(pane, "_ask_text", lambda p, t, default="": default)
+        assert pane.assign_session_to_workspace(child) == "S"
+        assert workspace["S"].id() == "idA"
+        assert child.text(0) == 'refA "S"'
+
+    def test_a_bad_name_is_refused(self, workspace):
+        _qt_or_skip()
+        ds = FakeDataset("d")
+        nav, pane = _built_pane(user_datasets=[ds])
+        assert pane.assign_to_workspace(ds, "D", None, name="2D") is None
+        assert "2D" not in workspace
+        assert any("not a valid Python variable name" in m for m, _, _ in nav.alerts)
+
+    def test_replacing_needs_confirmation(self, workspace, monkeypatch):
+        _qt_or_skip()
+        ds = FakeDataset("d")
+        nav, pane = _built_pane(user_datasets=[ds])
+        workspace["D"] = "keep me"
+        monkeypatch.setattr(pane, "_confirm", lambda *a, **k: False)
+        assert pane.assign_to_workspace(ds, "D", None, name="D") is None
+        assert workspace["D"] == "keep me"
+        monkeypatch.setattr(pane, "_confirm", lambda *a, **k: True)
+        assert pane.assign_to_workspace(ds, "D", None, name="D") == "D"
+        assert workspace["D"] is ds
+
+    def test_cancel_assigns_nothing(self, workspace, monkeypatch):
+        _qt_or_skip()
+        ds = FakeDataset("d")
+        nav, pane = _built_pane(user_datasets=[ds])
+        monkeypatch.setattr(pane, "_ask_text", lambda p, t, default="": None)
+        assert pane.assign_to_workspace(ds, "D") is None
+        assert "D" not in workspace
+
+
+class TestCheckCloudStatusWindow:
+    def test_the_status_window_shows_the_cloud_id(self, monkeypatch):
+        _qt_or_skip()
+        ds = FakeDataset("d", in_cloud=True)
+        nav, pane = _built_pane(user_datasets=[ds])
+        pane.populate_tree()
+        node = pane.dataset_nodes()[0]
+        result = pane._run_cloud(node, "check_status", ds)
+        assert result.cloud_dataset_id == "cid"
+        dialog = pane.open_windows[-1]
+        assert dialog.id_field.text() == "cid"
+        assert dialog.copy_button.isEnabled()
+        assert node.data(0, 32)["cloud"] == "incloud"
+        assert nav.alerts == []  # the window replaces the alert
+
+    def test_not_in_cloud_greys_out_copy(self):
+        _qt_or_skip()
+        ds = FakeDataset("d", in_cloud=False)
+        nav, pane = _built_pane(user_datasets=[ds])
+        pane.populate_tree()
+        pane._run_cloud(pane.dataset_nodes()[0], "check_status", ds)
+        assert not pane.open_windows[-1].copy_button.isEnabled()
 
 
 def _raise(message):

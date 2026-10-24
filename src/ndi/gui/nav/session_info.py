@@ -58,7 +58,9 @@ class SessionInfo:
     def daq_systems(self) -> list[Any]:
         """The session's DAQ system objects."""
         try:
-            daqs = self.session.daqsystem_load(name="(.*)")
+            # No name filter: a name regexp makes the database search much
+            # slower on large databases, and every DAQ system is wanted.
+            daqs = self.session.daqsystem_load()
         except Exception:  # noqa: BLE001
             return []
         if daqs is None:
