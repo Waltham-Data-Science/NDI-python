@@ -820,7 +820,7 @@ ported_late:
 
   - name: daqSystemBrowser
     matlab_path: "+ndi/+gui/+nav/daqSystemBrowser.m"
-    matlab_last_sync_hash: "f271efc"
+    matlab_last_sync_hash: "663ccff"
     python_path: "ndi/gui/nav/daq_system_browser.py"
     decision_log: >
       Read-only master-detail browser of a session's DAQ systems, with an
@@ -838,6 +838,9 @@ ported_late:
       (DetailGrid's role is played by detail_area, a QScrollArea),
       EpochDropdown/EpochButton/EpochTable -> epoch_dropdown/epoch_button/
       epoch_table, EpochColumnNames -> module constant EPOCH_COLUMN_NAMES.
+      NDI-matlab 663ccff only preallocates describe's metadata-reader cell
+      array (a Code Analyzer performance warning); the result is unchanged,
+      so nothing to follow.
 
   - name: cloudStatusDialog
     matlab_path: "+ndi/+gui/+nav/cloudStatusDialog.m"
