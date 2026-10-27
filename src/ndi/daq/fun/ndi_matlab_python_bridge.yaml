@@ -1,0 +1,57 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/daq/fun/
+# The Primary Contract for the ndi.daq.fun namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Standalone functions
+# =========================================================================
+functions:
+
+  - name: ingestEpochDocuments
+    type: function
+    matlab_path: "+ndi/+daq/+fun/ingestEpochDocuments.m"
+    matlab_last_sync_hash: "8feb9166e"
+    python_path: "ndi/daq/fun/ingest_epoch_documents.py"
+    input_arguments:
+      - name: daqreader
+        type_matlab: "ndi.daq.reader"
+        type_python: "Any"
+      - name: daqmetadatareaders
+        type_matlab: "cell array of ndi.daq.metadatareader"
+        type_python: "list[Any]"
+      - name: epochFiles
+        type_matlab: "cell array of cell arrays of char"
+        type_python: "list[list[str]]"
+      - name: epochIds
+        type_matlab: "cell array of char"
+        type_python: "list[str]"
+      - name: ProgressFcn
+        type_matlab: "function handle or []"
+        type_python: "Callable[[int, int], Any] | None"
+        default: "None"
+      - name: NumberOfWorkers
+        type_matlab: "double ([]: use the preferences)"
+        type_python: "int | None"
+        default: "None"
+    output_arguments:
+      - name: docsPerEpoch
+        type_python: "list[list[Any]]"
+      - name: usedParallel
+        type_python: "bool"
+    decision_log: >
+      Ported (VH-Lab/NDI-matlab#1079). Runs each epoch's reader and
+      metadata-reader ingest_epochfiles, serially or on workers as
+      ndi.fun.parallelWorkers allows, with ProgressFcn(numDone, numTotal)
+      called in the calling process after each epoch and the result always in
+      epoch order. MATLAB's parfor + parallel.pool.DataQueue becomes a spawn
+      ProcessPoolExecutor + as_completed. Two Python-specific points: the
+      readers keep a _session reference that MATLAB's value-class readers do
+      not have, so workers get shallow copies with it cleared
+      (ingest_epochfiles never uses it); and a reader that cannot be pickled
+      falls back to serial with a warning. MATLAB's thread-pool refusal has
+      no counterpart (Python workers here are always processes). A snake_case
+      alias ingest_epoch_documents is bound to the same function.

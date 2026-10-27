@@ -3339,18 +3339,43 @@ not_applicable:
       MATLAB's library paths.
 
   - name: parallelWorkers
+    type: function
     matlab_path: "+ndi/+fun/parallelWorkers.m"
-    matlab_last_sync_hash: "9a9150e7"
-    status: matlab_only
+    matlab_last_sync_hash: "9a9150e7c"
+    python_path: "ndi/fun/utils.py"
+    input_arguments:
+      - name: numberOfWorkers
+        type_matlab: "double ([]: use the preference)"
+        type_python: "int | float | None"
+        default: "None"
+      - name: useDefaultNumberOfWorkers
+        type_matlab: "logical ([]: use the preference)"
+        type_python: "bool | None"
+        default: "None"
+      - name: openPoolIfNone
+        type_matlab: "logical ([]: use the preference)"
+        type_python: "bool | None"
+        default: "None"
+    output_arguments:
+      - name: numberOfWorkers
+        type_python: "int"
     decision_log: >
-      Not applicable. Returns the worker limit to pass as the second
-      argument of a MATLAB `parfor`, reading the Parallel.OpenPoolIfNone and
-      Parallel.NumberOfWorkers preferences. Python has no parfor: parallel
-      code here uses multiprocessing or joblib, which take a worker count
-      directly, so there is no argument for this function to compute. The
-      preferences themselves stay meaningful on the MATLAB side; a Python
-      caller that grows a worker pool should read them through
-      ndi.preferences rather than reviving this signature.
+      Ported 2026-10-27, reversing the earlier matlab_only decision because a
+      Python caller now grows a worker pool: ndi_session.ingest /
+      ndi.daq.fun.ingestEpochDocuments, mirroring NDI-matlab's parallel ingest
+      (VH-Lab/NDI-matlab#1079). The preference reading, the per-call
+      overrides (giving numberOfWorkers implies the default is not wanted),
+      the bad-count warning and the fallback to the shipped defaults when the
+      preferences cannot be read all match. ONE DIFFERENCE, FROM THE
+      LANGUAGES RATHER THAN THE PORT: a MATLAB parpool outlives the call, so
+      MATLAB uses a pool the user opened earlier; Python workers live only
+      for the call that starts them, so there is never "a pool already open".
+      With OpenPoolIfNone false the answer is therefore always 0 (serial);
+      with it true it is NumberOfWorkers when UseDefaultNumberOfWorkers is
+      off, else the number of CPUs available to the process (what a default
+      MATLAB pool gets). The Parallel Computing Toolbox checks have no
+      counterpart: concurrent.futures is in the standard library. A
+      snake_case alias parallel_workers is bound to the same function.
 
   - name: assertAddonOnPath
     matlab_path: "+ndi/+fun/assertAddonOnPath.m"

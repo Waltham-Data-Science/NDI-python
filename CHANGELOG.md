@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Ingestion progress bars and parallel per-epoch work** (mirroring
+  VH-Lab/NDI-matlab#1079). `ndi_session.ingest()` now shows progress through
+  `ndi_gui_component_ProgressBarWindow` -- one bar for the session and one per
+  DAQ system -- on by default (`ShowProgress=False` turns it off;
+  `ProgressBar=` / `ProgressBarTag=` reuse a window). The per-epoch reader and
+  metadata-reader work moves to the new `ndi.daq.fun.ingestEpochDocuments`,
+  which runs it on spawned worker processes when NDI's parallel preferences
+  allow; database writes stay serial and in epoch order. To support this:
+  `ProgressBarWindow` gains MATLAB's silent (headless) mode -- `Silent`,
+  `isHeadless`, `silentModeDefault`, `resolveSilentMode` -- so a run with no
+  display or no PySide6 keeps the bookkeeping and builds no window instead of
+  Qt aborting the process, and `addBar` gains MATLAB's per-bar `Timeout`; and
+  the `Parallel.OpenPoolIfNone`, `Parallel.UseDefaultNumberOfWorkers` and
+  `Parallel.NumberOfWorkers` preferences are registered (shared with
+  NDI-matlab) and read by the new `ndi.fun.parallelWorkers`. Python has no
+  pool that outlives a call, so with the default `OpenPoolIfNone=false`
+  ingestion is serial.
+
 - **Navigator: DAQ system browser, cloud dataset id, Assign to workspace,
   and faster DAQ system loading** (mirroring VH-Lab/NDI-matlab#1058).
   "Session > DAQ Systems..." opens the new `ndi.gui.nav.DaqSystemBrowser`, a

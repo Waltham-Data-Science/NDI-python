@@ -33,7 +33,7 @@ classes:
   - name: session
     type: class
     matlab_path: "+ndi/session.m"
-    matlab_last_sync_hash: "10bad94"
+    matlab_last_sync_hash: "8feb9166e"
     python_path: "ndi/session/session_base.py"
     python_class: "ndi_session"
 
@@ -289,13 +289,32 @@ classes:
         decision_log: "Exact match."
 
       - name: ingest
-        input_arguments: []
+        input_arguments:
+          - name: ShowProgress
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "True"
+          - name: ProgressBar
+            type_matlab: "ndi.gui.component.ProgressBarWindow or []"
+            type_python: "ndi_gui_component_ProgressBarWindow | None"
+            default: "None"
+          - name: ProgressBarTag
+            type_matlab: "char"
+            type_python: "str"
+            default: "''"
         output_arguments:
           - name: b
             type_python: "bool"
           - name: errmsg
             type_python: "str"
-        decision_log: "Exact match. Returns (bool, str) tuple."
+        decision_log: >
+          Exact match. Returns (bool, str) tuple. NDI-matlab 96430ab81 and
+          8feb9166e (VH-Lab/NDI-matlab#1079) add a session-level progress bar
+          (not auto-removed; it stays at 100% like MATLAB's), one bar per DAQ
+          system, and parallel per-epoch work governed by the Parallel.*
+          preferences; all ported, with the options as keyword-only
+          arguments. Python ingest keeps its existing behaviour of catching a
+          DAQ system's exception into errmsg rather than raising.
 
       - name: get_ingested_docs
         input_arguments: []

@@ -523,6 +523,23 @@ classes:
       2026-09-25: NDI-matlab b367283b added a per-bar Timeout name-value on addBar so a long-running bar can opt out of the global auto-timeout sweep. No Python UI counterpart; no behavioural change here.
       2026-09-28: NDI-matlab 2b23dd30 relaxed the addBar Timeout argument-block size constraint (dropped `(1,:)`, which was rejecting `duration.empty` under some MATLAB releases). Pure MATLAB argument-validation adjustment; no behavioural change here.
       2026-10-14: NDI-matlab 1e8fc581, d367f621 and 175b08af (on main via merge aa96851e) made the bar fill its row on R2026a: addBar now parents the bar's uiaxes to a borderless uipanel (AutoResizeChildren off) and pins the axes' InnerPosition BarMargin (5) px inside it through the new static fitBarAxes, run once and as the panel's SizeChangedFcn; removeBar deletes and re-rows that panel via Axes.Parent. This works around uiaxes reserving tick-label/title room in a grid cell, which left R2026a a 2.7 px bar. The Qt port draws a QProgressBar that its layout already sizes to the row, so there is nothing to follow; BarMargin and fitBarAxes join the uifigure plumbing above that has no Qt counterpart. No behavioural change here.
+      2026-10-27: the behavioural gap above is closed, at the maintainer's
+      direction, so that ndi_session.ingest can show progress by default
+      without risking a headless run (Qt aborts the whole process when it
+      cannot reach a display, which no try/except catches). Silent mode is
+      ported: the Silent constructor argument and property, and the static
+      isHeadless, silentModeDefault and resolveSilentMode, with MATLAB's
+      decision order (explicit argument, process-wide override, detection).
+      A silent window builds no widgets -- PySide6 is not even imported -- and
+      keeps all bar bookkeeping. isHeadless has Python-specific signals:
+      MATLAB's batchStartupOptionUsed has no Python counterpart, so it is
+      "PySide6 is missing, or on Linux neither DISPLAY nor WAYLAND_DISPLAY is
+      set" (QT_QPA_PLATFORM=offscreen/minimal counts as a usable display,
+      since Qt then needs none). The per-bar Timeout of NDI-matlab b367283b,
+      recorded above as having no counterpart, is ported too: ingestion bars
+      need to opt out of the 60 s window timeout, because one epoch can take
+      longer than that. Examined against NDI-matlab aa96851e; the MATLAB file
+      has not changed.
 
       NDI-python#295: the MATLAB properties this port does not expose under
       MATLAB's name are enumerated in tests/bridge_property_allowlist.yaml,
@@ -549,6 +566,13 @@ classes:
         type_python: "bool"
         default: "True"
         decision_log: "Exact match."
+      - name: Silent
+        type_matlab: "logical"
+        type_python: "bool"
+        decision_log: >
+          Exact match. Decided once at construction by resolveSilentMode;
+          True means no window or widgets exist and the bars are bookkeeping
+          only.
       - name: ProgressBars
         type_matlab: "struct array"
         type_python: "list[dict[str, Any]]"
@@ -573,6 +597,10 @@ classes:
             type_matlab: "logical"
             type_python: "bool"
             default: "True"
+          - name: Silent
+            type_matlab: "logical or [] (empty: decide automatically)"
+            type_python: "bool | None"
+            default: "None"
         output_arguments:
           - name: app
             type_python: "ndi_gui_component_ProgressBarWindow"
@@ -599,8 +627,15 @@ classes:
             type_matlab: "logical"
             type_python: "bool"
             default: "False"
+          - name: Timeout
+            type_matlab: "duration (duration.empty: inherit the window's)"
+            type_python: "float | None"
+            default: "None"
         output_arguments: []
-        decision_log: "Exact match."
+        decision_log: >
+          Exact match. Timeout is in seconds rather than a duration, like the
+          window's Timeout; None inherits the window's value and math.inf
+          (MATLAB minutes(Inf)) never times out.
 
       - name: updateBar
         input_arguments:
@@ -665,3 +700,42 @@ classes:
           - name: barNum
             type_python: "list[int]"
         decision_log: "Exact match."
+
+      - name: isHeadless
+        kind: static
+        input_arguments: []
+        output_arguments:
+          - name: tf
+            type_python: "bool"
+        decision_log: >
+          Ported with Python-specific signals: True when PySide6 is missing, or
+          on Linux when neither DISPLAY nor WAYLAND_DISPLAY is set (unless
+          QT_QPA_PLATFORM is offscreen/minimal). MATLAB's -batch check has no
+          Python counterpart.
+
+      - name: silentModeDefault
+        kind: static
+        input_arguments:
+          - name: newValue
+            type_matlab: "logical or [] (clear)"
+            type_python: "bool | None"
+            default: "(omitted: read only)"
+        output_arguments:
+          - name: value
+            type_python: "bool | None"
+        decision_log: >
+          Exact match. A module-level variable stands in for MATLAB's
+          persistent; None plays the part of MATLAB's [] both as "no override"
+          and, when passed, as "clear it".
+
+      - name: resolveSilentMode
+        kind: static
+        input_arguments:
+          - name: explicitValue
+            type_matlab: "logical or []"
+            type_python: "bool | None"
+            default: "None"
+        output_arguments:
+          - name: tf
+            type_python: "bool"
+        decision_log: "Exact match. Explicit value, then silentModeDefault, then isHeadless."

@@ -729,18 +729,42 @@ class ndi_session(ABC):
     # Ingest Methods
     # =========================================================================
 
-    def ingest(self) -> tuple[bool, str]:
+    def ingest(
+        self,
+        *,
+        ShowProgress: bool = True,
+        ProgressBar: Any = None,
+        ProgressBarTag: str = "",
+    ) -> tuple[bool, str]:
         """
         Ingest all raw data and sync info into the database.
+
+        MATLAB equivalent: ndi.session/ingest
+
+        [B,ERRMSG] = INGEST(NDI_SESSION_OBJ, ...)
+
+        The reading of each epoch runs on worker processes when NDI's parallel
+        preferences allow it (Parallel.OpenPoolIfNone, Parallel.UseDefault-
+        NumberOfWorkers, Parallel.NumberOfWorkers; see ndi.fun.parallelWorkers).
+        With the default preferences ingestion is serial. All database writes
+        stay serial. Progress is shown with
+        ndi.gui.component.ProgressBarWindow: one bar for the session and one for
+        each DAQ system as it is ingested; with no display the window is
+        silent automatically.
+
+        Args:
+            ShowProgress: Show ingestion progress bars.
+            ProgressBar: An existing ProgressBarWindow to use. None opens/reuses
+                one titled 'NDI Ingest'.
+            ProgressBarTag: Tag for the session-level bar. Empty makes a new
+                unique id.
 
         Returns:
             Tuple of (success, error_message)
         """
-        errmsg = ""
+        from ..daq.system import ndi_daq_system
 
-        # Ingest syncgraph
-        if self._syncgraph is not None:
-            d_syncgraph = self._syncgraph.new_document()
+        errmsg = ""
 
         # Get all DAQ systems
         daqs = self.daqsystem_load(name="(.*)")
@@ -749,12 +773,25 @@ class ndi_session(ABC):
         elif not isinstance(daqs, list):
             daqs = [daqs]
 
+        progress_bar, bar_tag = None, ""
+        if ShowProgress:
+            progress_bar, bar_tag = ndi_daq_system.addIngestProgressBar(
+                ProgressBar, f"Ingesting session {self.reference}", Tag=ProgressBarTag, Auto=False
+            )
+        # steps: the syncgraph, each daq system, and the final syncgraph add
+        num_steps = len(daqs) + 2
+
+        # Ingest syncgraph
+        if self._syncgraph is not None:
+            d_syncgraph = self._syncgraph.new_document()
+        ndi_daq_system.updateIngestProgressBar(progress_bar, bar_tag, 1 / num_steps)
+
         # Ingest each DAQ system
         daq_docs = []
         success = True
-        for daq in daqs:
+        for i, daq in enumerate(daqs, start=1):
             try:
-                b, docs = daq.ingest()
+                b, docs = daq.ingest(ShowProgress=ShowProgress, ProgressBar=progress_bar)
                 daq_docs.append(docs)
                 if not b:
                     success = False
@@ -762,6 +799,7 @@ class ndi_session(ABC):
             except Exception as e:
                 success = False
                 errmsg = str(e)
+            ndi_daq_system.updateIngestProgressBar(progress_bar, bar_tag, (1 + i) / num_steps)
 
         if not success:
             # Clean up on failure
@@ -769,12 +807,14 @@ class ndi_session(ABC):
                 if docs:
                     for doc in docs if isinstance(docs, list) else [docs]:
                         self.database_rm(doc)
+            ndi_daq_system.removeIngestProgressBar(progress_bar, bar_tag)
         else:
             # Add syncgraph documents
             if self._syncgraph is not None:
                 for doc in d_syncgraph:
                     doc = doc.set_session_id(self.id())
                     self.database_add(doc)
+            ndi_daq_system.updateIngestProgressBar(progress_bar, bar_tag, 1.0)
 
         return success, errmsg
 

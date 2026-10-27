@@ -605,55 +605,171 @@ class ndi_daq_system(ndi_ido):
 
         return reader.readmetadata(epochfiles)
 
-    def ingest(self) -> tuple[bool, list[Any]]:
+    def ingest(
+        self,
+        *,
+        ShowProgress: bool = True,
+        ProgressBar: Any = None,
+    ) -> tuple[bool, list[Any]]:
         """
         Ingest data from this DAQ system into the database.
+
+        MATLAB equivalent: ndi.daq.system/ingest
+
+        [B,D] = INGEST(NDI_DAQSYSTEM_OBJ, ...)
+
+        Ingest any uningested epochs. The per-epoch work runs on worker
+        processes when NDI's parallel preferences allow it (see
+        ndi.fun.parallelWorkers; by default it is serial). All database writes
+        are made serially in the calling process after the epochs are computed,
+        and the documents are added in the same order as a serial ingest.
+
+        Args:
+            ShowProgress: Show a progress bar using
+                ndi.gui.component.ProgressBarWindow (silent automatically when
+                there is no display).
+            ProgressBar: An existing ProgressBarWindow to add the bar to. None
+                opens/reuses one titled 'NDI Ingest'.
 
         Returns:
             Tuple of (success, documents):
             - success: True if successful
             - documents: List of created documents
         """
-        et = self.epochtable()
-        docs = []
-        filenavigator_ingested = False
+        from .fun import ingestEpochDocuments
 
+        et = self.epochtable()
+        docs: list[Any] = []
+
+        # find the epochs that still need to be ingested
+        epoch_files: list[list[str]] = []
+        epoch_ids: list[str] = []
         for entry in et:
             underlying = entry.get("underlying_epochs", {})
             epochfiles = underlying.get("underlying", [])
+            if not self._is_ingested(epochfiles):
+                epoch_files.append(list(epochfiles))
+                epoch_ids.append(entry["epoch_id"])
 
-            # Check if already ingested
-            if self._is_ingested(epochfiles):
-                continue
+        progress_bar, bar_tag = None, ""
+        if ShowProgress and epoch_files:
+            progress_bar, bar_tag = self.addIngestProgressBar(
+                ProgressBar, f"Ingesting {self.name} ({len(epoch_files)} epochs)"
+            )
+        # the database add is one more step after all of the epochs
+        num_steps = len(epoch_files) + 1
 
-            # Ingest file navigator first
-            if not filenavigator_ingested and self._filenavigator is not None:
-                nav_docs = self._filenavigator.ingest()
-                docs.extend(nav_docs)
-                filenavigator_ingested = True
+        try:
+            if epoch_files:
+                # the file navigator documents are made once, serially; they
+                # need the session and its database
+                if self._filenavigator is not None:
+                    docs.extend(self._filenavigator.ingest())
 
-            # Ingest DAQ reader data
-            if self._daqreader is not None:
-                reader_docs = self._daqreader.ingest_epochfiles(epochfiles, entry["epoch_id"])
-                if not isinstance(reader_docs, list):
-                    reader_docs = [reader_docs]
-                docs.extend(reader_docs)
+                docs_per_epoch, _ = ingestEpochDocuments(
+                    self._daqreader,
+                    list(self._daqmetadatareaders),
+                    epoch_files,
+                    epoch_ids,
+                    ProgressFcn=lambda num_done, num_total: self.updateIngestProgressBar(
+                        progress_bar, bar_tag, num_done / num_steps
+                    ),
+                )
+                for epoch_docs in docs_per_epoch:
+                    docs.extend(epoch_docs)
 
-            # Ingest metadata
-            for mreader in self._daqmetadatareaders:
-                m_docs = mreader.ingest_epochfiles(epochfiles, entry["epoch_id"])
-                if not isinstance(m_docs, list):
-                    m_docs = [m_docs]
-                docs.extend(m_docs)
+            # Set session IDs and add to database
+            if self.session is not None:
+                session_id = self.session.id()
+                for doc in docs:
+                    doc.set_session_id(session_id)
+                self.session.database_add(docs)
+        except BaseException:
+            self.removeIngestProgressBar(progress_bar, bar_tag)
+            raise
 
-        # Set session IDs and add to database
-        if self.session is not None:
-            session_id = self.session.id()
-            for doc in docs:
-                doc.set_session_id(session_id)
-            self.session.database_add(docs)
-
+        self.updateIngestProgressBar(progress_bar, bar_tag, 1.0)
         return True, docs
+
+    # -- Ingestion progress helpers (MATLAB: methods (Static, Hidden)) -------
+    # Shared with ndi_session.ingest. Progress reporting must never break an
+    # ingest, so every call is guarded.
+
+    @staticmethod
+    def addIngestProgressBar(
+        progressBar: Any,
+        label: str,
+        Tag: str = "",
+        Auto: bool = True,
+    ) -> tuple[Any, str]:
+        """Add an ingestion bar to a ProgressBarWindow.
+
+        MATLAB equivalent: ndi.daq.system.addIngestProgressBar
+
+        Adds a bar labeled *label* to *progressBar*. If *progressBar* is None, a
+        window titled 'NDI Ingest' is opened (or reused). Returns the window and
+        the tag of the new bar; on any failure both are empty and a warning is
+        issued. The bar never times out (ingesting one epoch can take longer
+        than the window's default timeout).
+        """
+        import math
+        import warnings
+
+        bar_tag = Tag or ndi_ido.unique_id()
+        try:
+            if progressBar is None:
+                from ..gui.component.ProgressBarWindow import (
+                    ndi_gui_component_ProgressBarWindow,
+                )
+
+                progressBar = ndi_gui_component_ProgressBarWindow("NDI Ingest")
+            progressBar.addBar(Label=label, Tag=bar_tag, Auto=Auto, Timeout=math.inf)
+        except Exception as exc:  # noqa: BLE001 - no bar is not a failed ingest
+            warnings.warn(f"Could not create an ingestion progress bar: {exc}", stacklevel=2)
+            return None, ""
+        return progressBar, bar_tag
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    add_ingest_progress_bar = addIngestProgressBar
+
+    @staticmethod
+    def updateIngestProgressBar(progressBar: Any, barTag: str, fraction: float) -> None:
+        """Set an ingestion bar's progress; no-op if the bar is gone.
+
+        MATLAB equivalent: ndi.daq.system.updateIngestProgressBar
+        """
+        import warnings
+
+        if progressBar is None or not barTag:
+            return
+        try:
+            idx, _ = progressBar.getBarNum(barTag)
+            if idx is None:
+                return  # closed by the user, or removed on completion
+            progressBar.updateBar(barTag, max(0.0, min(1.0, float(fraction))))
+        except Exception as exc:  # noqa: BLE001 - progress must never break an ingest
+            warnings.warn(f"Could not update the ingestion progress bar: {exc}", stacklevel=2)
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    update_ingest_progress_bar = updateIngestProgressBar
+
+    @staticmethod
+    def removeIngestProgressBar(progressBar: Any, barTag: str) -> None:
+        """Remove an ingestion bar (used on error).
+
+        MATLAB equivalent: ndi.daq.system.removeIngestProgressBar
+        """
+        if progressBar is None or not barTag:
+            return
+        try:
+            idx, _ = progressBar.getBarNum(barTag)
+            if idx is not None:
+                progressBar.removeBar(barTag)
+        except Exception:  # noqa: BLE001 - the ingest error is what matters
+            pass
+
+    #: Snake-case alias for MATLAB's name; one method under two names.
+    remove_ingest_progress_bar = removeIngestProgressBar
 
     def _is_ingested(self, epochfiles: list[str]) -> bool:
         """Check if epochfiles indicate an ingested epoch."""
