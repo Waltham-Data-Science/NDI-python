@@ -756,7 +756,7 @@ classes:
   - name: system
     type: class
     matlab_path: "+ndi/+daq/system.m"
-    matlab_last_sync_hash: "8feb9166e"
+    matlab_last_sync_hash: "375a0ff7e"
     python_path: "ndi/daq/system.py"
     python_class: "ndi_daq_system"
     inherits: "ndi.ido"
@@ -775,6 +775,8 @@ classes:
       updateIngestProgressBar and removeIngestProgressBar are ported as static
       methods. Python ingest keeps its existing guard for a missing
       filenavigator or session.
+      NDI-matlab 375a0ff7e only preallocates in ingest's loops (Code Analyzer);
+      nothing to follow.
 
     properties:
       - name: name

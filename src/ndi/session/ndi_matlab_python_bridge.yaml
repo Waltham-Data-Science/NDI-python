@@ -33,7 +33,7 @@ classes:
   - name: session
     type: class
     matlab_path: "+ndi/session.m"
-    matlab_last_sync_hash: "8feb9166e"
+    matlab_last_sync_hash: "375a0ff7e"
     python_path: "ndi/session/session_base.py"
     python_class: "ndi_session"
 
