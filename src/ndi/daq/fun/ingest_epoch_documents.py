@@ -19,11 +19,13 @@ cleared; ``ingest_epochfiles`` never uses it.
 from __future__ import annotations
 
 import copy
+import functools
 import multiprocessing
 import pickle
 import warnings
 from collections.abc import Callable
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
+from queue import Empty
 from typing import Any
 
 from pydantic import ConfigDict, validate_call
@@ -37,7 +39,7 @@ def ingestEpochDocuments(  # noqa: N802 (MATLAB mirror)
     daqmetadatareaders: list[Any],
     epochFiles: list[list[str]],
     epochIds: list[str],
-    ProgressFcn: Callable[[int, int], Any] | None = None,
+    ProgressFcn: Callable[[float, int], Any] | None = None,
     NumberOfWorkers: int | None = None,
 ) -> tuple[list[list[Any]], bool]:
     """Build the ingested-data documents for a set of epochs.
@@ -67,7 +69,10 @@ def ingestEpochDocuments(  # noqa: N802 (MATLAB mirror)
         epochFiles: One list of file names per epoch.
         epochIds: One epoch id per epoch.
         ProgressFcn: Called as ``ProgressFcn(numDone, numTotal)`` in the calling
-            process after each epoch completes.
+            process as epochs progress. numDone counts epochs and is fractional
+            while an epoch is underway: readers whose ingest_epochfiles is
+            ndi_daq_reader_mfdaq's report each segment they write. It is called
+            only when numDone changes, so each whole number is reported once.
         NumberOfWorkers: Overrides the preferences for this call (passed to
             ndi.fun.parallelWorkers); 0 forces serial.
 
@@ -83,22 +88,35 @@ def ingestEpochDocuments(  # noqa: N802 (MATLAB mirror)
         be pickled falls back to serial with a warning rather than failing.
         Completed epochs are reported as they finish, so ProgressFcn may see
         epochs out of order, but the returned list is always in epoch order.
+        Within-epoch progress travels from the workers on a
+        ``multiprocessing.Manager`` queue (MATLAB uses a DataQueue) that the
+        caller drains while it waits.
     """
     num_epochs = len(epochFiles)
     if len(epochIds) != num_epochs:
         raise ValueError("EPOCHFILES and EPOCHIDS must have the same number of entries.")
 
     docs_per_epoch: list[list[Any]] = [[] for _ in range(num_epochs)]
-    done = 0
+    # per-epoch fractions done
+    frac = [0.0] * num_epochs
 
-    def tick() -> None:
-        nonlocal done
-        done += 1
+    def update_progress(k: int, fraction: float) -> None:
+        # Fractions only move forward, and ProgressFcn is called only when the
+        # total changes, so a reader's own final report and the epoch's
+        # completion do not count the epoch twice.
+        new_fraction = max(frac[k], min(max(float(fraction), 0.0), 1.0))
+        if new_fraction == frac[k]:
+            return
+        frac[k] = new_fraction
         if ProgressFcn is not None:
             try:
-                ProgressFcn(done, num_epochs)
+                ProgressFcn(sum(frac), num_epochs)
             except Exception as exc:  # noqa: BLE001 - progress must never break an ingest
                 warnings.warn(f"Progress reporting failed: {exc}", stacklevel=3)
+
+    # only readers using ndi_daq_reader_mfdaq's ingest_epochfiles take a
+    # ProgressFcn; any other reader reports per epoch only
+    within_epoch = ProgressFcn is not None and _reader_reports_progress(daqreader)
 
     number_of_workers = 0
     if num_epochs > 1:
@@ -113,26 +131,50 @@ def ingestEpochDocuments(  # noqa: N802 (MATLAB mirror)
     if number_of_workers > 0:
         reader, mreaders = payload
         ctx = multiprocessing.get_context("spawn")
+        manager = ctx.Manager() if within_epoch else None
+        queue = manager.Queue() if manager is not None else None
+
+        def drain() -> None:
+            while queue is not None:
+                try:
+                    k, fraction = queue.get_nowait()
+                except Empty:
+                    return
+                update_progress(k, fraction)
+
         executor = ProcessPoolExecutor(
             max_workers=min(number_of_workers, num_epochs), mp_context=ctx
         )
         try:
             futures = {
-                executor.submit(_ingestOneEpoch, reader, mreaders, ef, eid): k
+                executor.submit(_ingestOneEpoch, reader, mreaders, ef, eid, queue, k): k
                 for k, (ef, eid) in enumerate(zip(epochFiles, epochIds))
             }
-            for future in as_completed(futures):
-                docs_per_epoch[futures[future]] = future.result()
-                tick()
+            pending = set(futures)
+            while pending:
+                finished, pending = wait(pending, timeout=0.25, return_when=FIRST_COMPLETED)
+                drain()
+                for future in finished:
+                    docs_per_epoch[futures[future]] = future.result()
+                    update_progress(futures[future], 1)
+            drain()
         except BaseException:
             executor.shutdown(wait=True, cancel_futures=True)
             raise
+        finally:
+            if manager is not None:
+                manager.shutdown()
         executor.shutdown(wait=True)
         return docs_per_epoch, True
 
     for k, (ef, eid) in enumerate(zip(epochFiles, epochIds)):
-        docs_per_epoch[k] = _ingestOneEpoch(daqreader, daqmetadatareaders, ef, eid)
-        tick()
+        epoch_progress = None
+        if within_epoch:
+            epoch_progress = functools.partial(update_progress, k)
+        docs_per_epoch[k] = _ingestOneEpoch(
+            daqreader, daqmetadatareaders, ef, eid, epoch_progress=epoch_progress
+        )
+        update_progress(k, 1)
     return docs_per_epoch, False
 
 
@@ -141,17 +183,52 @@ ingest_epoch_documents = ingestEpochDocuments
 
 
 def _ingestOneEpoch(  # noqa: N802 (mirrors MATLAB's local function)
-    daqreader: Any, daqmetadatareaders: list[Any], ef: list[str], epoch_id: str
+    daqreader: Any,
+    daqmetadatareaders: list[Any],
+    ef: list[str],
+    epoch_id: str,
+    queue: Any = None,
+    k: int = 0,
+    epoch_progress: Callable[[float], Any] | None = None,
 ) -> list[Any]:
-    """Create the documents for a single epoch (no database access)."""
+    """Create the documents for a single epoch (no database access).
+
+    In a worker process, progress is sent as ``(k, fraction)`` on QUEUE; in
+    the calling process it goes to EPOCH_PROGRESS.
+    """
+    if queue is not None:
+        epoch_progress = functools.partial(_send_progress, queue, k)
     docs: list[Any] = []
     if daqreader is not None:
-        new_d = daqreader.ingest_epochfiles(ef, epoch_id)
+        if epoch_progress is None:
+            new_d = daqreader.ingest_epochfiles(ef, epoch_id)
+        else:
+            new_d = daqreader.ingest_epochfiles(ef, epoch_id, ProgressFcn=epoch_progress)
         docs.extend(new_d if isinstance(new_d, list) else [new_d])
     for mreader in daqmetadatareaders:
         new_d = mreader.ingest_epochfiles(ef, epoch_id)
         docs.extend(new_d if isinstance(new_d, list) else [new_d])
     return docs
+
+
+def _send_progress(queue: Any, k: int, fraction: float) -> None:
+    """Send epoch K's progress from a worker process to the caller."""
+    queue.put((k, fraction))
+
+
+def _reader_reports_progress(daqreader: Any) -> bool:
+    """Does DAQREADER's ingest_epochfiles take a ProgressFcn?
+
+    True when the method is ndi_daq_reader_mfdaq's own; a subclass that
+    overrides ingest_epochfiles keeps its own signature and is called without
+    one.
+    """
+    if daqreader is None:
+        return False
+    from ..mfdaq import ndi_daq_reader_mfdaq
+
+    method = getattr(type(daqreader), "ingest_epochfiles", None)
+    return method is ndi_daq_reader_mfdaq.ingest_epochfiles
 
 
 def _resolve_workers(override: int | None) -> int:

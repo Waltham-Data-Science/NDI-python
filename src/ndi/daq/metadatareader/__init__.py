@@ -187,10 +187,21 @@ class ndi_daq_metadatareader(ndi_ido):
         if doc is None:
             return []
 
-        # Extract metadata from document
-        # This would typically involve reading compressed data
-        # For now, return empty list
-        return []
+        import os
+
+        import ndicompress
+
+        from ...database_fun import copydocfile2temp
+
+        tname, tname_without_ext = copydocfile2temp(doc, session, "data.bin", ".nbf.tgz")
+        try:
+            parameters = ndicompress.expand_metadata(tname_without_ext)
+        finally:
+            os.remove(tname)
+        # MATLAB's jsondecode returns a struct array for a list of objects
+        if isinstance(parameters, dict):
+            parameters = [parameters]
+        return parameters if parameters is not None else []
 
     def get_ingested_document(
         self,
@@ -232,6 +243,12 @@ class ndi_daq_metadatareader(ndi_ido):
         """
         Create a document for ingested epoch metadata.
 
+        MATLAB equivalent: ndi.daq.metadatareader/ingest_epochfiles
+
+        The parameters returned by :meth:`readmetadata` are stored, compressed
+        with ``ndicompress.compress_metadata``, as the document's ``data.bin``.
+        The document is not added to any database.
+
         Args:
             epochfiles: List of file paths
             epoch_id: ndi_epoch_epoch identifier
@@ -249,13 +266,16 @@ class ndi_daq_metadatareader(ndi_ido):
         )
         doc.set_dependency_value("daqmetadatareader_id", self.id)
 
-        # Read and store metadata
-        try:
-            self.readmetadata(epochfiles)
-            # In a full implementation, we would compress and store
-            # the parameters as binary data
-        except (ValueError, FileNotFoundError):
-            pass
+        import os
+        import tempfile
+        import uuid
+
+        import ndicompress
+
+        parameters = self.readmetadata(epochfiles)
+        metadatafile = os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
+        ndicompress.compress_metadata(parameters, metadatafile)
+        doc.add_file("data.bin", metadatafile + ".nbf.tgz")
 
         return doc
 

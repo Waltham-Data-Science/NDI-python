@@ -7,7 +7,13 @@ multi-function data acquisition systems that sample various data types.
 
 from __future__ import annotations
 
+import logging
+import os
+import tempfile
+import uuid
+import warnings
 from abc import abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -17,6 +23,8 @@ import numpy as np
 from ..time import DEV_LOCAL_TIME, ndi_time_clocktype
 from .daqsystemstring import ndi_daq_daqsystemstring
 from .reader_base import ndi_daq_reader
+
+logger = logging.getLogger(__name__)
 
 
 class ChannelType(Enum):
@@ -582,6 +590,236 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
                 s[pos_inf] = s_end
 
         return s
+
+    #: Samples per stored segment of analog/time data, as MATLAB's ingest_epochfiles.
+    SAMPLE_ANALOG_SEGMENT = 1_000_000
+    #: Samples per stored segment of digital data, as MATLAB's ingest_epochfiles.
+    SAMPLE_DIGITAL_SEGMENT = 10_000_000
+
+    #: File-record prefix for each channel type's segments.
+    INGEST_FILE_PREFIX = {
+        "analog_in": "ai",
+        "analog_out": "ao",
+        "auxiliary_in": "ax",
+        "digital_in": "di",
+        "digital_out": "do",
+        "eventmarktext": "evmktx",
+        "time": "ti",
+    }
+
+    def ingest_epochfiles(
+        self,
+        epochfiles: list[str],
+        epoch_id: str,
+        ProgressFcn: Callable[[float], Any] | None = None,  # noqa: N803 (MATLAB name)
+    ) -> Any:
+        """
+        Create a document holding the data read by this reader for one epoch.
+
+        MATLAB equivalent: ndi.daq.reader.mfdaq/ingest_epochfiles
+
+        Creates an ndi_document of type ``daqreader_mfdaq_epochdata_ingested``
+        with the epoch's channel list (``channel_list.bin``) and its data,
+        compressed with ``ndicompress`` into segments of
+        ``SAMPLE_ANALOG_SEGMENT`` (analog, auxiliary, time) or
+        ``SAMPLE_DIGITAL_SEGMENT`` (digital) samples per channel group, plus
+        one file per group of event/marker/text channels. Analog data are
+        stored in the type given by :meth:`underlying_datatype` (e.g. Intan's
+        uint16). The document is not added to any database; its files are
+        temporary files that the database takes over when it is added.
+
+        Args:
+            epochfiles: Files for this epoch
+            epoch_id: The epoch id
+            ProgressFcn: Called as ``ProgressFcn(F)`` with F, the fraction of
+                this epoch done (0..1), after each segment is written. Each
+                channel group counts in proportion to its number of channels.
+                Errors in it are turned into warnings.
+
+        Returns:
+            ndi_document of type daqreader_mfdaq_epochdata_ingested
+
+        Python-specific Notes:
+            Sample numbers passed to :meth:`readchannels_epochsamples` are
+            1-based, as that method takes them. Digital-output segments are
+            stored as ``do_group*`` (the document's file list and the ingested
+            reader use ``do``); MATLAB writes them as ``di_group*``, which
+            collides with digital-input segments of the same group.
+        """
+        import ndicompress
+
+        from ..document import ndi_document
+        from ..file.type.mfdaq_epoch_channel import ndi_file_type_mfdaq__epoch__channel
+        from ..fun.utils import channelname2prefixnumber
+
+        # the epoch table (clock and t0_t1), as the base reader writes it
+        base_doc = super().ingest_epochfiles(epochfiles, epoch_id)
+        epochtable = base_doc.document_properties["daqreader_epochdata_ingested"]["epochtable"]
+
+        d = ndi_document(
+            "ingestion/daqreader_mfdaq_epochdata_ingested",
+            daqreader_mfdaq_epochdata_ingested={
+                "parameters": {
+                    "sample_analog_segment": self.SAMPLE_ANALOG_SEGMENT,
+                    "sample_digital_segment": self.SAMPLE_DIGITAL_SEGMENT,
+                }
+            },
+            daqreader_epochdata_ingested={"epochtable": epochtable},
+            epochid={"epochid": epoch_id},
+        )
+        d.set_dependency_value("daqreader_id", self.id)
+
+        # Step 1: the channel list, with each channel's sample rate, offset and scale
+        ch = self.getchannelsepoch(epochfiles)
+        names = [c.name if hasattr(c, "name") else c["name"] for c in ch]
+        types = [c.type if hasattr(c, "type") else c["type"] for c in ch]
+        numbers = [channelname2prefixnumber(n)[1] for n in names]
+        sample_rates = [float("nan")] * len(ch)
+        for rate_type in (
+            "analog_in",
+            "analog_out",
+            "auxiliary_in",
+            "digital_in",
+            "digital_out",
+            "time",
+        ):
+            idx = [i for i, t in enumerate(types) if t == rate_type]
+            if idx:
+                sr = np.atleast_1d(
+                    self.samplerate(epochfiles, rate_type, [numbers[i] for i in idx])
+                )
+                for j, i in enumerate(idx):
+                    sample_rates[i] = float(sr[j])
+        records = []
+        for i, c in enumerate(ch):
+            _, poly, _ = self.underlying_datatype(epochfiles, types[i], numbers[i])
+            poly = np.atleast_2d(poly)
+            time_channel = c.time_channel if hasattr(c, "time_channel") else c.get("time_channel")
+            records.append(
+                {
+                    "name": names[i],
+                    "type": types[i],
+                    "time_channel": float("nan") if time_channel is None else time_channel,
+                    "sample_rate": sample_rates[i],
+                    "offset": float(poly[0, 0]),
+                    "scale": float(poly[0, 1]),
+                }
+            )
+
+        mec = ndi_file_type_mfdaq__epoch__channel().create_properties(records)
+        channel_file_name = _ingest_temp_name()
+        b, errmsg = mec.writeToFile(channel_file_name)
+        if not b:
+            raise RuntimeError(errmsg)
+        d.add_file("channel_list.bin", channel_file_name)
+
+        ci = mec.channel_information
+
+        # Step 2: the data, one channel type and group at a time; event, marker
+        # and text channels are stored together
+        all_types, _ = self.channel_types()
+        emt = ("event", "marker", "text")
+        store_types = [t for t in all_types if t not in emt] + ["eventmarktext"]
+
+        def entries_of(type_name: str) -> list[Any]:
+            if type_name == "eventmarktext":
+                return [c for c in ci if c.type in emt]
+            return [c for c in ci if c.type == type_name]
+
+        weight_total = sum(len(entries_of(t)) for t in store_types)
+        weight_done = 0
+        _report_ingest_progress(ProgressFcn, 0)
+
+        for type_name in store_types:
+            entries = entries_of(type_name)
+            prefix = self.INGEST_FILE_PREFIX[type_name]
+            for group in sorted({c.group for c in entries}):
+                members = [c for c in entries if c.group == group]
+                weight_here = len(members)
+                channels_here = [c.number for c in members]
+                underlying_format, mypoly, datasize = self.underlying_datatype(
+                    epochfiles, type_name, channels_here
+                )
+                # event/marker/text channels have no scalar sample rate
+                if type_name == "eventmarktext":
+                    rates = [float("nan")]
+                else:
+                    rates = np.atleast_1d(
+                        self.samplerate(epochfiles, [c.type for c in members], channels_here)
+                    ).tolist()
+                unique_rates = {r for r in rates if not np.isnan(r)}
+                if len(unique_rates) > 1:
+                    raise ValueError(
+                        f"Sample rates are not all identical for {type_name} group {group}."
+                    )
+
+                dataclass_here = members[0].dataclass
+                if dataclass_here in ("ephys", "digital", "time"):
+                    if not unique_rates:
+                        raise ValueError("Analog records have a NaN sample rate.")
+                    t0t1 = self.t0_t1(epochfiles)
+                    # epochtimes2samples is 0-based; S1 is the 1-based last sample
+                    S1 = (
+                        int(
+                            np.asarray(
+                                self.epochtimes2samples(
+                                    type_name, channels_here, epochfiles, t0t1[0][-1]
+                                )
+                            ).ravel()[0]
+                        )
+                        + 1
+                    )
+                    segment = (
+                        self.SAMPLE_DIGITAL_SEGMENT
+                        if dataclass_here == "digital"
+                        else self.SAMPLE_ANALOG_SEGMENT
+                    )
+                    s_starts = list(range(1, S1 + 1, segment))
+                    for s, s0 in enumerate(s_starts, start=1):
+                        logger.info(
+                            "Working on %s ingestion segment %d of %d.",
+                            {"ephys": "ephys/analog"}.get(dataclass_here, dataclass_here),
+                            s,
+                            len(s_starts),
+                        )
+                        s1 = min(s0 + segment - 1, S1)
+                        data = self.readchannels_epochsamples(
+                            type_name, channels_here, epochfiles, s0, s1
+                        )
+                        filename_here = _ingest_temp_name()
+                        if dataclass_here == "ephys":
+                            data = _scaled2underlying(data, mypoly)
+                            _compress_ephys_underlying(
+                                data, filename_here, underlying_format, datasize
+                            )
+                        elif dataclass_here == "digital":
+                            data = _scaled2underlying(data, mypoly)
+                            ndicompress.compress_digital(data, filename_here)
+                        else:
+                            ndicompress.compress_time(np.asarray(data, dtype=float), filename_here)
+                        d.add_file(f"{prefix}_group{group}_seg.nbf_{s}", filename_here + ".nbf.tgz")
+                        _report_ingest_progress(
+                            ProgressFcn,
+                            (weight_done + weight_here * s / len(s_starts)) / weight_total,
+                        )
+                elif dataclass_here == "eventmarktext":
+                    logger.info("Working on event/marker/text ingestion segment 1 of 1.")
+                    channeltype = [c.type for c in members]
+                    T, D = self.readevents_epochsamples_native(
+                        channeltype, channels_here, epochfiles, -np.inf, np.inf
+                    )
+                    filename_here = _ingest_temp_name()
+                    ndicompress.compress_eventmarktext(
+                        channeltype, channels_here, T, D, filename_here
+                    )
+                    d.add_file(f"evmktx_group{group}_seg.nbf_1", filename_here + ".nbf.tgz")
+                else:
+                    raise ValueError(f"Unknown channel type {type_name}.")
+                weight_done += weight_here
+                _report_ingest_progress(ProgressFcn, weight_done / max(weight_total, 1))
+
+        _report_ingest_progress(ProgressFcn, 1)
+        return d
 
     def underlying_datatype(
         self,
@@ -1290,3 +1528,78 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
                 s[pos_inf] = s_end
 
         return s
+
+
+def _ingest_temp_name() -> str:
+    """A new temporary file name (no extension), as MATLAB's ndi.file.temp_name."""
+    return os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
+
+
+def _report_ingest_progress(progress_fcn: Callable[[float], Any] | None, fraction: float) -> None:
+    """Call PROGRESS_FCN(FRACTION); progress reporting must never break an ingest.
+
+    MATLAB equivalent: ndi.daq.reader.mfdaq.reportIngestProgress
+    """
+    if progress_fcn is None:
+        return
+    try:
+        progress_fcn(min(max(float(fraction), 0.0), 1.0))
+    except Exception as exc:  # noqa: BLE001 - progress must never break an ingest
+        warnings.warn(f"Progress reporting failed: {exc}", stacklevel=2)
+
+
+def _scaled2underlying(data: Any, poly: Any) -> np.ndarray:
+    """Scaled data to underlying values: D ./ scale + offset, per column.
+
+    MATLAB equivalent: ndi.compress.scaled2underlying
+    """
+    poly = np.atleast_2d(np.asarray(poly, dtype=float))
+    data = np.asarray(data, dtype=float)
+    if data.ndim == 1:
+        data = data[:, np.newaxis]
+    return data / poly[:, 1][np.newaxis, :] + poly[:, 0][np.newaxis, :]
+
+
+_FLOAT_TYPES = {
+    "float64": np.float64,
+    "double": np.float64,
+    "float32": np.float32,
+    "single": np.float32,
+}
+
+
+def _compress_ephys_underlying(
+    data: np.ndarray, filename: str, underlying_format: str, datasize: int
+) -> None:
+    """Compress underlying-valued DATA as MATLAB's ingest does.
+
+    MATLAB calls ndi.compress.compress_ephys(DATA, DATASIZE, FILENAME,
+    'data_format', ndi.compress.datatypestring(FORMAT), 'data_is_unsigned', ...),
+    whose integer path rounds the samples to integers of the underlying type.
+    The C encoder takes the samples in that type, so they are rounded and
+    clipped to its range here.
+    """
+    import ndicompress
+
+    fmt = underlying_format.lower()
+    if fmt in _FLOAT_TYPES:
+        ndicompress.compress_ephys(
+            np.asarray(data, dtype=_FLOAT_TYPES[fmt]),
+            filename,
+            output_size_bits=int(datasize),
+            data_is_unsigned=False,
+            data_format="float",
+        )
+        return
+    dtype = np.dtype(fmt)
+    if not np.issubdtype(dtype, np.integer):
+        raise ValueError(f"Unknown underlying data type {underlying_format}.")
+    info = np.iinfo(dtype)
+    values = np.clip(np.round(data), info.min, info.max).astype(dtype)
+    ndicompress.compress_ephys(
+        values,
+        filename,
+        output_size_bits=int(datasize),
+        data_is_unsigned=fmt.startswith("u"),
+        data_format="integer",
+    )

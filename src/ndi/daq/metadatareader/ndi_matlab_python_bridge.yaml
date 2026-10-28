@@ -84,7 +84,11 @@ classes:
         output_arguments:
           - name: parameters
             type_python: "list[dict[str, Any]]"
-        decision_log: "Exact match."
+        decision_log: >
+          Ported: expands the ingested document's data.bin with
+          ndicompress.expand_metadata (it returned an empty list). A single
+          JSON object comes back as a one-element list, as MATLAB's
+          jsondecode makes a struct array.
 
       - name: get_ingested_document
         input_arguments:
@@ -110,7 +114,11 @@ classes:
         output_arguments:
           - name: doc
             type_python: "Any"
-        decision_log: "Exact match."
+        decision_log: >
+          Ported: readmetadata's parameters are stored with
+          ndicompress.compress_metadata as the document's data.bin (it made
+          the document without them and ignored readmetadata errors, which
+          now propagate as in MATLAB).
 
       - name: newdocument
         input_arguments: []

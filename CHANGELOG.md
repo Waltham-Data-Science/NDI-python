@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Ingestion stores the data** (mirroring NDI-matlab's
+  `ndi.daq.reader.mfdaq/ingest_epochfiles`, with VH-Lab/NDI-matlab#1089's
+  within-epoch progress). Ingesting an epoch used to make its documents
+  without any data, so an ingested epoch could not be read (`channel_list.bin
+  not found`). `ndi_daq_reader_mfdaq.ingest_epochfiles` now writes the channel
+  list and the epoch's data in compressed segments as MATLAB does -- analog
+  data in the reader's underlying type (Intan: uint16, via the new
+  `ndi_daq_reader_mfdaq_intan.underlying_datatype`), digital, time, and
+  event/marker/text channels -- and metadata readers store their parameters
+  (`data.bin`), which `readmetadata_ingested` now reads back. The channel list
+  is written in MATLAB's `saveStructArray` format so NDI-matlab can read it.
+  `ingest_epochfiles` takes a `ProgressFcn`, and `ingestEpochDocuments`
+  reports fractional progress as segments are written, in worker processes
+  too. The Intan reader now reads auxiliary inputs at their own sample rate
+  and its digital channels as NDR numbers them (both as MATLAB), and no
+  longer pads reads that run past the end of the file. Needs ndi-compress with
+  Waltham-Data-Science/NDI-compress-python#4.
+
 - **Ingestion progress bars and parallel per-epoch work** (mirroring
   VH-Lab/NDI-matlab#1079). `ndi_session.ingest()` now shows progress through
   `ndi_gui_component_ProgressBarWindow` -- one bar for the session and one per
