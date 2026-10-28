@@ -31,6 +31,7 @@ from .pane import NavPane
 from .progress_pane import ProgressPane
 from .session_info import SessionInfo
 from .status_icon import status_icon, statusIcon
+from .update_dialog import UpdateDialog
 
 __all__ = [
     "datasets_cloud",
@@ -46,4 +47,5 @@ __all__ = [
     "SessionInfo",
     "status_icon",
     "statusIcon",
+    "UpdateDialog",
 ]

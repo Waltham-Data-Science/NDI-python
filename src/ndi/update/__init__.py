@@ -21,6 +21,7 @@ from .check_on_startup import checkOnStartup
 from .install import UpdateError, install
 from .install_type import installType
 from .modification_summary import modificationSummary
+from .package_status import packageStatus
 
 __all__ = [
     "check",
@@ -28,5 +29,6 @@ __all__ = [
     "install",
     "installType",
     "modificationSummary",
+    "packageStatus",
     "UpdateError",
 ]
