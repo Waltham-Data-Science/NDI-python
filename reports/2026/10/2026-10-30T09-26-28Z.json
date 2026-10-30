@@ -1,0 +1,30 @@
+{
+  "runs": [
+    {
+      "environment": "prod",
+      "error": "Traceback (most recent call last):\n  File \"/home/runner/work/NDI-python/NDI-python/main/scripts/diagnose_orphan_datasets.py\", line 210, in _collect\n    runs.append(_run_one(user_index, environment, username, password))\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/NDI-python/NDI-python/main/scripts/diagnose_orphan_datasets.py\", line 120, in _run_one\n    result[\"org_id\"] = config.org_id\n                       ^^^^^^^^^^^^^\nAttributeError: 'CloudConfig' object has no attribute 'org_id'\n",
+      "login_ok": false,
+      "user_index": 1
+    },
+    {
+      "environment": "dev",
+      "error": "Traceback (most recent call last):\n  File \"/home/runner/work/NDI-python/NDI-python/main/scripts/diagnose_orphan_datasets.py\", line 210, in _collect\n    runs.append(_run_one(user_index, environment, username, password))\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/NDI-python/NDI-python/main/scripts/diagnose_orphan_datasets.py\", line 120, in _run_one\n    result[\"org_id\"] = config.org_id\n                       ^^^^^^^^^^^^^\nAttributeError: 'CloudConfig' object has no attribute 'org_id'\n",
+      "login_ok": false,
+      "user_index": 1
+    },
+    {
+      "environment": "prod",
+      "error": "Traceback (most recent call last):\n  File \"/home/runner/work/NDI-python/NDI-python/main/scripts/diagnose_orphan_datasets.py\", line 210, in _collect\n    runs.append(_run_one(user_index, environment, username, password))\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/NDI-python/NDI-python/main/scripts/diagnose_orphan_datasets.py\", line 120, in _run_one\n    result[\"org_id\"] = config.org_id\n                       ^^^^^^^^^^^^^\nAttributeError: 'CloudConfig' object has no attribute 'org_id'\n",
+      "login_ok": false,
+      "user_index": 2
+    },
+    {
+      "environment": "dev",
+      "error": "Traceback (most recent call last):\n  File \"/home/runner/work/NDI-python/NDI-python/main/scripts/diagnose_orphan_datasets.py\", line 210, in _collect\n    runs.append(_run_one(user_index, environment, username, password))\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/NDI-python/NDI-python/main/scripts/diagnose_orphan_datasets.py\", line 120, in _run_one\n    result[\"org_id\"] = config.org_id\n                       ^^^^^^^^^^^^^\nAttributeError: 'CloudConfig' object has no attribute 'org_id'\n",
+      "login_ok": false,
+      "user_index": 2
+    }
+  ],
+  "script_version": 1,
+  "timestamp": "2026-10-30T09:26:28Z"
+}
