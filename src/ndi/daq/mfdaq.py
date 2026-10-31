@@ -628,6 +628,11 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
         uint16). The document is not added to any database; its files are
         temporary files that the database takes over when it is added.
 
+        Runs :meth:`ingest_epochfiles_plan`, :meth:`ingest_segment` for each
+        planned segment, then :meth:`ingest_attach_segments`, so the segments
+        can also be written one at a time elsewhere (see
+        ``ndi.daq.fun.ingestEpochDocuments``).
+
         Args:
             epochfiles: Files for this epoch
             epoch_id: The epoch id
@@ -638,16 +643,63 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
 
         Returns:
             ndi_document of type daqreader_mfdaq_epochdata_ingested
+        """
+        d, plan = self.ingest_epochfiles_plan(epochfiles, epoch_id)
+        _report_ingest_progress(ProgressFcn, 0)
+        weight_total = sum(entry["weight"] for entry in plan)
+        weight_done = 0.0
+        segment_files = []
+        for entry in plan:
+            segment_files.append(self.ingest_segment(epochfiles, entry))
+            weight_done += entry["weight"]
+            _report_ingest_progress(ProgressFcn, weight_done / max(weight_total, 1e-300))
+        d = self.ingest_attach_segments(d, plan, segment_files)
+        _report_ingest_progress(ProgressFcn, 1)
+        return d
+
+    def ingest_epochfiles_plan(
+        self,
+        epochfiles: list[str],
+        epoch_id: str,
+    ) -> tuple[Any, list[dict[str, Any]]]:
+        """
+        Plan the ingestion of an epoch, segment by segment.
+
+        MATLAB equivalent: ndi.daq.reader.mfdaq/ingest_epochfiles_plan
+
+        Creates the ``daqreader_mfdaq_epochdata_ingested`` document for the
+        epoch, with its channel list already attached, and the plan: one dict
+        per data segment still to be written, in the order the segment files
+        are added to the document. Each entry can be computed independently
+        (and in another process) with :meth:`ingest_segment`;
+        :meth:`ingest_attach_segments` then adds the resulting files.
+
+        Each entry has MATLAB's fields: ``kind`` (``"ephys"``, ``"digital"``,
+        ``"eventmarktext"`` or ``"time"``), ``channeltype``, ``channels``,
+        ``eventchanneltypes`` (eventmarktext: the type of each channel),
+        ``s0`` and ``s1`` (first and last sample, 1-based), ``poly``,
+        ``datasize``, ``underlying_format``, ``docfilename`` (e.g.
+        ``"ai_group1_seg.nbf_3"``), ``segment`` and ``numSegments`` (this
+        segment's number within its group), and ``weight`` (its share of the
+        epoch's work; the weights sum to 1).
+
+        Args:
+            epochfiles: Files for this epoch
+            epoch_id: The epoch id
+
+        Returns:
+            ``(d, plan)``. The document is not added to any database.
 
         Python-specific Notes:
-            Sample numbers passed to :meth:`readchannels_epochsamples` are
-            1-based, as that method takes them. Digital-output segments are
-            stored as ``do_group*`` (the document's file list and the ingested
-            reader use ``do``); MATLAB writes them as ``di_group*``, which
-            collides with digital-input segments of the same group.
+            Sample numbers are 1-based, as :meth:`readchannels_epochsamples`
+            takes them; ``epochtimes2samples`` here is 0-based, so the last
+            sample is its answer plus 1. Digital-output segments are stored as
+            ``do_group*`` (the document's file list and the ingested reader use
+            ``do``); MATLAB writes them as ``di_group*``, which collides with
+            digital-input segments of the same group. The time group computes
+            its own sample range, where MATLAB reuses the group planned before
+            it (the same whenever the time channel shares that group's rate).
         """
-        import ndicompress
-
         from ..document import ndi_document
         from ..file.type.mfdaq_epoch_channel import ndi_file_type_mfdaq__epoch__channel
         from ..fun.utils import channelname2prefixnumber
@@ -715,8 +767,8 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
 
         ci = mec.channel_information
 
-        # Step 2: the data, one channel type and group at a time; event, marker
-        # and text channels are stored together
+        # Step 2: plan the data, one channel type and group at a time; event,
+        # marker and text channels are stored together
         all_types, _ = self.channel_types()
         emt = ("event", "marker", "text")
         store_types = [t for t in all_types if t not in emt] + ["eventmarktext"]
@@ -726,16 +778,17 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
                 return [c for c in ci if c.type in emt]
             return [c for c in ci if c.type == type_name]
 
-        weight_total = sum(len(entries_of(t)) for t in store_types)
-        weight_done = 0
-        _report_ingest_progress(ProgressFcn, 0)
+        # each channel group counts in proportion to its number of channels,
+        # which tracks the work of reading and compressing it
+        weight_total = max(sum(len(entries_of(t)) for t in store_types), 1)
+        plan: list[dict[str, Any]] = []
 
         for type_name in store_types:
             entries = entries_of(type_name)
             prefix = self.INGEST_FILE_PREFIX[type_name]
             for group in sorted({c.group for c in entries}):
                 members = [c for c in entries if c.group == group]
-                weight_here = len(members)
+                group_weight = len(members) / weight_total
                 channels_here = [c.number for c in members]
                 underlying_format, mypoly, datasize = self.underlying_datatype(
                     epochfiles, type_name, channels_here
@@ -753,72 +806,149 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
                         f"Sample rates are not all identical for {type_name} group {group}."
                     )
 
-                dataclass_here = members[0].dataclass
-                if dataclass_here in ("ephys", "digital", "time"):
-                    if not unique_rates:
-                        raise ValueError("Analog records have a NaN sample rate.")
-                    t0t1 = self.t0_t1(epochfiles)
-                    # epochtimes2samples is 0-based; S1 is the 1-based last sample
-                    S1 = (
-                        int(
-                            np.asarray(
-                                self.epochtimes2samples(
-                                    type_name, channels_here, epochfiles, t0t1[0][-1]
-                                )
-                            ).ravel()[0]
-                        )
-                        + 1
+                entry: dict[str, Any] = {
+                    "kind": "",
+                    "channeltype": type_name,
+                    "channels": channels_here,
+                    "eventchanneltypes": [],
+                    "s0": None,
+                    "s1": None,
+                    "poly": np.atleast_2d(mypoly),
+                    "datasize": datasize,
+                    "underlying_format": underlying_format,
+                    "docfilename": "",
+                    "segment": None,
+                    "numSegments": None,
+                    "weight": None,
+                }
+                kind = members[0].dataclass
+                if kind == "eventmarktext":
+                    entry.update(
+                        kind="eventmarktext",
+                        eventchanneltypes=[c.type for c in members],
+                        docfilename=f"evmktx_group{group}_seg.nbf_1",
+                        segment=1,
+                        numSegments=1,
+                        weight=group_weight,
                     )
-                    segment = (
-                        self.SAMPLE_DIGITAL_SEGMENT
-                        if dataclass_here == "digital"
-                        else self.SAMPLE_ANALOG_SEGMENT
-                    )
-                    s_starts = list(range(1, S1 + 1, segment))
-                    for s, s0 in enumerate(s_starts, start=1):
-                        logger.info(
-                            "Working on %s ingestion segment %d of %d.",
-                            {"ephys": "ephys/analog"}.get(dataclass_here, dataclass_here),
-                            s,
-                            len(s_starts),
-                        )
-                        s1 = min(s0 + segment - 1, S1)
-                        data = self.readchannels_epochsamples(
-                            type_name, channels_here, epochfiles, s0, s1
-                        )
-                        filename_here = _ingest_temp_name()
-                        if dataclass_here == "ephys":
-                            data = _scaled2underlying(data, mypoly)
-                            _compress_ephys_underlying(
-                                data, filename_here, underlying_format, datasize
-                            )
-                        elif dataclass_here == "digital":
-                            data = _scaled2underlying(data, mypoly)
-                            ndicompress.compress_digital(data, filename_here)
-                        else:
-                            ndicompress.compress_time(np.asarray(data, dtype=float), filename_here)
-                        d.add_file(f"{prefix}_group{group}_seg.nbf_{s}", filename_here + ".nbf.tgz")
-                        _report_ingest_progress(
-                            ProgressFcn,
-                            (weight_done + weight_here * s / len(s_starts)) / weight_total,
-                        )
-                elif dataclass_here == "eventmarktext":
-                    logger.info("Working on event/marker/text ingestion segment 1 of 1.")
-                    channeltype = [c.type for c in members]
-                    T, D = self.readevents_epochsamples_native(
-                        channeltype, channels_here, epochfiles, -np.inf, np.inf
-                    )
-                    filename_here = _ingest_temp_name()
-                    ndicompress.compress_eventmarktext(
-                        channeltype, channels_here, T, D, filename_here
-                    )
-                    d.add_file(f"evmktx_group{group}_seg.nbf_1", filename_here + ".nbf.tgz")
-                else:
+                    plan.append(entry)
+                    continue
+                if kind not in ("ephys", "digital", "time"):
                     raise ValueError(f"Unknown channel type {type_name}.")
-                weight_done += weight_here
-                _report_ingest_progress(ProgressFcn, weight_done / max(weight_total, 1))
+                if not unique_rates:
+                    raise ValueError("Analog records have a NaN sample rate.")
+                t0t1 = self.t0_t1(epochfiles)
+                # epochtimes2samples is 0-based; S1 is the 1-based last sample
+                S1 = (
+                    int(
+                        np.asarray(
+                            self.epochtimes2samples(
+                                type_name, channels_here, epochfiles, t0t1[0][-1]
+                            )
+                        ).ravel()[0]
+                    )
+                    + 1
+                )
+                segment_length = (
+                    self.SAMPLE_DIGITAL_SEGMENT if kind == "digital" else self.SAMPLE_ANALOG_SEGMENT
+                )
+                s_starts = list(range(1, S1 + 1, segment_length))
+                for s, s0 in enumerate(s_starts, start=1):
+                    plan.append(
+                        {
+                            **entry,
+                            "kind": kind,
+                            "s0": s0,
+                            "s1": min(s0 + segment_length - 1, S1),
+                            "docfilename": f"{prefix}_group{group}_seg.nbf_{s}",
+                            "segment": s,
+                            "numSegments": len(s_starts),
+                            "weight": group_weight / len(s_starts),
+                        }
+                    )
+        return d, plan
 
-        _report_ingest_progress(ProgressFcn, 1)
+    def ingest_segment(self, epochfiles: list[str], planEntry: dict[str, Any]) -> str:  # noqa: N803
+        """
+        Read and compress one planned segment of an epoch.
+
+        MATLAB equivalent: ndi.daq.reader.mfdaq/ingest_segment
+
+        Reads the data described by PLANENTRY (one entry of the plan from
+        :meth:`ingest_epochfiles_plan`) and writes it, compressed, to a new
+        temporary file. Touches no database, so it can run in a worker
+        process.
+
+        Args:
+            epochfiles: Files for this epoch
+            planEntry: One entry of the plan
+
+        Returns:
+            The full path of the ``.nbf.tgz`` file written.
+        """
+        import ndicompress
+
+        kind = planEntry["kind"]
+        filename_here = _ingest_temp_name()
+        if kind in ("ephys", "digital", "time"):
+            logger.info(
+                "Working on %s ingestion segment %d of %d.",
+                {"ephys": "ephys/analog"}.get(kind, kind),
+                planEntry["segment"],
+                planEntry["numSegments"],
+            )
+            data = self.readchannels_epochsamples(
+                planEntry["channeltype"],
+                planEntry["channels"],
+                epochfiles,
+                planEntry["s0"],
+                planEntry["s1"],
+            )
+            if kind == "ephys":
+                _compress_ephys_underlying(
+                    _scaled2underlying(data, planEntry["poly"]),
+                    filename_here,
+                    planEntry["underlying_format"],
+                    planEntry["datasize"],
+                )
+            elif kind == "digital":
+                ndicompress.compress_digital(
+                    _scaled2underlying(data, planEntry["poly"]), filename_here
+                )
+            else:
+                ndicompress.compress_time(np.asarray(data, dtype=float), filename_here)
+        elif kind == "eventmarktext":
+            logger.info("Working on event/marker/text ingestion segment 1 of 1.")
+            T, D = self.readevents_epochsamples_native(
+                planEntry["eventchanneltypes"], planEntry["channels"], epochfiles, -np.inf, np.inf
+            )
+            ndicompress.compress_eventmarktext(
+                planEntry["eventchanneltypes"], planEntry["channels"], T, D, filename_here
+            )
+        else:
+            raise ValueError(f"Unknown segment kind {kind}.")
+        return filename_here + ".nbf.tgz"
+
+    @staticmethod
+    def ingest_attach_segments(
+        d: Any, plan: list[dict[str, Any]], segmentFiles: list[str]  # noqa: N803 (MATLAB name)
+    ) -> Any:
+        """
+        Add planned segment files to an ingested-epoch document, in plan order.
+
+        MATLAB equivalent: ndi.daq.reader.mfdaq.ingest_attach_segments
+
+        Args:
+            d: The document from :meth:`ingest_epochfiles_plan`
+            plan: Its plan
+            segmentFiles: ``segmentFiles[t]``, the file :meth:`ingest_segment`
+                wrote for ``plan[t]``
+
+        Returns:
+            The document, with the files added under each entry's ``docfilename``.
+        """
+        for entry, filename in zip(plan, segmentFiles):
+            d.add_file(entry["docfilename"], filename)
         return d
 
     def underlying_datatype(

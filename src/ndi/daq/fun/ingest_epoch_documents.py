@@ -25,7 +25,6 @@ import pickle
 import warnings
 from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
-from queue import Empty
 from typing import Any
 
 from pydantic import ConfigDict, validate_call
@@ -86,11 +85,14 @@ def ingestEpochDocuments(  # noqa: N802 (MATLAB mirror)
         workers -- and live only for this call. Readers are sent with their
         ``_session`` cleared (see the module docstring). A reader that cannot
         be pickled falls back to serial with a warning rather than failing.
-        Completed epochs are reported as they finish, so ProgressFcn may see
-        epochs out of order, but the returned list is always in epoch order.
-        Within-epoch progress travels from the workers on a
-        ``multiprocessing.Manager`` queue (MATLAB uses a DataQueue) that the
-        caller drains while it waits.
+        On workers, a reader whose ingest_epochfiles is ndi_daq_reader_mfdaq's
+        is ingested one segment per task (MATLAB's ``parfeval`` scheduler):
+        every epoch is planned in the calling process, the segments of all
+        epochs (and each epoch's metadata readers) are handed to the workers
+        as they free up, and the files are attached in plan order afterwards.
+        Progress is reported as each task finishes, weighted by segment size,
+        so ProgressFcn may see epochs out of order, but the returned list is
+        always in epoch order. The pool is used even for a single epoch.
     """
     num_epochs = len(epochFiles)
     if len(epochIds) != num_epochs:
@@ -114,12 +116,13 @@ def ingestEpochDocuments(  # noqa: N802 (MATLAB mirror)
             except Exception as exc:  # noqa: BLE001 - progress must never break an ingest
                 warnings.warn(f"Progress reporting failed: {exc}", stacklevel=3)
 
-    # only readers using ndi_daq_reader_mfdaq's ingest_epochfiles take a
-    # ProgressFcn; any other reader reports per epoch only
-    within_epoch = ProgressFcn is not None and _reader_reports_progress(daqreader)
+    # readers using ndi_daq_reader_mfdaq's ingest_epochfiles take a ProgressFcn
+    # and can be ingested segment by segment; any other reader works (and
+    # reports) per epoch
+    plans_segments = _reader_plans_segments(daqreader)
 
     number_of_workers = 0
-    if num_epochs > 1:
+    if num_epochs > 0:
         number_of_workers = _resolve_workers(NumberOfWorkers)
 
     payload = None
@@ -130,46 +133,21 @@ def ingestEpochDocuments(  # noqa: N802 (MATLAB mirror)
 
     if number_of_workers > 0:
         reader, mreaders = payload
-        ctx = multiprocessing.get_context("spawn")
-        manager = ctx.Manager() if within_epoch else None
-        queue = manager.Queue() if manager is not None else None
-
-        def drain() -> None:
-            while queue is not None:
-                try:
-                    k, fraction = queue.get_nowait()
-                except Empty:
-                    return
-                update_progress(k, fraction)
-
-        executor = ProcessPoolExecutor(
-            max_workers=min(number_of_workers, num_epochs), mp_context=ctx
+        docs_per_epoch = _ingest_on_pool(
+            daqreader,
+            reader,
+            mreaders,
+            epochFiles,
+            epochIds,
+            number_of_workers,
+            plans_segments,
+            update_progress,
         )
-        try:
-            futures = {
-                executor.submit(_ingestOneEpoch, reader, mreaders, ef, eid, queue, k): k
-                for k, (ef, eid) in enumerate(zip(epochFiles, epochIds))
-            }
-            pending = set(futures)
-            while pending:
-                finished, pending = wait(pending, timeout=0.25, return_when=FIRST_COMPLETED)
-                drain()
-                for future in finished:
-                    docs_per_epoch[futures[future]] = future.result()
-                    update_progress(futures[future], 1)
-            drain()
-        except BaseException:
-            executor.shutdown(wait=True, cancel_futures=True)
-            raise
-        finally:
-            if manager is not None:
-                manager.shutdown()
-        executor.shutdown(wait=True)
         return docs_per_epoch, True
 
     for k, (ef, eid) in enumerate(zip(epochFiles, epochIds)):
         epoch_progress = None
-        if within_epoch:
+        if plans_segments and ProgressFcn is not None:
             epoch_progress = functools.partial(update_progress, k)
         docs_per_epoch[k] = _ingestOneEpoch(
             daqreader, daqmetadatareaders, ef, eid, epoch_progress=epoch_progress
@@ -182,22 +160,131 @@ def ingestEpochDocuments(  # noqa: N802 (MATLAB mirror)
 ingest_epoch_documents = ingestEpochDocuments
 
 
+def _ingest_on_pool(
+    daqreader: Any,
+    reader: Any,
+    mreaders: list[Any],
+    epoch_files: list[list[str]],
+    epoch_ids: list[str],
+    number_of_workers: int,
+    plans_segments: bool,
+    update_progress: Callable[[int, float], None],
+) -> list[list[Any]]:
+    """Ingest the epochs on worker processes, one segment per task.
+
+    MATLAB counterpart: ``ingestOnPool``. Every epoch is planned here
+    (ndi_daq_reader_mfdaq.ingest_epochfiles_plan reads only file headers and
+    writes the channel list); each planned segment, and each epoch's
+    metadata readers, is a task. Readers that do not plan segments run one
+    task per epoch. Tasks are handed out as workers free up, so the pool stays
+    busy however unequal the epochs are, and the segment files are attached
+    in plan order afterwards, so the documents match a serial ingest.
+    """
+    from ..mfdaq import ndi_daq_reader_mfdaq
+
+    num_epochs = len(epoch_files)
+    epoch_docs: list[Any] = [None] * num_epochs
+    plans: list[list[dict[str, Any]]] = [[] for _ in range(num_epochs)]
+    segment_files: list[list[Any]] = [[] for _ in range(num_epochs)]
+    meta_docs: list[list[Any]] = [[] for _ in range(num_epochs)]
+    docs_per_epoch: list[list[Any]] = [[] for _ in range(num_epochs)]
+
+    # (epoch, kind, index into the plan, weight)
+    tasks: list[tuple[int, str, int, float]] = []
+    for k in range(num_epochs):
+        if plans_segments:
+            epoch_docs[k], plans[k] = daqreader.ingest_epochfiles_plan(epoch_files[k], epoch_ids[k])
+            segment_files[k] = [None] * len(plans[k])
+            tasks.extend((k, "segment", t, e["weight"]) for t, e in enumerate(plans[k]))
+            if mreaders:
+                tasks.append((k, "metadata", 0, 0.0))
+        else:
+            tasks.append((k, "epoch", 0, 1.0))
+    remaining = [0] * num_epochs
+    for k, *_ in tasks:
+        remaining[k] += 1
+    weight_done = [0.0] * num_epochs
+
+    ctx = multiprocessing.get_context("spawn")
+    executor = ProcessPoolExecutor(max_workers=number_of_workers, mp_context=ctx)
+    try:
+        futures = {}
+        for index, (k, kind, t, _) in enumerate(tasks):
+            entry = plans[k][t] if kind == "segment" else None
+            future = executor.submit(
+                _run_task,
+                reader,
+                mreaders if kind != "segment" else [],
+                epoch_files[k],
+                epoch_ids[k],
+                kind,
+                entry,
+            )
+            futures[future] = index
+        pending = set(futures)
+        while pending:
+            finished, pending = wait(pending, return_when=FIRST_COMPLETED)
+            for future in finished:
+                k, kind, t, weight = tasks[futures[future]]
+                out = future.result()
+                if kind == "segment":
+                    segment_files[k][t] = out
+                elif kind == "metadata":
+                    meta_docs[k] = out
+                else:
+                    docs_per_epoch[k] = out
+                remaining[k] -= 1
+                weight_done[k] += weight
+                update_progress(k, 1 if remaining[k] == 0 else min(weight_done[k], 0.999))
+    except BaseException:
+        executor.shutdown(wait=True, cancel_futures=True)
+        raise
+    executor.shutdown(wait=True)
+    for k in range(num_epochs):
+        update_progress(k, 1)  # e.g., an epoch with nothing to write
+
+    if plans_segments:
+        for k in range(num_epochs):
+            d = ndi_daq_reader_mfdaq.ingest_attach_segments(
+                epoch_docs[k], plans[k], segment_files[k]
+            )
+            docs_per_epoch[k] = [d, *meta_docs[k]]
+    return docs_per_epoch
+
+
+def _run_task(
+    daqreader: Any,
+    daqmetadatareaders: list[Any],
+    ef: list[str],
+    epoch_id: str,
+    kind: str,
+    plan_entry: dict[str, Any] | None,
+) -> Any:
+    """One worker task: a segment, an epoch's metadata, or a whole epoch."""
+    if kind == "segment":
+        return daqreader.ingest_segment(ef, plan_entry)
+    if kind == "metadata":
+        return _metadata_docs(daqmetadatareaders, ef, epoch_id)
+    return _ingestOneEpoch(daqreader, daqmetadatareaders, ef, epoch_id)
+
+
+def _metadata_docs(daqmetadatareaders: list[Any], ef: list[str], epoch_id: str) -> list[Any]:
+    """The metadata readers' documents for one epoch."""
+    docs: list[Any] = []
+    for mreader in daqmetadatareaders:
+        new_d = mreader.ingest_epochfiles(ef, epoch_id)
+        docs.extend(new_d if isinstance(new_d, list) else [new_d])
+    return docs
+
+
 def _ingestOneEpoch(  # noqa: N802 (mirrors MATLAB's local function)
     daqreader: Any,
     daqmetadatareaders: list[Any],
     ef: list[str],
     epoch_id: str,
-    queue: Any = None,
-    k: int = 0,
     epoch_progress: Callable[[float], Any] | None = None,
 ) -> list[Any]:
-    """Create the documents for a single epoch (no database access).
-
-    In a worker process, progress is sent as ``(k, fraction)`` on QUEUE; in
-    the calling process it goes to EPOCH_PROGRESS.
-    """
-    if queue is not None:
-        epoch_progress = functools.partial(_send_progress, queue, k)
+    """Create the documents for a single epoch (no database access)."""
     docs: list[Any] = []
     if daqreader is not None:
         if epoch_progress is None:
@@ -205,23 +292,18 @@ def _ingestOneEpoch(  # noqa: N802 (mirrors MATLAB's local function)
         else:
             new_d = daqreader.ingest_epochfiles(ef, epoch_id, ProgressFcn=epoch_progress)
         docs.extend(new_d if isinstance(new_d, list) else [new_d])
-    for mreader in daqmetadatareaders:
-        new_d = mreader.ingest_epochfiles(ef, epoch_id)
-        docs.extend(new_d if isinstance(new_d, list) else [new_d])
+    docs.extend(_metadata_docs(daqmetadatareaders, ef, epoch_id))
     return docs
 
 
-def _send_progress(queue: Any, k: int, fraction: float) -> None:
-    """Send epoch K's progress from a worker process to the caller."""
-    queue.put((k, fraction))
+def _reader_plans_segments(daqreader: Any) -> bool:
+    """Does DAQREADER use ndi_daq_reader_mfdaq's ingest_epochfiles?
 
-
-def _reader_reports_progress(daqreader: Any) -> bool:
-    """Does DAQREADER's ingest_epochfiles take a ProgressFcn?
-
-    True when the method is ndi_daq_reader_mfdaq's own; a subclass that
-    overrides ingest_epochfiles keeps its own signature and is called without
-    one.
+    MATLAB counterpart: ``readerPlansSegments``. Such a reader takes a
+    ProgressFcn and can be ingested segment by segment
+    (ingest_epochfiles_plan / ingest_segment). A subclass that overrides
+    ingest_epochfiles keeps its own signature and is called once per epoch,
+    without one.
     """
     if daqreader is None:
         return False

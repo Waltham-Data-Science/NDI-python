@@ -1320,7 +1320,7 @@ not_applicable:
   # =========================================================================
   - name: setup
     matlab_path: "+ndi/+setup/"
-    matlab_last_sync_hash: "03c79fa48"
+    matlab_last_sync_hash: "fd7ddbf06"
     python_path: "ndi/setup/"
     status: ported
     decision_log: >
@@ -1353,6 +1353,13 @@ not_applicable:
       and play different roles, and the usage line in this record has always
       said so. Changing the signature now would break every caller for a
       cosmetic gain.
+
+      NDI-matlab 4f0e7234d..fd7ddbf06 change only +ndi/+setup/+conv/+vhlab:
+      the vhlab (Stacy) data importer, its approach and treatment tables, and
+      its validation and study drivers. Nothing to port: +setup/+conv, the
+      per-lab importers for one-off dataset conversions, has no counterpart
+      in this port (src/ndi/setup holds the lab setup functions and the DAQ,
+      epoch, file and sync helpers), and none of these commits touches those.
 
   # =========================================================================
   # ndi.docs namespace — MATLAB documentation generation

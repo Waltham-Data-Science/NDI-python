@@ -26,6 +26,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   longer pads reads that run past the end of the file. Needs ndi-compress with
   Waltham-Data-Science/NDI-compress-python#4.
 
+- **Parallel ingestion by segment, and an ingest comparison tool** (mirroring
+  VH-Lab/NDI-matlab#1090 and #1091). `ingest_epochfiles` is split into
+  `ingest_epochfiles_plan`, `ingest_segment` and the static
+  `ingest_attach_segments`, and `ingestEpochDocuments` now hands single
+  segments to the worker processes, so every worker stays busy even when one
+  epoch is much longer than the others. The new `ndi.test.ingest.compare`
+  and `mfdaq_compare` compare a raw session with an ingested copy of it --
+  every epoch, channel list, sample and event -- and return a report of
+  every check, with no stopping or prompting on a mismatch.
+
 - **Ingestion progress bars and parallel per-epoch work** (mirroring
   VH-Lab/NDI-matlab#1079). `ndi_session.ingest()` now shows progress through
   `ndi_gui_component_ProgressBarWindow` -- one bar for the session and one per
