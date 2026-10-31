@@ -1,6 +1,6 @@
 """ndi.update: modificationSummary, checkOnStartup, installType, the CLI and
-the navigator's Update-button decisions (update_dialog), all without Qt or
-network.
+the navigator's Update pane, all without Qt or network. The package table
+the Update button opens is tested in test_update_package_status.py.
 
 MATLAB counterparts: TestModificationSummary.m, TestInstallType.m and
 TestNavigatorLayout/testNdiPaneHasUpdateButton in NDI-matlab's
@@ -23,7 +23,6 @@ from ndi.gui.nav.ndi_pane import (
     PREFS_WIDTH,
     UPDATE_WIDTH,
     NdiPane,
-    update_dialog,
 )
 from ndi.update import checkOnStartup, installType, modificationSummary
 
@@ -194,77 +193,3 @@ def test_cli_update_reports_refusal(monkeypatch, capsys):
 def test_pane_is_wide_enough_for_three_buttons():
     pane = NdiPane()
     assert pane.right_width() == BROOM_WIDTH + UPDATE_WIDTH + PREFS_WIDTH + 2 * BUTTON_SPACING
-
-
-def test_dialog_up_to_date_is_an_alert():
-    plan = update_dialog({"UpdateAvailable": False, "Status": "upToDate", "Message": "fine"})
-    assert plan == {"kind": "alert", "message": "fine", "success": True}
-
-
-def test_dialog_unknown_is_a_warning():
-    plan = update_dialog({"UpdateAvailable": False, "Status": "unknown", "Message": "offline"})
-    assert plan["success"] is False
-
-
-def test_dialog_other_branch_only_explains():
-    plan = update_dialog(
-        {"UpdateAvailable": True, "CanInstall": True, "InstallType": "git", "Branch": "dev"}
-    )
-    assert plan["kind"] == "alert"
-    assert plan["success"] is False
-
-
-def test_dialog_offers_update_and_drops_terminal_hints():
-    plan = update_dialog(
-        {
-            "UpdateAvailable": True,
-            "CanInstall": True,
-            "InstallType": "git",
-            "Branch": "main",
-            "HasModifications": False,
-            "Message": "An update is available.\nRun ndi.update.install() (or `ndi update`) to update.",
-        }
-    )
-    assert plan["kind"] == "confirm"
-    assert plan["accept"] == "Update"
-    assert plan["default_cancel"] is False
-    assert "ndi.update.install" not in plan["message"]
-    assert plan["message"].endswith("Update now?")
-
-
-def test_dialog_with_modified_code_defaults_to_cancel():
-    plan = update_dialog(
-        {
-            "UpdateAvailable": True,
-            "CanInstall": True,
-            "InstallType": "git",
-            "Branch": "main",
-            "HasModifications": True,
-            "Modifications": [mod(changed=["src/a.py"])],
-            "Message": "An update is available.\nNote: you have changed code in NDI-python.",
-        }
-    )
-    assert plan["accept"] == "Update anyway"
-    assert plan["default_cancel"] is True
-    assert "changed:    src/a.py" in plan["message"]
-    assert "Note: you have changed code" not in plan["message"]
-
-
-def test_dialog_with_untracked_files_in_the_way_only_explains():
-    # git will not overwrite them, so the button says to move them instead of
-    # offering an update that would stop part-way.
-    plan = update_dialog(
-        {
-            "UpdateAvailable": True,
-            "CanInstall": True,
-            "InstallType": "git",
-            "Branch": "main",
-            "HasModifications": True,
-            "Modifications": [mod(blocking=["new_module.py"])],
-            "Message": "An update is available.",
-        }
-    )
-    assert plan["kind"] == "alert"
-    assert plan["success"] is False
-    assert "in the way: new_module.py" in plan["message"]
-    assert "Move or rename" in plan["message"]

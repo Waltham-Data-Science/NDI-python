@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Update button: a package table with tick boxes** (mirroring
+  NDI-matlab 19b8ab573 and 749b1a266). The navigator's Update button now lists
+  NDI-python and each dependency clone in `~/.ndi/tools` in
+  `ndi.gui.nav.update_dialog`, with installed and latest commits, status, notes
+  (what updating does to your changes, what blocks it) and a tick box each, and
+  updates only the ticked packages. Behind it: `ndi.update.packageStatus`, a
+  `Packages` option for `ndi.update.install` (update named packages only;
+  changes elsewhere need no consent, and the clone need not be on main unless
+  NDI-python is named), and `CurrentVersion`/`LatestVersion` on each dependency
+  in `ndi.update.check`. Pulls now stash and restore your edits in every
+  repository and merge local commits (`git pull --no-edit`) instead of refusing
+  them. Bridge entries are added for `updateDialog`, `packageStatus`,
+  `pullRepo` and `findCalculators` (MATLAB-only: NDI-python has no calculator
+  clones), and the `ndi.fun.epoch` and `ndi.setup` entries are re-examined
+  against NDI-matlab main.
+
 - **Ingestion progress bars and parallel per-epoch work** (mirroring
   VH-Lab/NDI-matlab#1079). `ndi_session.ingest()` now shows progress through
   `ndi_gui_component_ProgressBarWindow` -- one bar for the session and one per

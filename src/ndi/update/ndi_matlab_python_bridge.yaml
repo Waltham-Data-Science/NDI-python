@@ -19,7 +19,7 @@ functions:
   - name: check
     type: function
     matlab_path: "+ndi/+update/check.m"
-    matlab_last_sync_hash: "b6427cc89"
+    matlab_last_sync_hash: "749b1a266"
     python_path: "ndi/update/check.py"
     input_arguments:
       - name: IncludeDependencies
@@ -37,6 +37,9 @@ functions:
       - name: IncludePython
         type_matlab: "logical"
         decision_log: "No counterpart: NDI-python checking NDI-python is the whole function."
+      - name: IncludeCalculators
+        type_matlab: "logical"
+        decision_log: "No counterpart: there are no calculator clones to check (see decision_log)."
       - name: NdiHome
         type_python: "str"
         decision_log: "Python only, for tests: check the installer install under this folder (MATLAB's checkPython has the same option)."
@@ -67,11 +70,22 @@ functions:
       2026-10-21: NDI-matlab b6427cc89: ndi_install now puts stashed changes back after
       the pull (git stash pop), as ndi_install.py and this port already did, and
       only pops a stash it made itself. Comment only here; nothing to port.
+      2026-10-28: NDI-matlab 19b8ab573 / 749b1a266 (the Update dialog's package
+      table): Dependencies entries gain CurrentVersion and LatestVersion
+      (short commit hashes) and Url -- ported; Url is "" here, since the clones
+      in ~/.ndi/tools come from ndi_install.py, not a requirements.txt line.
+      MATLAB also checks the NDIcalc-*-matlab calculator clones beside
+      NDI-matlab (Calculators, CalculatorUpdateAvailable, IncludeCalculators).
+      NDI-python has no such clones -- it gets the calculator definitions it
+      uses (ndicalc-vis-matlab) as a pip dependency, updated with NDI-python --
+      so both fields are present and always empty / False. MATLAB's Python
+      field gains CurrentVersion, LatestVersion and CommitsBehind; this
+      function is that check, and already returns them.
 
   - name: install
     type: function
     matlab_path: "+ndi/+update/install.m"
-    matlab_last_sync_hash: "b6427cc89"
+    matlab_last_sync_hash: "749b1a266"
     python_path: "ndi/update/install.py"
     input_arguments:
       - name: Confirm
@@ -90,6 +104,12 @@ functions:
       - name: IncludePython
         type_matlab: "logical"
         decision_log: "No counterpart (see check)."
+      - name: IncludeCalculators
+        type_matlab: "logical"
+        decision_log: "No counterpart (see check)."
+      - name: Packages
+        type_matlab: "string array"
+        type_python: "list[str] | None"
     output_arguments:
       - name: result
         type_python: "dict"
@@ -113,6 +133,19 @@ functions:
       2026-10-21: NDI-matlab b6427cc89: ndi_install now puts stashed changes back after
       the pull (git stash pop), as ndi_install.py and this port already did, and
       only pops a stash it made itself. The two languages now behave the same.
+      2026-10-28: NDI-matlab 19b8ab573 / 749b1a266: Packages updates only the
+      named packages (unknown names raise ndi:update:install:unknownPackage;
+      up-to-date ones are skipped; only changes in the named packages need
+      consent; the clone need not be on main unless "NDI-python" is named),
+      and each repository is pulled with pullRepo (stash, git pull --no-edit,
+      stash pop; local commits are merged rather than refused by --ff-only).
+      Ported. Mapping: "NDI-python" pulls main and runs ndi_install.py
+      without --update (MATLAB pulls NDI-matlab and runs ndi_install only
+      for named dependencies); a named dependency is pulled in ~/.ndi/tools,
+      where the .pth file already points, so no installer run is needed.
+      With no Packages, ndi_install.py --update runs as before, and main is
+      pulled only when NDI-python is behind (as MATLAB now pulls NDI-matlab
+      only when behind). Calculators and "NDI-matlab" have no counterpart.
 
   - name: installType
     type: function
@@ -161,7 +194,7 @@ functions:
   - name: checkOnStartup
     type: function
     matlab_path: "+ndi/+update/checkOnStartup.m"
-    matlab_last_sync_hash: "f9ced4bcd"
+    matlab_last_sync_hash: "19b8ab573"
     python_path: "ndi/update/check_on_startup.py"
     output_arguments:
       - name: line
@@ -175,6 +208,10 @@ functions:
       off the other's check of a different repository. NDI-python has no
       ndi_Init: the navigator calls this, on a thread, when it opens; importing
       ndi never does. Returns the line it printed.
+      2026-10-28: NDI-matlab 19b8ab573 also reports calculator updates
+      (CalculatorUpdateAvailable). Nothing to port: NDI-python has no
+      calculator clones (see check), and a dependency behind already sets
+      UpdateAvailable here.
 
   - name: checkPython
     type: function
@@ -237,3 +274,57 @@ functions:
     decision_log: >
       Private helper; here github_api in the private module _github, on
       urllib.request instead of webread.
+
+  - name: packageStatus
+    type: function
+    matlab_path: "+ndi/+update/packageStatus.m"
+    matlab_last_sync_hash: "749b1a266"
+    python_path: "ndi/update/package_status.py"
+    input_arguments:
+      - name: result
+        type_matlab: "struct"
+        type_python: "dict"
+    output_arguments:
+      - name: rows
+        type_matlab: "struct array"
+        type_python: "list[dict]"
+      - name: summary
+        type_matlab: "struct"
+        type_python: "dict"
+    decision_log: >
+      Ported (NDI-matlab 19b8ab573, 749b1a266). Same row and summary fields,
+      notes, levels, Selectable/Selected rules and messages. Rows: a git
+      install lists NDI-python ("ndi") and each ~/.ndi/tools clone
+      ("dependency"); an installer install is one "installer" row for
+      NDI-python (MATLAB's "toolbox" row has no counterpart), noting that it
+      is updated by running the installer again; pip and unknown installs are
+      one "Could not check" row. No "calculator" rows and no "python" row (see
+      check). A dependency row's WillUpdate is its own status (behind or
+      missing): MATLAB also requires UpdateAvailable, which a dependency
+      behind always sets here. A snake_case alias package_status is bound to
+      the same function.
+
+  - name: findCalculators
+    type: function
+    matlab_path: "+ndi/+update/private/findCalculators.m"
+    matlab_last_sync_hash: "19b8ab573"
+    status: matlab_only
+    decision_log: >
+      Finds the NDIcalc-*-matlab git clones beside NDI-matlab and on the
+      MATLAB path, for check's Calculators. NDI-python has no calculator
+      clones: the calculator definitions it uses come from the
+      ndicalc-vis-matlab pip dependency, updated with NDI-python.
+
+  - name: pullRepo
+    type: function
+    matlab_path: "+ndi/+update/private/pullRepo.m"
+    matlab_last_sync_hash: "19b8ab573"
+    python_path: "ndi/update/install.py"
+    status: ported_differently
+    decision_log: >
+      Private helper; here _pull_repo in install.py, beside the UpdateError
+      it raises. Same steps and messages: stash tracked edits (comparing
+      refs/stash so an unrelated older stash is never popped), git pull
+      --no-edit, stash pop with a warning (printed) if the edits no longer
+      apply, and ndi:update:install:pullFailed on a failed status, stash or
+      pull.

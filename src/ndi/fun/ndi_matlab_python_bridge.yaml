@@ -1161,7 +1161,7 @@ functions:
   - name: epochid2element
     type: function
     matlab_path: "+ndi/+fun/+epoch/epochid2element.m"
-    matlab_last_sync_hash: "fe64a9f53"
+    matlab_last_sync_hash: "9821a12e6"
     python_path: "ndi/fun/epoch.py"
     input_arguments:
       - name: session
@@ -1208,11 +1208,16 @@ functions:
       differences that stand: MATLAB returns a cell array the same size as the
       input where this returns a dict keyed by epoch id, and MATLAB drives a
       ProgressBarWindow that has no counterpart in a headless port.
+      NDI-matlab 9821a12e6 assigns the element to every entry of the input
+      that names the epoch (element(epochInd) = {...}); it used to fail when
+      the same epoch id appeared more than once. No-op here: the result is a
+      dict keyed by epoch id, so repeated ids share one entry, which lists
+      every element claiming that epoch.
 
   - name: filename2epochid
     type: function
     matlab_path: "+ndi/+fun/+epoch/filename2epochid.m"
-    matlab_last_sync_hash: "fe64a9f53"
+    matlab_last_sync_hash: "774a01f71"
     python_path: "ndi/fun/epoch.py"
     input_arguments:
       - name: session
@@ -1237,6 +1242,10 @@ functions:
       dev{d}.epochtable) where the port reads daqsystem.epoch_table out of the
       stored daq_system documents -- the same table when the documents are
       current, and stale when they are not.
+      NDI-matlab 774a01f71 assigns the epoch id to every filename that names
+      the epoch (epochid(fileInd) = {...}); it used to fail when several
+      filenames matched one epoch. No-op here: each filename already gets
+      its own list of matching epoch ids.
 
   - name: t0_t1cell2array
     type: function
