@@ -58,6 +58,8 @@ def _empty_result(install_type: str, repo_root: str) -> dict[str, Any]:
         "HasModifications": False,
         "Modifications": [],
         "Dependencies": [],
+        "Calculators": [],
+        "CalculatorUpdateAvailable": False,
         "RepoRoot": repo_root,
     }
 
@@ -101,7 +103,9 @@ def check(
         update adds a file to, which git will not overwrite -- and
         ``CommitsAhead``; other untracked files are left alone and not
         listed), ``Dependencies`` (``Name``, ``Path``, ``Status``,
-        ``CommitsBehind``) and ``RepoRoot``.
+        ``CommitsBehind``, ``CurrentVersion`` and ``LatestVersion`` -- short
+        commit hashes, or ``""`` -- and ``Url``), ``Calculators``,
+        ``CalculatorUpdateAvailable`` and ``RepoRoot``.
 
     Python-specific Notes:
         Also ``CanInstall`` (``ndi.update.install`` can update this kind of
@@ -110,6 +114,12 @@ def check(
         reports for this same install. A missing count is None where MATLAB
         has NaN. MATLAB's ``ReleaseUrl``, ``MltbxUrl`` and ``BothInstalled``
         belong to its packaged toolbox, which NDI-python does not have.
+        ``Calculators`` is always empty and ``CalculatorUpdateAvailable``
+        False: MATLAB checks the NDIcalc-*-matlab git clones beside
+        NDI-matlab, while NDI-python gets the calculator definitions it uses
+        (ndicalc-vis-matlab) as a pip dependency, updated with NDI-python.
+        A dependency's ``Url`` is ``""``: the clones in ``~/.ndi/tools`` come
+        from ``ndi_install.py``, not from a requirements.txt line.
     """
     api = GitHubApi or github_api
     if RepoRoot:
@@ -239,7 +249,9 @@ def _check_dependencies(tools: Path) -> tuple[list[dict[str, Any]], list[dict[st
     if not tools.is_dir():
         return deps, mods
     for path in sorted(p for p in tools.iterdir() if (p / ".git").exists()):
-        dep = {"Name": path.name, "Path": str(path), "Status": "unknown", "CommitsBehind": None}
+        dep = _repo_entry(path.name, path)
+        _, local_hash = run_git(path, "rev-parse", "HEAD")
+        dep["CurrentVersion"] = local_hash[:7]
         fetched, _ = run_git(path, "fetch", "--quiet")
         counted, behind = run_git(path, "rev-list", "--count", "HEAD..@{u}")
         ahead_status, ahead = run_git(path, "rev-list", "--count", "@{u}..HEAD")
@@ -252,10 +264,25 @@ def _check_dependencies(tools: Path) -> tuple[list[dict[str, Any]], list[dict[st
             )
         )
         if fetched == 0 and counted == 0:
+            _, upstream_hash = run_git(path, "rev-parse", "@{u}")
+            dep["LatestVersion"] = upstream_hash[:7]
             dep["CommitsBehind"] = _to_int(behind)
             dep["Status"] = "behind" if (dep["CommitsBehind"] or 0) > 0 else "upToDate"
         deps.append(dep)
     return deps, mods
+
+
+def _repo_entry(name: str, path: str | Path) -> dict[str, Any]:
+    """A Dependencies entry, as MATLAB's repoEntry."""
+    return {
+        "Name": name,
+        "Path": str(path),
+        "Status": "unknown",
+        "CommitsBehind": None,
+        "CurrentVersion": "",
+        "LatestVersion": "",
+        "Url": "",
+    }
 
 
 def _local_modifications(

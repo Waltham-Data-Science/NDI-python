@@ -748,7 +748,7 @@ ported_late:
 
   - name: ndiPane
     matlab_path: "+ndi/+gui/+nav/ndiPane.m"
-    matlab_last_sync_hash: "a24f19076"
+    matlab_last_sync_hash: "749b1a266"
     python_path: "ndi/gui/nav/ndi_pane.py"
     decision_log: >
       The NDI-branded pane. Ported in #88.
@@ -767,6 +767,36 @@ ported_late:
       at a path the update adds a file to are reported, as BlockingFiles
       (replacing NewFiles), and the Update button shows them in a
       warning and asks for them to be moved instead of offering the update. Ported the same.
+      2026-10-28: NDI-matlab 19b8ab573 / 749b1a266: the Update button lists every
+      package in updateDialog (status, notes, a tick box each) and installs
+      the ticked ones with ndi.update.install(Packages=...); the tooltip
+      names the dependencies too. Ported: check_for_updates opens
+      ndi.gui.nav.update_dialog and calls install with Packages, then reports
+      "Updated: ..." with the restart note (on Windows, for an installer
+      install, that the installer has opened in its own window). The old
+      pure update_dialog() decisions are gone with MATLAB's old dialogs;
+      updated_message() builds the closing alert.
+
+  - name: updateDialog
+    matlab_path: "+ndi/+gui/+nav/updateDialog.m"
+    matlab_last_sync_hash: "749b1a266"
+    python_path: "ndi/gui/nav/update_dialog.py"
+    python_class: "UpdateDialog"
+    decision_log: >
+      Ported (NDI-matlab 19b8ab573, 749b1a266). A modal QDialog with the same
+      summary line, table columns (Update, Package, Installed, Latest,
+      Status, Notes), bold rows for packages that will update, green "Up to
+      date", an icon and colour for each row's most serious note, a details
+      box (starting on the first blocked row, else the first with notes),
+      and the same Update / Update anyway (N) / Close button rules, with
+      Cancel the default when a ticked package has the user's changes.
+      Methods: set_selected, selected_packages, show_details, choose (MATLAB's
+      setSelected, selectedPackages, showDetails, choose; rows are 0-based);
+      the static tableData, noteText and updateButtonState are module
+      functions table_data, note_text and update_button_state, testable
+      without Qt; ask(result, parent) returns (go, packages). Tick boxes are
+      checkable only on Selectable rows, so a row that cannot be updated
+      cannot be ticked rather than snapping back.
 
   - name: datasetsPane
     matlab_path: "+ndi/+gui/+nav/datasetsPane.m"

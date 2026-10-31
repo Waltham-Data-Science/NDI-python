@@ -1354,12 +1354,13 @@ not_applicable:
       said so. Changing the signature now would break every caller for a
       cosmetic gain.
 
-      NDI-matlab 4f0e7234d..fd7ddbf06 change only +ndi/+setup/+conv/+vhlab:
-      the vhlab (Stacy) data importer, its approach and treatment tables, and
-      its validation and study drivers. Nothing to port: +setup/+conv, the
-      per-lab importers for one-off dataset conversions, has no counterpart
-      in this port (src/ndi/setup holds the lab setup functions and the DAQ,
-      epoch, file and sync helpers), and none of these commits touches those.
+      Re-examined against NDI-matlab fd7ddbf06. Every change since 03c79fa48
+      is in +ndi/+setup/+conv/+vhlab -- the vhlab (Stacy) legacy-data
+      importer: approach mappings, subject creation, per-experiment and
+      per-study import, directory validation, spike-timing and mixture
+      fixes. That converter has no Python port (nothing under ndi/setup
+      imports legacy lab data), so nothing here follows; lab, labNames and
+      the per-lab wrappers are unchanged.
 
   # =========================================================================
   # ndi.docs namespace — MATLAB documentation generation
