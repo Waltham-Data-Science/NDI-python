@@ -3,20 +3,16 @@
 MATLAB counterpart: ``src/ndi/+ndi/+gui/+nav/ndiPane.m``
 
 A single-row pane with an "NDI" title and, on the right, a broom button that
-clears NDI's in-memory caches, an "Update" button that checks for a newer
-NDI-python and offers to install it, and a "Prefs" button that opens the
-preferences editor. Always the first pane in the navigator, and it cannot be
-collapsed.
-
-What the Update button says is decided by :func:`update_dialog`, which is
-pure (a check result in, a dialog description out) so it is testable without
-Qt, the split ndi.gui.nav makes elsewhere.
+clears NDI's in-memory caches, an "Update" button that checks for newer
+versions of NDI-python and its dependencies and offers to install them (in
+:mod:`ndi.gui.nav.update_dialog`'s package table), and a "Prefs" button that
+opens the preferences editor. Always the first pane in the navigator, and it
+cannot be collapsed.
 """
 
 from __future__ import annotations
 
 import os
-import re
 from typing import Any
 
 from .pane import NavPane
@@ -28,7 +24,7 @@ __all__ = [
     "UPDATE_WIDTH",
     "PREFS_WIDTH",
     "BUTTON_SPACING",
-    "update_dialog",
+    "updated_message",
 ]
 
 #: U+1F9F9 BROOM. MATLAB has to write this as a UTF-16 surrogate pair
@@ -48,64 +44,19 @@ CACHE_TOOLTIP = (
 )
 
 
-UPDATE_TOOLTIP = "Check for a newer version of NDI-python"
+UPDATE_TOOLTIP = "Check for a newer version of NDI-python and its dependencies"
 UPDATE_TITLE = "NDI Update"
 
 
-def update_dialog(result: dict[str, Any]) -> dict[str, Any]:
-    """What the Update button shows for an ``ndi.update.check`` RESULT.
+def updated_message(result: dict[str, Any], packages: list[str]) -> str:
+    """What the Update button says after installing PACKAGES for a check RESULT."""
+    from ...update import packageStatus
 
-    Mirrors the decisions in MATLAB's ``ndiPane.checkForUpdates``. Returns a
-    dict with ``kind`` -- ``"alert"`` (just tell the user) or ``"confirm"``
-    (ask, then install) -- and ``message``, ``success`` (alert icon),
-    ``accept`` (the confirm button's label) and ``default_cancel`` (Cancel is
-    the default button, as it is whenever the user's own code is touched).
-    """
-    message = result.get("Message", "")
-    if not result.get("UpdateAvailable"):
-        return {
-            "kind": "alert",
-            "message": message,
-            "success": result.get("Status") != "unknown",
-        }
-    if not result.get("CanInstall"):
-        return {"kind": "alert", "message": message, "success": False}
-    if result.get("InstallType") == "git" and result.get("Branch") != "main":
-        # ndi.update.install refuses this case; say why up front.
-        return {"kind": "alert", "message": message, "success": False}
-
-    # The message ends with command-line hints; the dialog replaces them.
-    message = re.sub(r"\n?Run ndi\.update\.install\(\)[^\n]*", "", message)
-    message = re.sub(r"\n?Note: you have changed code[^\n]*", "", message)
-    if result.get("HasModifications"):
-        from ...update import modificationSummary
-
-        summary = modificationSummary(result)
-        if any(m.get("BlockingFiles") for m in result.get("Modifications", [])):
-            # Untracked files sit where the update adds files; git will not
-            # overwrite them, so updating cannot work until they move.
-            return {
-                "kind": "alert",
-                "message": f"{message}\n\n{summary}\n\nMove or rename the files marked "
-                '"in the way", then press Update again.',
-                "success": False,
-            }
-        return {
-            "kind": "confirm",
-            "message": f"{message}\n\n{summary}\n\nUpdate anyway?",
-            "accept": "Update anyway",
-            "default_cancel": True,
-        }
+    rows, _ = packageStatus(result)
+    names = [r["Name"] for r in rows if r["Name"] in packages]
     if result.get("InstallType") == "installer" and os.name == "nt":
-        message += (
-            "\n\nThe NDI installer will open in its own window and finish " "after you close NDI."
-        )
-    return {
-        "kind": "confirm",
-        "message": f"{message}\n\nUpdate now?",
-        "accept": "Update",
-        "default_cancel": False,
-    }
+        return "The NDI installer has opened in a new window. Close NDI to let it finish."
+    return f"Updated: {', '.join(names)}.\n\nRestart NDI to make sure the new versions are used."
 
 
 class NdiPane(NavPane):
@@ -168,12 +119,15 @@ class NdiPane(NavPane):
         return cleared
 
     def check_for_updates(self) -> dict[str, Any] | None:
-        """Check for, and offer to install, an NDI-python update (the Update button).
+        """Check for, and offer to install, NDI updates (the Update button).
 
-        Runs ``ndi.update.check`` and reports the result. If an update can be
-        installed, asks the user to confirm and then runs
-        ``ndi.update.install`` without its terminal prompt. Returns the check
-        result (None if the check itself failed).
+        Runs ``ndi.update.check`` and lists every package in
+        :class:`ndi.gui.nav.update_dialog.UpdateDialog` -- NDI-python and its
+        dependency clones -- each with its status, notes and a tick box. If
+        the user presses Update, runs ``ndi.update.install`` for the ticked
+        packages only, without its terminal prompts (the dialog has already
+        shown what updating will do). Returns the check result (None if the
+        check itself failed).
         """
         from ... import update
 
@@ -184,45 +138,26 @@ class NdiPane(NavPane):
             self._alert(str(exc), UPDATE_TITLE, success=False)
             return None
 
-        plan = update_dialog(result)
-        if plan["kind"] == "alert":
-            self._alert(plan["message"], UPDATE_TITLE, success=plan["success"])
-            return result
-        if not self._confirm(plan["message"], plan["accept"], plan["default_cancel"]):
+        go, packages = self._ask(result)
+        if not go or not packages:
             return result
 
         try:
             with _busy_cursor():
-                update.install(Confirm=False, AllowModified=True)
+                update.install(Confirm=False, AllowModified=True, Packages=packages)
         except Exception as exc:  # noqa: BLE001 - reported to the user
             self._alert(str(exc), UPDATE_TITLE, success=False)
             return result
-        if result["InstallType"] == "installer" and os.name == "nt":
-            done = "The NDI installer has opened in a new window. Close NDI to let it finish."
-        else:
-            done = "NDI-python was updated. Restart NDI to make sure the new version is used."
-        self._alert(done, UPDATE_TITLE, success=True)
+        self._alert(updated_message(result, packages), UPDATE_TITLE, success=True)
         return result
 
-    def _confirm(self, message: str, accept: str, default_cancel: bool) -> bool:
-        """Ask before updating; blocking, as MATLAB's uiconfirm is."""
+    def _ask(self, result: dict[str, Any]) -> tuple[bool, list[str]]:
+        """Show the package table; blocking, as MATLAB's uiwait is."""
         if self.navigator is None or getattr(self.navigator, "figure", None) is None:
-            return False
-        from PySide6 import QtWidgets
+            return False, []
+        from .update_dialog import ask
 
-        box = QtWidgets.QMessageBox(self.navigator.figure)
-        box.setWindowTitle(UPDATE_TITLE)
-        box.setText(message)
-        box.setIcon(
-            QtWidgets.QMessageBox.Icon.Warning
-            if default_cancel
-            else QtWidgets.QMessageBox.Icon.Question
-        )
-        go = box.addButton(accept, QtWidgets.QMessageBox.ButtonRole.AcceptRole)
-        cancel = box.addButton("Cancel", QtWidgets.QMessageBox.ButtonRole.RejectRole)
-        box.setDefaultButton(cancel if default_cancel else go)
-        box.exec()
-        return box.clickedButton() is go
+        return ask(result, self.navigator.figure)
 
     def _alert(self, message: str, title: str, *, success: bool) -> None:
         """Show a message on the navigator figure, if there is one."""
