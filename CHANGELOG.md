@@ -24,6 +24,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   clones), and the `ndi.fun.epoch` and `ndi.setup` entries are re-examined
   against NDI-matlab main.
 
+- **Ingestion stores the data** (mirroring NDI-matlab's
+  `ndi.daq.reader.mfdaq/ingest_epochfiles`, with VH-Lab/NDI-matlab#1089's
+  within-epoch progress). Ingesting an epoch used to make its documents
+  without any data, so an ingested epoch could not be read (`channel_list.bin
+  not found`). `ndi_daq_reader_mfdaq.ingest_epochfiles` now writes the channel
+  list and the epoch's data in compressed segments as MATLAB does -- analog
+  data in the reader's underlying type (Intan: uint16, via the new
+  `ndi_daq_reader_mfdaq_intan.underlying_datatype`), digital, time, and
+  event/marker/text channels -- and metadata readers store their parameters
+  (`data.bin`), which `readmetadata_ingested` now reads back. The channel list
+  is written in MATLAB's `saveStructArray` format so NDI-matlab can read it.
+  `ingest_epochfiles` takes a `ProgressFcn`, and `ingestEpochDocuments`
+  reports fractional progress as segments are written, in worker processes
+  too. The Intan reader now reads auxiliary inputs at their own sample rate
+  and its digital channels as NDR numbers them (both as MATLAB), and no
+  longer pads reads that run past the end of the file. Needs ndi-compress with
+  Waltham-Data-Science/NDI-compress-python#4.
+
+- **Parallel ingestion by segment, and an ingest comparison tool** (mirroring
+  VH-Lab/NDI-matlab#1090 and #1091). `ingest_epochfiles` is split into
+  `ingest_epochfiles_plan`, `ingest_segment` and the static
+  `ingest_attach_segments`, and `ingestEpochDocuments` now hands single
+  segments to the worker processes, so every worker stays busy even when one
+  epoch is much longer than the others. The new `ndi.test.ingest.compare`
+  and `mfdaq_compare` compare a raw session with an ingested copy of it --
+  every epoch, channel list, sample and event -- and return a report of
+  every check, with no stopping or prompting on a mismatch.
+
 - **Ingestion progress bars and parallel per-epoch work** (mirroring
   VH-Lab/NDI-matlab#1079). `ndi_session.ingest()` now shows progress through
   `ndi_gui_component_ProgressBarWindow` -- one bar for the session and one per

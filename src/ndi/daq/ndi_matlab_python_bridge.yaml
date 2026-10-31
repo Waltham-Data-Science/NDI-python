@@ -396,7 +396,7 @@ classes:
   - name: mfdaq_reader
     type: class
     matlab_path: "+ndi/+daq/+reader/mfdaq.m"
-    matlab_last_sync_hash: "770c1eb3"
+    matlab_last_sync_hash: "5c5784c6a"
     decision_log: >
       NDI-matlab 770c1eb3 clamps readchannels_epochsamples_ingested's
       window to what the epoch has: a finite s0 below the first sample
@@ -414,11 +414,129 @@ classes:
       port: this port's ingest (ndi.daq.reader_base.ingest_epochfiles) never
       calls samplerate at all. samplerate here is reached only from
       times2samples and samples2times, which event channels do not use.
+
+      NDI-matlab 6ff0264e5 (VH-Lab/NDI-matlab#1089) adds ingest_epochfiles'
+      ProgressFcn. With it, this port gains ingest_epochfiles itself: until
+      now ingestion here made the epoch documents without any data, so an
+      ingested epoch could not be read. It now writes channel_list.bin and
+      the compressed segments as MATLAB does (see the method's entry).
+
+      NDI-matlab 569fdab67 and 5c5784c6a (VH-Lab/NDI-matlab#1090) split
+      ingest_epochfiles into ingest_epochfiles_plan, ingest_segment and the
+      static ingest_attach_segments, so ingestEpochDocuments can spread one
+      epoch's segments over the workers. Ported, with the same plan fields
+      and weights; ingest_epochfiles is now plan, each segment, attach, as
+      in MATLAB. 5c5784c6a only marks a growing array for Code Analyzer.
     python_path: "ndi/daq/mfdaq.py"
     python_class: "ndi_daq_reader_mfdaq"
     inherits: "ndi.daq.reader"
 
     methods:
+      - name: ingest_epochfiles
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: epoch_id
+            type_matlab: "char"
+            type_python: "str"
+          - name: ProgressFcn
+            type_matlab: "function handle or []"
+            type_python: "Callable[[float], Any] | None"
+            default: "None"
+        output_arguments:
+          - name: d
+            type_python: "ndi_document"
+        decision_log: >
+          Ported from NDI-matlab 6ff0264e5. Same document, file records,
+          segment sizes (1e6 analog/time, 1e7 digital), channel list
+          (sample rate, offset and scale per channel, written in MATLAB's
+          saveStructArray format), per-group sample-rate check, progress
+          weights and priority of log messages (logger.info). Analog data are
+          converted to the reader's underlying_datatype and compressed with
+          ndicompress.compress_ephys's data_format/data_is_unsigned/
+          output_size_bits, which mirror MATLAB's compress_ephys (they need
+          ndi-compress with Waltham-Data-Science/NDI-compress#14).
+          Differences: (1) readchannels_epochsamples takes 1-based samples,
+          and epochtimes2samples here returns 0-based ones, so S1 is the
+          latter plus 1. (2) Digital-output segments are written as
+          do_group*, which is what the document's file list and
+          readchannels_epochsamples_ingested use; MATLAB writes di_group*,
+          colliding with digital inputs of the same group. (3) The time
+          channel group computes its own sample range; MATLAB reuses the
+          previous group's S0/S1/channels (the same values whenever the time
+          channel shares the rate of the channel type before it).
+          (4) MATLAB maps an underlying 'float64' through
+          ndi.compress.datatypestring, which accepts only MATLAB class names
+          ('double'), so a reader that keeps analog data in doubles cannot
+          ingest there; here 'float64'/'float32' (and 'double'/'single') are
+          stored as floats.
+          Since NDI-matlab 569fdab67 (VH-Lab/NDI-matlab#1090) it runs
+          ingest_epochfiles_plan, ingest_segment for each plan entry
+          (reporting ProgressFcn by the entries' weights) and
+          ingest_attach_segments, as MATLAB does.
+
+      - name: ingest_epochfiles_plan
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: epoch_id
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments:
+          - name: d
+            type_python: "ndi_document"
+          - name: plan
+            type_python: "list[dict[str, Any]]"
+        decision_log: >
+          Ported from NDI-matlab 569fdab67 (VH-Lab/NDI-matlab#1090). The
+          document (with channel_list.bin attached) and one plan entry per
+          segment, with MATLAB's fields (kind, channeltype, channels,
+          eventchanneltypes, s0, s1, poly, datasize, underlying_format,
+          docfilename, segment, numSegments, weight); MATLAB's struct array
+          becomes a list of dicts. s0/s1 stay 1-based, as MATLAB's, since
+          readchannels_epochsamples here takes 1-based samples. The
+          differences listed under ingest_epochfiles (do_group* file names,
+          the time group's own sample range, float underlying types) are
+          made here.
+
+      - name: ingest_segment
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: planEntry
+            type_matlab: "struct (one plan entry)"
+            type_python: "dict[str, Any]"
+        output_arguments:
+          - name: filename
+            type_python: "str"
+        decision_log: >
+          Ported from NDI-matlab 569fdab67 (VH-Lab/NDI-matlab#1090). Reads and
+          compresses one plan entry to a temporary .nbf.tgz file and returns
+          its name; touches no database, so it runs in worker processes.
+
+      - name: ingest_attach_segments
+        input_arguments:
+          - name: d
+            type_matlab: "ndi.document"
+            type_python: "ndi_document"
+          - name: plan
+            type_matlab: "struct array"
+            type_python: "list[dict[str, Any]]"
+          - name: segmentFiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+        output_arguments:
+          - name: d
+            type_python: "ndi_document"
+        decision_log: >
+          Ported from NDI-matlab 569fdab67 (VH-Lab/NDI-matlab#1090). Static in
+          both. Adds segmentFiles[t] to the document as plan[t]'s docfilename,
+          in plan order, so the document is the same whatever order the
+          segments were written in.
+
       - name: epochclock
         input_arguments:
           - name: epochfiles

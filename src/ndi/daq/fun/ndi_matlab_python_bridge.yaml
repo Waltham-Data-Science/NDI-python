@@ -14,7 +14,7 @@ functions:
   - name: ingestEpochDocuments
     type: function
     matlab_path: "+ndi/+daq/+fun/ingestEpochDocuments.m"
-    matlab_last_sync_hash: "8feb9166e"
+    matlab_last_sync_hash: "569fdab67"
     python_path: "ndi/daq/fun/ingest_epoch_documents.py"
     input_arguments:
       - name: daqreader
@@ -31,7 +31,7 @@ functions:
         type_python: "list[str]"
       - name: ProgressFcn
         type_matlab: "function handle or []"
-        type_python: "Callable[[int, int], Any] | None"
+        type_python: "Callable[[float, int], Any] | None"
         default: "None"
       - name: NumberOfWorkers
         type_matlab: "double ([]: use the preferences)"
@@ -55,3 +55,24 @@ functions:
       falls back to serial with a warning. MATLAB's thread-pool refusal has
       no counterpart (Python workers here are always processes). A snake_case
       alias ingest_epoch_documents is bound to the same function.
+
+      NDI-matlab b192ae605 (VH-Lab/NDI-matlab#1089): ProgressFcn's numDone is
+      fractional while an epoch is underway. A reader whose ingest_epochfiles
+      is ndi_daq_reader_mfdaq's own is passed a ProgressFcn and reports each
+      segment it writes; the total is reported only when it changes, so each
+      whole number is reported once. Ported. MATLAB's DataQueue sends from
+      the workers become a multiprocessing.Manager queue that the caller
+      drains while it waits on the futures; the DefiningClass check becomes
+      an identity check on the ingest_epochfiles function.
+
+      NDI-matlab 569fdab67 (VH-Lab/NDI-matlab#1090) schedules the parallel
+      work by segment instead of by epoch, so every worker stays busy even
+      with one long epoch: each epoch whose reader plans segments (its
+      ingest_epochfiles is ndi_daq_reader_mfdaq's own) is planned in the
+      caller, and each segment, each metadata reader's work and each other
+      epoch become one task; segments are attached in plan order as each
+      epoch's tasks finish. The pool is used whenever there is an epoch, as
+      in MATLAB. Ported: parfeval + fetchNext becomes a spawn
+      ProcessPoolExecutor + as_completed, and progress is counted in the
+      caller from the plan weights, so the Manager queue of #1089's port is
+      gone.

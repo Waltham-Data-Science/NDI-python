@@ -61,6 +61,33 @@ classes:
             type_python: "list[ChannelInfo]"
         decision_log: "Exact match. Delegates to ndi_daq_reader_SpikeInterfaceReader."
 
+      - name: underlying_datatype
+        input_arguments:
+          - name: epochfiles
+            type_matlab: "cell array of char"
+            type_python: "list[str]"
+          - name: channeltype
+            type_matlab: "char"
+            type_python: "str"
+          - name: channel
+            type_matlab: "integer | array"
+            type_python: "int | list[int]"
+        output_arguments:
+          - name: datatype
+            type_python: "str"
+          - name: p
+            type_python: "np.ndarray"
+          - name: datasize
+            type_python: "int"
+        decision_log: >
+          Ported: uint16/16 bits with [32768 0.195] for analog channels and
+          [0 3.74e-05] for auxiliary inputs; time, digital and event types
+          as the base class. One polynomial row per channel. The Python
+          reader also lists the board ADC inputs as analog_in channels after
+          the amplifier channels (MATLAB's does not); their rows are
+          [32768 0.0003125], matching how readchannels_epochsamples scales
+          them.
+
       - name: readchannels_epochsamples
         input_arguments:
           - name: channeltype
@@ -83,7 +110,14 @@ classes:
             type_python: "np.ndarray"
         decision_log: >
           Semantic Parity: channel and s0/s1 are 1-indexed.
-          Delegates to ndi_daq_reader_SpikeInterfaceReader.
+          Reads through ndr.format.intan. As MATLAB: auxiliary inputs are
+          read at their own sample rate (s0/s1 count aux samples, as
+          samplerate reports them; they were interpolated to the amplifier
+          rate, which disagreed with samplerate); digital channels are the
+          enabled channels 1..N, each mapped by NDR to its bit (16 were
+          requested, which NDR rejects); and a request past the end of the
+          recording returns only the samples the file has rather than zero
+          padding.
 
       - name: samplerate
         input_arguments:

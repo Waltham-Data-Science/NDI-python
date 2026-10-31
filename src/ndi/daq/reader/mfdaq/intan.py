@@ -184,6 +184,7 @@ class ndi_daq_reader_mfdaq_intan(ndi_daq_reader_mfdaq):
 
         n_samples = s1 - s0 + 1
         result = np.zeros((n_samples, len(channel)))
+        n_read = n_samples
 
         # Cache NDR reads by channel type to avoid re-reading the file
         ndr_cache: dict[str, np.ndarray] = {}
@@ -196,6 +197,7 @@ class ndi_daq_reader_mfdaq_intan(ndi_daq_reader_mfdaq):
                     )
                 data = ndr_cache["time"]
                 n = min(n_samples, data.shape[0])
+                n_read = min(n_read, n)
                 result[:n, col] = data[:n, 0]
 
             elif ct == "analog_in":
@@ -211,6 +213,7 @@ class ndi_daq_reader_mfdaq_intan(ndi_daq_reader_mfdaq):
                         )
                     data = ndr_cache["amp"]
                     n = min(n_samples, data.shape[0])
+                    n_read = min(n_read, n)
                     result[:n, col] = data[:n, ch_num - 1]
                 else:
                     # Board ADC channel
@@ -233,62 +236,114 @@ class ndi_daq_reader_mfdaq_intan(ndi_daq_reader_mfdaq):
                         adc_idx = ch_num - n_amp - 1
                         data = ndr_cache["adc"]
                         n = min(n_samples, data.shape[0])
+                        n_read = min(n_read, n)
                         result[:n, col] = data[:n, adc_idx]
 
             elif ct == "auxiliary_in":
+                # Aux inputs are read at their own sample rate, as MATLAB
+                # does: S0 and S1 count aux samples (see samplerate).
                 if "aux" not in ndr_cache:
                     n_aux = len(header.get("aux_input_channels", []))
                     if n_aux > 0:
-                        # Read all aux data to interpolate correctly
+                        aux_sr = header["frequency_parameters"].get("aux_input_sample_rate", sr / 4)
                         ndr_cache["aux"] = read_Intan_RHD2000_datafile(
                             filepath,
                             channeltype="aux",
                             channel=list(range(1, n_aux + 1)),
-                            t0=0.0,
-                            t1=float("inf"),
+                            t0=(s0 - 1) / aux_sr,
+                            t1=(s1 - 1) / aux_sr,
                         )
                 if "aux" in ndr_cache:
-                    ch_idx = ch_num - 1
-                    aux_data = ndr_cache["aux"]
-                    # Aux is sampled at 1/4 rate; interpolate to main rate
-                    i0 = s0 - 1
-                    i1 = s1  # exclusive end
-                    aux_i0 = i0 // 4
-                    aux_i1 = i1 // 4
-                    if aux_i1 > aux_i0 and aux_i1 <= aux_data.shape[0]:
-                        result[:, col] = np.interp(
-                            np.arange(i0, i1),
-                            np.arange(aux_i0 * 4, aux_i1 * 4, 4),
-                            aux_data[aux_i0:aux_i1, ch_idx],
-                        )
+                    data = ndr_cache["aux"]
+                    n = min(n_samples, data.shape[0])
+                    n_read = min(n_read, n)
+                    result[:n, col] = data[:n, ch_num - 1]
 
             elif ct == "digital_in":
                 if "din" not in ndr_cache:
+                    # NDR numbers the enabled digital channels 1..N and
+                    # maps each to its bit (native_order)
                     ndr_cache["din"] = read_Intan_RHD2000_datafile(
                         filepath,
                         channeltype="din",
-                        channel=list(range(1, 17)),
+                        channel=list(range(1, len(header.get("board_dig_in_channels", [])) + 1)),
                         t0=t0_sec,
                         t1=t1_sec,
                     )
                 data = ndr_cache["din"]
                 n = min(n_samples, data.shape[0])
+                n_read = min(n_read, n)
                 result[:n, col] = data[:n, ch_num - 1]
 
             elif ct == "digital_out":
                 if "dout" not in ndr_cache:
+                    # NDR numbers the enabled digital channels 1..N and
+                    # maps each to its bit (native_order)
                     ndr_cache["dout"] = read_Intan_RHD2000_datafile(
                         filepath,
                         channeltype="dout",
-                        channel=list(range(1, 17)),
+                        channel=list(range(1, len(header.get("board_dig_out_channels", [])) + 1)),
                         t0=t0_sec,
                         t1=t1_sec,
                     )
                 data = ndr_cache["dout"]
                 n = min(n_samples, data.shape[0])
+                n_read = min(n_read, n)
                 result[:n, col] = data[:n, ch_num - 1]
 
-        return result
+        # As MATLAB, return only the samples the file has: a request that runs
+        # past the end of the recording is not padded with zeros.
+        return result[:n_read]
+
+    def underlying_datatype(
+        self,
+        epochfiles: list[str],
+        channeltype: str,
+        channel: int | list[int],
+    ) -> tuple[str, np.ndarray, int]:
+        """
+        Get the underlying data type for channels.
+
+        MATLAB equivalent: ndi.daq.reader.mfdaq.intan/underlying_datatype
+
+        Amplifier and auxiliary channels are stored by Intan as uint16
+        samples, so ingestion stores them that way: amplifier samples convert
+        as (raw - 32768) * 0.195 (microvolts), auxiliary samples as
+        raw * 3.74e-5 (volts).
+
+        Args:
+            epochfiles: Files for this epoch
+            channeltype: Channel type
+            channel: Channel number(s)
+
+        Returns:
+            Tuple of (datatype, polynomial, datasize), with one polynomial row
+            per channel.
+
+        Python-specific Notes:
+            The Python reader also returns the board ADC inputs as analog_in
+            channels numbered after the amplifier channels (MATLAB's reader
+            does not list them). They are uint16 too, converting as
+            (raw - 32768) * 0.0003125 (volts), so their rows differ.
+        """
+        if isinstance(channel, (int, np.integer)):
+            channel = [channel]
+        channel = [int(c) for c in channel]
+        channeltype = standardize_channel_type(channeltype)
+
+        if channeltype in ("analog_in", "analog_out"):
+            header = self._get_header(epochfiles) or {}
+            n_amp = len(header.get("amplifier_channels", []))
+            poly = np.array(
+                [
+                    [32768.0, 0.195] if (c <= n_amp or not n_amp) else [32768.0, 0.0003125]
+                    for c in channel
+                ]
+            ).reshape(len(channel), 2)
+            return "uint16", poly, 16
+        if channeltype == "auxiliary_in":
+            return "uint16", np.tile([0.0, 3.74e-05], (len(channel), 1)), 16
+        return super().underlying_datatype(epochfiles, channeltype, channel)
 
     def t0_t1(self, epochfiles: list[str]) -> list[tuple[float, float]]:
         header = self._get_header(epochfiles)

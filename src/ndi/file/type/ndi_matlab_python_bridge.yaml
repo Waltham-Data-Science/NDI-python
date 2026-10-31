@@ -119,6 +119,11 @@ classes:
           (snake_case) and returned None. Renamed to 'writeToFile' and
           updated to return 2-tuple (success_bool, error_message)
           matching MATLAB. Synchronized 2026-03-13.
+          Now writes MATLAB's format (vlt.file.saveStructArray, tab
+          delimited) rather than JSON, so NDI-matlab can read the channel
+          list of an epoch ingested by NDI-python; a missing time_channel is
+          written as NaN. readFromFile still reads the older JSON files and
+          reads a NaN time_channel back as None.
 
       # --- Channel Queries ---
       - name: channels_of_type

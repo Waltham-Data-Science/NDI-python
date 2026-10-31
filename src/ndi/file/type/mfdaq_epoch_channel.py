@@ -16,6 +16,7 @@ spelling a given method happens to have.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -52,6 +53,12 @@ TYPE_DATACLASS = {
     EVENTMARKTEXT: "eventmarktext",
     "time": "time",
 }
+
+
+def _int_or_none(value: Any) -> int | None:
+    """An integer field read from a file; NaN (a missing value) becomes None."""
+    value = float(value)
+    return None if math.isnan(value) else int(value)
 
 
 @dataclass
@@ -262,7 +269,7 @@ class ndi_file_type_mfdaq__epoch__channel:
                 ChannelInfo(
                     name=str(rec.get("name", "")),
                     type=str(rec.get("type", "")),
-                    time_channel=int(rec.get("time_channel", 1)),
+                    time_channel=_int_or_none(rec.get("time_channel", 1)),
                     sample_rate=float(rec.get("sample_rate", 0.0)),
                     offset=float(rec.get("offset", 0.0)),
                     scale=float(rec.get("scale", 1.0)),
@@ -278,9 +285,13 @@ class ndi_file_type_mfdaq__epoch__channel:
 
     def writeToFile(self, filename: str) -> tuple[bool, str]:
         """
-        Write channel information to a JSON file.
+        Write channel information to a file.
 
         MATLAB equivalent: ndi.file.type.mfdaq_epoch_channel/writeToFile
+
+        Writes the tab-delimited format of ``vlt.file.saveStructArray``, as
+        MATLAB does, so NDI-matlab can read the channel list of an epoch
+        ingested by NDI-python. A missing ``time_channel`` is written as NaN.
 
         Args:
             filename: Path to write
@@ -289,10 +300,16 @@ class ndi_file_type_mfdaq__epoch__channel:
             Tuple of (success, error_message)
         """
         try:
-            data = {"channel_information": [ch.to_dict() for ch in self.channel_information]}
+            from vlt.file import saveStructArray
+
+            records = []
+            for ch in self.channel_information:
+                rec = ch.to_dict()
+                if rec["time_channel"] is None:
+                    rec["time_channel"] = float("nan")
+                records.append(rec)
             Path(filename).parent.mkdir(parents=True, exist_ok=True)
-            with open(filename, "w") as f:
-                json.dump(data, f, indent=2)
+            saveStructArray(filename, records)
             return True, ""
         except Exception as e:
             return False, str(e)
