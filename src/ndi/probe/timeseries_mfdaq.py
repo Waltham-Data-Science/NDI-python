@@ -50,8 +50,8 @@ class ndi_probe_timeseries_mfdaq(ndi_probe_timeseries):
 
         Args:
             epoch: ndi_epoch_epoch number (1-indexed) or epoch_id
-            s0: Start sample (1-indexed)
-            s1: End sample (1-indexed)
+            s0: Start sample (0-based, as epochtimes2samples returns)
+            s1: End sample (0-based)
 
         Returns:
             Tuple of (data, t, timeref_out):

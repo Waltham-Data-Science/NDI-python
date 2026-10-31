@@ -197,6 +197,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Reading samples through a DAQ system: raw and ingested epochs now agree.**
+  `ndi_daq_system_mfdaq.readchannels_epochsamples` takes 0-based samples, as
+  `epochtimes2samples` and `epochsamples2times` do, but passed them unchanged
+  to a raw reader, whose samples are 1-based. A raw epoch therefore read one
+  sample later than the same epoch ingested, and a probe's raw data
+  (`ndi_probe_timeseries_mfdaq.readtimeseriesepoch`) were one sample off from
+  the times returned with them. The system now converts for the raw reader.
+
 - **`session.daqsystem_add` raised AttributeError for every DAQ system**: it
   called `dev.setsession`, but `ndi_daq_system`'s method is `set_session`.
 
