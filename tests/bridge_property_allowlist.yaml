@@ -261,12 +261,6 @@ not_exposed:
       Not ported. The Qt port sets its border in a stylesheet rather than
       exposing a width for MATLAB's hand-drawn axes.
   - python_class: ndi_gui_component_ProgressBarWindow
-    property: Silent
-    reason: >
-      Not ported. MATLAB suppresses the window when it cannot open a figure;
-      the Qt port raises at construction if Qt is unavailable, so there is no
-      silent mode to configure.
-  - python_class: ndi_gui_component_ProgressBarWindow
     property: ProgressFigure
     reason: "MATLAB uifigure handle; the Qt port owns its own QWidget."
   - python_class: ndi_gui_component_ProgressBarWindow

@@ -3,11 +3,12 @@ ndi.fun.utils - General utility functions.
 
 MATLAB equivalents: +ndi/+fun/channelname2prefixnumber.m,
     name2variableName.m, pseudorandomint.m, timestamp.m,
-    find_calc_directories.m
+    find_calc_directories.m, parallelWorkers.m
 """
 
 from __future__ import annotations
 
+import os
 import random
 import re
 import warnings
@@ -219,3 +220,98 @@ def find_calc_directories() -> list[Path]:
         if directory not in d:
             d.append(directory)
     return d
+
+
+@validate_call
+def parallelWorkers(
+    numberOfWorkers: int | float | None = None,
+    useDefaultNumberOfWorkers: bool | None = None,
+    openPoolIfNone: bool | None = None,
+) -> int:
+    """How many workers a parallel loop should be allowed.
+
+    MATLAB equivalent: +ndi/+fun/parallelWorkers.m
+
+    N = parallelWorkers()
+    N = parallelWorkers(numberOfWorkers=N, openPoolIfNone=TF)
+
+    Returns the number of worker processes a parallel loop may use, so that a
+    calculation honours the user's parallel preferences. N is 0 when the loop
+    should run serially in the calling process. Results never depend on N;
+    only the time taken and the memory used do.
+
+    The preferences, shared with NDI-matlab through ~/.ndi/NDI_Preferences.json
+    and editable in the preferences editor:
+
+    * ``Parallel.OpenPoolIfNone`` -- start workers when none are running.
+      Default False, so NDI never starts workers on its own.
+    * ``Parallel.UseDefaultNumberOfWorkers`` -- let NDI decide how many
+      workers (one per available core). Default True.
+    * ``Parallel.NumberOfWorkers`` -- how many workers to allow when
+      UseDefaultNumberOfWorkers is off. Ignored while it is on.
+
+    Any of the three may be overridden for a single call with the keyword of
+    the same name. Giving numberOfWorkers implies that the default is not
+    wanted, so useDefaultNumberOfWorkers does not also have to be given.
+
+    Python-specific Notes
+    ---------------------
+    MATLAB's parpool stays open between calls, so with the default
+    preferences a MATLAB calculation uses a pool the user opened earlier.
+    Python has no such pool: workers live only for the duration of the call
+    that starts them (e.g. a ``concurrent.futures.ProcessPoolExecutor``). There
+    is therefore never "a pool already open", and with OpenPoolIfNone False
+    this returns 0 (serial). With it True, the result is NumberOfWorkers when
+    UseDefaultNumberOfWorkers is off, otherwise the number of CPUs available to
+    this process -- what a MATLAB pool opened with the default size gets.
+    """
+    try:
+        from ndi import preferences as _preferences
+
+        open_pool = bool(_preferences.get("Parallel.OpenPoolIfNone"))
+        use_default = bool(_preferences.get("Parallel.UseDefaultNumberOfWorkers"))
+        preferred = _preferences.get("Parallel.NumberOfWorkers")
+    except Exception:  # noqa: BLE001 - an unreadable preferences file must not fail a calculation
+        open_pool = False
+        use_default = True
+        preferred = 0
+
+    if openPoolIfNone is not None:
+        open_pool = bool(openPoolIfNone)
+    if useDefaultNumberOfWorkers is not None:
+        use_default = bool(useDefaultNumberOfWorkers)
+    if numberOfWorkers is not None:
+        # Naming a number is itself a statement that the default is not wanted.
+        preferred = numberOfWorkers
+        use_default = False
+
+    # max_workers is this function's own shorthand, never a preference value:
+    # 0 means impose no limit.
+    if use_default:
+        max_workers = 0
+    else:
+        try:
+            max_workers = round(float(preferred))
+        except (TypeError, ValueError):
+            max_workers = 0
+        if max_workers < 1:
+            warnings.warn(
+                f"Parallel.NumberOfWorkers is {preferred}, which is not a number of "
+                "workers. Using the default instead.",
+                stacklevel=2,
+            )
+            max_workers = 0
+
+    # No pool outlives a call in Python, so there is never one to reuse.
+    if not open_pool:
+        return 0
+
+    if max_workers > 0:
+        return max_workers
+    if hasattr(os, "sched_getaffinity"):
+        return max(len(os.sched_getaffinity(0)), 1)
+    return max(os.cpu_count() or 1, 1)
+
+
+#: Snake-case alias for MATLAB's name; one function under two names.
+parallel_workers = parallelWorkers

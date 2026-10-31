@@ -1207,6 +1207,16 @@ classes:
       under the same keys, so one setting governs both languages. The third is
       MATLAB's own: Python registers Update.Python.LastCheckTime instead, since
       the two check different repositories and one must not hold the other off.
+      2026-10-27: the three Parallel items (OpenPoolIfNone,
+      UseDefaultNumberOfWorkers, NumberOfWorkers) are now ported, reversing
+      the earlier decision above, because there is now Python code that reads
+      them: ndi_session.ingest computes its epochs on worker processes when
+      they allow (through ndi.fun.utils.parallelWorkers), mirroring
+      NDI-matlab's ingest (VH-Lab/NDI-matlab#1079). Same keys and defaults as
+      MATLAB, so one setting in the shared file governs both languages.
+      NumberOfWorkers is registered as "int" (a worker count). The
+      descriptions say how each language reads them: Python has no pool that
+      outlives a call, so with OpenPoolIfNone false NDI-python is serial.
 
     properties:
       - name: Items

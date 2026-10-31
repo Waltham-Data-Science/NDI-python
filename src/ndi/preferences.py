@@ -240,6 +240,48 @@ class ndi_preferences:
             "NDI_FROM_MATLAB=1, the console script itself drops MATLAB's "
             "library paths before loading anything.",
         )
+        # The Parallel items are the same keys NDI-matlab registers, so one
+        # setting in the shared file governs both languages. Python has no
+        # parpool that stays open between calls, so "a pool you have already
+        # opened" never exists here: NDI-python starts worker processes only
+        # when OpenPoolIfNone is true (see ndi.fun.utils.parallelWorkers).
+        self._add_item(
+            "Parallel",
+            "",
+            "OpenPoolIfNone",
+            False,
+            "bool",
+            "Start parallel workers when a calculation reaches a parallel "
+            "loop and no pool is running. When false, NDI never starts a pool "
+            "of its own: NDI-matlab uses a pool you have already opened, and "
+            "otherwise runs serially; NDI-python, which has no pool that stays "
+            "open, runs serially. Each worker is a separate process, so a pool "
+            "nobody asked for costs both start-up time and a multiple of the "
+            "memory.",
+        )
+        self._add_item(
+            "Parallel",
+            "",
+            "UseDefaultNumberOfWorkers",
+            True,
+            "bool",
+            "Let NDI decide how many workers a parallel loop may use: an open "
+            "MATLAB pool is used at its own size, and a pool opened by NDI "
+            "takes the default, normally one worker per core. Turn this off to "
+            "set the number yourself in NumberOfWorkers, which is worth doing "
+            "on a machine with limited memory.",
+        )
+        self._add_item(
+            "Parallel",
+            "",
+            "NumberOfWorkers",
+            2,
+            "int",
+            "How many workers a parallel loop may use, when "
+            "UseDefaultNumberOfWorkers is off. Ignored while that is on. This "
+            "is an upper limit: an open MATLAB pool smaller than this is used "
+            "at its own size, not enlarged.",
+        )
         # Update.CheckOnStartup and Update.CheckIntervalDays are the same keys
         # NDI-matlab registers, so one setting in the shared file governs
         # both languages. The last-check time is per language (MATLAB's is

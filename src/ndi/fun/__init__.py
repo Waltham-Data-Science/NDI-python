@@ -26,6 +26,8 @@ from .utils import (
     identifier,
     name2variable_name,
     name2variableName,
+    parallel_workers,
+    parallelWorkers,
     pseudorandomint,
     timestamp,
 )
@@ -37,6 +39,8 @@ __all__ = [
     "plot_extracellular_spikeshapes",
     "name2variableName",
     "name2variable_name",
+    "parallelWorkers",
+    "parallel_workers",
     "parseText",
     "parse_text",
     "probe",

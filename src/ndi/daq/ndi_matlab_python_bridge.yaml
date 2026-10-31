@@ -756,7 +756,7 @@ classes:
   - name: system
     type: class
     matlab_path: "+ndi/+daq/system.m"
-    matlab_last_sync_hash: "e066e8d"
+    matlab_last_sync_hash: "375a0ff7e"
     python_path: "ndi/daq/system.py"
     python_class: "ndi_daq_system"
     inherits: "ndi.ido"
@@ -764,6 +764,19 @@ classes:
       2026-10-24: NDI-matlab 989a620 added an optional prefetched-documents
       input to the constructor and e066e8d reverted it (VH-Lab/NDI-matlab#1058);
       the file is unchanged from fe64a9f5 in net, so nothing to follow.
+      2026-10-27: NDI-matlab 96430ab81 and 8feb9166e (VH-Lab/NDI-matlab#1079)
+      give ingest a progress bar and parallel per-epoch work. Ported: ingest
+      takes ShowProgress (default True) and ProgressBar, collects the
+      uningested epochs, makes the file navigator documents serially, hands
+      the per-epoch reader/metadata-reader work to
+      ndi.daq.fun.ingestEpochDocuments (worker processes when the Parallel.*
+      preferences allow), and keeps the database add serial and in epoch
+      order. The hidden static progress helpers addIngestProgressBar,
+      updateIngestProgressBar and removeIngestProgressBar are ported as static
+      methods. Python ingest keeps its existing guard for a missing
+      filenavigator or session.
+      NDI-matlab 375a0ff7e only preallocates in ingest's loops (Code Analyzer);
+      nothing to follow.
 
     properties:
       - name: name
@@ -936,13 +949,81 @@ classes:
           Semantic Parity: epoch and channel are 1-indexed (user concepts).
 
       - name: ingest
-        input_arguments: []
+        input_arguments:
+          - name: ShowProgress
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "True"
+          - name: ProgressBar
+            type_matlab: "ndi.gui.component.ProgressBarWindow or []"
+            type_python: "ndi_gui_component_ProgressBarWindow | None"
+            default: "None"
         output_arguments:
           - name: success
             type_python: "bool"
           - name: documents
             type_python: "list[Any]"
-        decision_log: "Exact match. Returns 2-tuple."
+        decision_log: >
+          Exact match. Returns 2-tuple. The name/value options are
+          keyword-only arguments. Parallel use follows the Parallel.*
+          preferences; there is no per-call parallel option, as in MATLAB.
+
+      - name: addIngestProgressBar
+        kind: static
+        input_arguments:
+          - name: progressBar
+            type_matlab: "ndi.gui.component.ProgressBarWindow or []"
+            type_python: "ndi_gui_component_ProgressBarWindow | None"
+          - name: label
+            type_matlab: "char"
+            type_python: "str"
+          - name: Tag
+            type_matlab: "char"
+            type_python: "str"
+            default: "'' (a new unique id)"
+          - name: Auto
+            type_matlab: "logical"
+            type_python: "bool"
+            default: "True"
+        output_arguments:
+          - name: progressBar
+            type_python: "ndi_gui_component_ProgressBarWindow | None"
+          - name: barTag
+            type_python: "str"
+        decision_log: >
+          Exact match (Hidden in MATLAB). Opens or reuses an 'NDI Ingest'
+          window when none is given; the bar never times out; any failure
+          warns and returns (None, "").
+
+      - name: updateIngestProgressBar
+        kind: static
+        input_arguments:
+          - name: progressBar
+            type_matlab: "ndi.gui.component.ProgressBarWindow or []"
+            type_python: "ndi_gui_component_ProgressBarWindow | None"
+          - name: barTag
+            type_matlab: "char"
+            type_python: "str"
+          - name: fraction
+            type_matlab: "double"
+            type_python: "float"
+        output_arguments: []
+        decision_log: >
+          Exact match (Hidden in MATLAB). A bar the user closed is skipped.
+          MATLAB also skips a bar in state 'Closed'; Python's removeBar drops
+          the row instead, so "not found" covers that case.
+
+      - name: removeIngestProgressBar
+        kind: static
+        input_arguments:
+          - name: progressBar
+            type_matlab: "ndi.gui.component.ProgressBarWindow or []"
+            type_python: "ndi_gui_component_ProgressBarWindow | None"
+          - name: barTag
+            type_matlab: "char"
+            type_python: "str"
+        output_arguments: []
+        decision_log: "Exact match (Hidden in MATLAB). Used on error; never raises."
 
       - name: deleteepoch
         input_arguments:
