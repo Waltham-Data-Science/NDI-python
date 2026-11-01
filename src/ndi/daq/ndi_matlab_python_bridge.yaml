@@ -396,7 +396,7 @@ classes:
   - name: mfdaq_reader
     type: class
     matlab_path: "+ndi/+daq/+reader/mfdaq.m"
-    matlab_last_sync_hash: "5c5784c6a"
+    matlab_last_sync_hash: "dfba35572"
     decision_log: >
       NDI-matlab 770c1eb3 clamps readchannels_epochsamples_ingested's
       window to what the epoch has: a finite s0 below the first sample
@@ -435,8 +435,8 @@ classes:
       Python-only bug instead: the non-ingested read timed each dep/den/
       dimp/dimn "on" edge one sample early (np.where without the + 1 that
       MATLAB's 1 + find(...) and the "off" edges have). Fixed here.
-      matlab_last_sync_hash stays at 5c5784c6a until #1127 is on
-      NDI-matlab main; move it to the merge commit then.
+      Synced to dfba35572, the head of #1127's branch; the commits after
+      5c5784c6a touching this file are d37bf16c7 alone.
     python_path: "ndi/daq/mfdaq.py"
     python_class: "ndi_daq_reader_mfdaq"
     inherits: "ndi.daq.reader"

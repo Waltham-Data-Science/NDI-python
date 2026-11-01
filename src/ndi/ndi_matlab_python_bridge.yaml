@@ -1320,7 +1320,7 @@ not_applicable:
   # =========================================================================
   - name: setup
     matlab_path: "+ndi/+setup/"
-    matlab_last_sync_hash: "fd7ddbf06"
+    matlab_last_sync_hash: "dfba35572"
     python_path: "ndi/setup/"
     status: ported
     decision_log: >
@@ -1361,6 +1361,13 @@ not_applicable:
       fixes. That converter has no Python port (nothing under ndi/setup
       imports legacy lab data), so nothing here follows; lab, labNames and
       the per-lab wrappers are unchanged.
+
+      Re-examined against NDI-matlab dfba35572 (VH-Lab/NDI-matlab#1127). Its
+      only net change under +ndi/+setup/ is a comment in vhlab.m describing
+      the new vhneuropixelsGLX_nidq DAQ system (0b3c7d3dd also added it to
+      +daq/+system/export_vhlab_daq_systems.m, and dfba35572 took that back
+      out). No code moved, so nothing follows here; the DAQ system itself is
+      ndi_common/daq_systems/vhlab/vhneuropixelsGLX_nidq.json, copied as is.
 
   # =========================================================================
   # ndi.docs namespace — MATLAB documentation generation
