@@ -136,12 +136,20 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
         """
         Read channel data by sample indices.
 
+        Note:
+            Unlike MATLAB (1-based), Python sample indices are 0-based:
+            sample 0 is the epoch's first sample, as for
+            :meth:`epochtimes2samples` and :meth:`epochsamples2times`. A raw
+            reader's ``readchannels_epochsamples`` takes 1-based samples, so
+            they are converted here; an ingested epoch's reader takes 0-based
+            samples already. Both paths read the same samples.
+
         Args:
             channeltype: Channel type(s) (e.g., 'ai', 'analog_in')
             channel: Channel number(s) (1-indexed)
             epoch_number: ndi_epoch_epoch number (1-indexed)
-            s0: Start sample (1-indexed)
-            s1: End sample (1-indexed)
+            s0: Start sample (0-based)
+            s1: End sample (0-based)
 
         Returns:
             Array with shape (num_samples, num_channels)
@@ -157,7 +165,10 @@ class ndi_daq_system_mfdaq(ndi_daq_system):
             return self._daqreader.readchannels_epochsamples_ingested(
                 channeltype, channel, epochfiles, s0, s1, self.session
             )
-        return self._daqreader.readchannels_epochsamples(channeltype, channel, epochfiles, s0, s1)
+        # the raw reader's samples are 1-based
+        return self._daqreader.readchannels_epochsamples(
+            channeltype, channel, epochfiles, s0 + 1, s1 + 1
+        )
 
     def readevents_epochsamples(
         self,

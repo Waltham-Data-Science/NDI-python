@@ -1282,7 +1282,16 @@ classes:
           - name: data
             type_python: "np.ndarray"
         decision_log: >
-          Semantic Parity: channel, epoch_number, s0, s1 are 1-indexed.
+          Semantic Parity: channel and epoch_number are 1-indexed. s0 and s1
+          are sample positions, 0-based as in the rest of this port's sample
+          API (epochtimes2samples, epochsamples2times; see
+          docs/developer_notes/ndi_xlang_principles.md and NDI-python#313),
+          where MATLAB's are 1-based. A raw reader's readchannels_epochsamples
+          takes 1-based samples, so they are converted before it is called; the
+          ingested reader takes 0-based samples. Until this was fixed the raw
+          path passed the 0-based numbers through unchanged, so a raw epoch read
+          one sample later than the same epoch ingested, and a probe's raw data
+          were one sample off from the times it returned with them.
 
       - name: readevents_epochsamples
         input_arguments:
