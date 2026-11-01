@@ -36,10 +36,13 @@ class TestVhlabDaqSystemCount:
         setup_lab(s, "vhlab")
         return s
 
-    def test_nine_daq_systems_including_vhprairieview(self, vhlab_session):
+    def test_ten_daq_systems_including_vhprairieview(self, vhlab_session):
+        # Nine until vhneuropixelsGLX_nidq (the SpikeGLX NI-DAQ stream) joined
+        # vhlab, as it did in NDI-matlab (VH-Lab/NDI-matlab#1127).
         summary = sessionSummary(vhlab_session)
-        assert len(summary["daqSystemNames"]) == 9
+        assert len(summary["daqSystemNames"]) == 10
         assert "vhprairieview" in summary["daqSystemNames"]
+        assert "vhneuropixelsGLX_nidq" in summary["daqSystemNames"]
 
     def test_vhprairieview_uses_the_image_classes(self, vhlab_session):
         """Not just present -- present with the right navigator and reader."""

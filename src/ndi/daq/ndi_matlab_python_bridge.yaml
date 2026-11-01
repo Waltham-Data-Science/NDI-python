@@ -427,6 +427,16 @@ classes:
       epoch's segments over the workers. Ported, with the same plan fields
       and weights; ingest_epochfiles is now plan, each segment, attach, as
       in MATLAB. 5c5784c6a only marks a growing array for Code Analyzer.
+
+      VH-Lab/NDI-matlab#1127 (d37bf16c7) fixes readevents_epochsamples and
+      readevents_epochsamples_ingested so dimn returns its off (0->1)
+      transitions; the dimn branch tested 'dimp'. Nothing to port for that:
+      this port's dimn branches were already right. Checking them found a
+      Python-only bug instead: the non-ingested read timed each dep/den/
+      dimp/dimn "on" edge one sample early (np.where without the + 1 that
+      MATLAB's 1 + find(...) and the "off" edges have). Fixed here.
+      matlab_last_sync_hash stays at 5c5784c6a until #1127 is on
+      NDI-matlab main; move it to the merge commit then.
     python_path: "ndi/daq/mfdaq.py"
     python_class: "ndi_daq_reader_mfdaq"
     inherits: "ndi.daq.reader"

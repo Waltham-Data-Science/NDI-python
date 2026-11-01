@@ -362,13 +362,13 @@ class ndi_daq_reader_mfdaq(ndi_daq_reader):
 
             # Find transitions
             if ct in ("dep", "dimp"):  # positive transitions
-                on_samples = np.where((di_data[:-1] == 0) & (di_data[1:] == 1))[0]
+                on_samples = 1 + np.where((di_data[:-1] == 0) & (di_data[1:] == 1))[0]
                 if ct == "dimp":
                     off_samples = 1 + np.where((di_data[:-1] == 1) & (di_data[1:] == 0))[0]
                 else:
                     off_samples = np.array([], dtype=int)
             else:  # negative transitions (den, dimn)
-                on_samples = np.where((di_data[:-1] == 1) & (di_data[1:] == 0))[0]
+                on_samples = 1 + np.where((di_data[:-1] == 1) & (di_data[1:] == 0))[0]
                 if ct == "dimn":
                     off_samples = 1 + np.where((di_data[:-1] == 0) & (di_data[1:] == 1))[0]
                 else:
