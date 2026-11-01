@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **`vhneuropixelsGLX_nidq` vhlab DAQ system** (mirroring VH-Lab/NDI-matlab#1127).
+  Reads the SpikeGLX NI-DAQ stream (`*.nidq.bin` / `*.nidq.meta`) with the NDR
+  `neuropixelsGLX` reader, so probes on NI-DAQ digital lines can be described
+  in `epochprobemap.txt` -- e.g. an optogenetic fiber on XD4 as
+  `vhneuropixelsGLX_nidq:dimp5` (SpikeGLX XDn is channel di(n+1)).
+  `vhneuropixelsGLX` reads the IMEC `.ap.bin`, whose digital lines are the IMEC
+  sync bits. A blank vhlab session now has ten DAQ systems.
+
 - **Update button: a package table with tick boxes** (mirroring
   NDI-matlab 19b8ab573 and 749b1a266). The navigator's Update button now lists
   NDI-python and each dependency clone in `~/.ndi/tools` in
@@ -196,6 +204,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `fileInfo`. `listFiles` and `getFileDetails` already pass `crc32` through.
 
 ### Fixed
+
+- **Digital-edge events were one sample early.** `ndi_daq_reader_mfdaq`'s
+  `dep`, `den`, `dimp` and `dimn` events (the non-ingested read) timed each
+  "on" edge at the last sample before the transition; MATLAB, the "off" edges
+  and the ingested read all use the first sample after it. A line going high
+  at 1.000 s at 1 kHz gave 0.999 s. They now agree.
 
 - **Reading samples through a DAQ system: raw and ingested epochs now agree.**
   `ndi_daq_system_mfdaq.readchannels_epochsamples` takes 0-based samples, as
