@@ -1369,6 +1369,16 @@ not_applicable:
       out). No code moved, so nothing follows here; the DAQ system itself is
       ndi_common/daq_systems/vhlab/vhneuropixelsGLX_nidq.json, copied as is.
 
+      Re-examined against NDI-matlab 3c80bc32b (VH-Lab/NDI-matlab#1114). Every
+      change it makes under +ndi/+setup/ but one is in +ndi/+setup/+conv/+vhlab
+      -- the vhlab (Stacy) legacy-data importer: importMeasuredDataCells,
+      the new matchCellIntervalsToEpochs and parseCellName, and
+      validateStacyDirectory. That converter has no Python port, so nothing
+      follows here. The exception is the stimulus-mismatch error in
+      +daq/+reader/+mfdaq/+stimulus/vhlabvisspike2.m, which NDI-python#351
+      already ported; see that class's own entry in
+      ndi/setup/daq/reader/mfdaq/stimulus/ndi_matlab_python_bridge.yaml.
+
   # =========================================================================
   # ndi.docs namespace — MATLAB documentation generation
   # =========================================================================
