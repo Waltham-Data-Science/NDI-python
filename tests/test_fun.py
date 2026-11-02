@@ -453,25 +453,67 @@ class TestEpochId2ndi_element:
 class TestFilename2EpochId:
     """Tests for epoch.filename2epochid."""
 
+    # This used to build daq_system DOCUMENTS carrying a
+    # `daqsystem.epoch_table` field. No schema has that field and nothing
+    # writes it, so the function returned nothing for real data. It now asks
+    # each loaded DAQ system for its live epochtable(), as MATLAB does.
+
+    @staticmethod
+    def _dev(table):
+        dev = MagicMock()
+        dev.epochtable.return_value = [
+            {"epoch_id": eid, "underlying_epochs": {"underlying": files}} for eid, files in table
+        ]
+        return dev
+
     def test_basic(self):
         from ndi.fun.epoch import filename2epochid
 
-        doc = MagicMock()
-        doc.document_properties = {
-            "daqsystem": {
-                "epoch_table": [
-                    {
-                        "epoch_id": "ep1",
-                        "underlying_files": ["/data/recording_001.dat"],
-                    }
-                ],
-            },
-        }
+        dev = self._dev([("ep1", ["/data/recording_001.dat", "/data/recording_001.epochprobemap"])])
         session = MagicMock()
-        session.database_search.return_value = [doc]
+        session.daqsystem_load.return_value = dev  # a single system, not a list
 
         result = filename2epochid(session, ["recording_001.dat"])
-        assert "ep1" in result["recording_001.dat"]
+        assert result == {"recording_001.dat": ["ep1"]}
+        session.daqsystem_load.assert_called_once_with()
+
+    def test_single_string_and_several_systems(self):
+        from ndi.fun.epoch import filename2epochid
+
+        session = MagicMock()
+        session.daqsystem_load.return_value = [
+            self._dev([("ep1", ["/d/t00001/a.smr"])]),
+            self._dev([("ep2", ["/d/t00002/b.rhd"])]),
+        ]
+        assert filename2epochid(session, "b.rhd") == {"b.rhd": ["ep2"]}
+
+    def test_several_filenames_name_one_epoch(self):
+        # NDI-matlab 774a01f71: every filename naming the epoch gets its id.
+        from ndi.fun.epoch import filename2epochid
+
+        session = MagicMock()
+        session.daqsystem_load.return_value = [
+            self._dev([("ep1", ["/d/t00001/stimtimes.txt", "/d/t00001/spike2data.smr"])])
+        ]
+        result = filename2epochid(session, ["stimtimes.txt", "spike2data.smr"])
+        assert result == {"stimtimes.txt": ["ep1"], "spike2data.smr": ["ep1"]}
+
+    def test_not_found_warns(self):
+        from ndi.fun.epoch import filename2epochid
+
+        session = MagicMock()
+        session.daqsystem_load.return_value = [self._dev([("ep1", ["/d/a.dat"])])]
+        with pytest.warns(UserWarning, match="nonexistent.dat"):
+            result = filename2epochid(session, ["a.dat", "nonexistent.dat"])
+        assert result == {"a.dat": ["ep1"], "nonexistent.dat": []}
+
+    def test_no_daq_systems(self):
+        from ndi.fun.epoch import filename2epochid
+
+        session = MagicMock()
+        session.daqsystem_load.return_value = None
+        with pytest.warns(UserWarning):
+            assert filename2epochid(session, ["x"]) == {"x": []}
 
 
 # ===========================================================================
