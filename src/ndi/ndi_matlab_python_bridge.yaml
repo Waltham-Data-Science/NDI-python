@@ -1320,7 +1320,7 @@ not_applicable:
   # =========================================================================
   - name: setup
     matlab_path: "+ndi/+setup/"
-    matlab_last_sync_hash: "dfba35572"
+    matlab_last_sync_hash: "81cbfd61"
     python_path: "ndi/setup/"
     status: ported
     decision_log: >

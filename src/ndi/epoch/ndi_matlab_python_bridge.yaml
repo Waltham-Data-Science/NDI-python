@@ -77,7 +77,7 @@ functions:
   - name: parse_devicestring
     type: function
     matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_last_sync_hash: "81cbfd61"
     python_path: "ndi/epoch/epochprobemap.py"
     input_arguments:
       - name: devicestring
@@ -93,7 +93,7 @@ functions:
   - name: build_devicestring
     type: function
     matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_last_sync_hash: "81cbfd61"
     python_path: "ndi/epoch/epochprobemap.py"
     input_arguments:
       - name: name
@@ -553,7 +553,7 @@ classes:
   - name: epochprobemap_daqsystem
     type: class
     matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_last_sync_hash: "81cbfd61"
     python_path: "ndi/epoch/epochprobemap_daqsystem.py"
     python_class: "ndi_epoch_epochprobemap__daqsystem"
     inherits: "ndi.epoch.epochprobemap"
