@@ -1,0 +1,156 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/setup/daq/reader/mfdaq/stimulus/
+# The Primary Contract for the ndi.setup.daq.reader.mfdaq.stimulus namespace.
+#
+# Only vhlabvisspike2 is recorded here so far. The other readers in this
+# package (nielsenvisintan, nielsenvisneuropixelsglx, rayolab_intanseries,
+# vhaudreybpod) have never had bridge entries; they are left for their own
+# change rather than recorded unexamined.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# Classes
+# =========================================================================
+classes:
+
+  # =========================================================================
+  # ndi.setup.daq.reader.mfdaq.stimulus.vhlabvisspike2
+  # =========================================================================
+  - name: vhlabvisspike2
+    type: class
+    matlab_path: "+ndi/+setup/+daq/+reader/+mfdaq/+stimulus/vhlabvisspike2.m"
+    matlab_last_sync_hash: "fe64a9f53"
+    python_path: "ndi/setup/daq/reader/mfdaq/stimulus/vhlabvisspike2.py"
+    python_class: "ndi_setup_daq_reader_mfdaq_stimulus_vhlabvisspike2"
+    inherits: "ndi.daq.reader.mfdaq.cedspike2"
+    decision_log: >
+      Examined against NDI-matlab fe64a9f53 (the file's last-touching commit
+      on main) on 2026-11-02. UNTIL NOW THE PORT HAD NO STIMULUS DECODING: it
+      was a bare subclass of the CED Spike2 reader, so mk1-mk3 and e1-e3 --
+      the channels the vhvis_spike2 DAQ system exists to provide -- were
+      looked up as CED channel numbers in spike2data.smr, which is not where
+      MATLAB reads them from. Now ported: epochclock (dev_local_time),
+      getchannelsepoch (mk1 stim on/off, mk2 stimid, mk3 setup/clear, e1
+      frame, e2 vertical refresh, e3 pretime), samplerate (NaN) and
+      readevents_epochsamples_native, which decodes stimtimes.txt and
+      stims.mat from the epoch directory, applies
+      stimtimes2stimtimes_mapping.txt and mti2stimtimes_mapping.txt when
+      present (1-based indices to keep, NaN dropped), raises if the trigger
+      counts differ, raises if a trial's Spike2 stimulus id differs from
+      mod(mti.stimid, 256), and maps setup/off/clear into Spike2 time with
+      timeshift = stimtimes(i) - mti{i}.startStopTimes(2).
+      read_stimtimes_txt and getstimscript come from vhlib.StimDecode
+      (vhlab-library-python, already a dependency) and dropnan from vlt.data
+      (vhlab-toolbox-python), as MATLAB calls the MATLAB versions; none is
+      reimplemented here. vhlab-NewStim-python has neither and is not needed:
+      only MTI2's stimid and startStopTimes fields are read, never the
+      stimscript object. ndi.daq.metadatareader.NewStimStims is the companion
+      that reads stimulus PARAMETERS from the same stims.mat; it does not
+      touch MTI2 timing, so the two do not overlap.
+      THE STIMULUS-MISMATCH MESSAGE FOLLOWS VH-Lab/NDI-matlab#1114 (branch
+      claude/friendly-euler-eugjd9, commit 9fe55861a), not yet merged into
+      NDI-matlab main when this was written: it names the epoch directory
+      first ("Epoch t00006: stimulus number N does not line up ..."), gives
+      the path, and points at the two mapping files. MATLAB's identifier
+      ndi:setup:daq:reader:mfdaq:stimulus:vhlabvisspike2:StimulusMismatch is
+      carried as VHLabVisSpike2StimulusMismatchError.identifier (a
+      ValueError). matlab_branch is deliberately NOT set: the file is on main
+      (section 8 of docs/developer_notes/ndi_matlab_python_bridge.yaml), and
+      when #1114 merges the drift check will flag this entry; re-examine
+      then, and the only change expected is the message this already uses.
+      The count-mismatch error carries no MATLAB identifier and is a plain
+      ValueError with MATLAB's wording.
+
+    properties:
+      - name: NDI_DAQREADER_CLASS
+        type_python: "str"
+        access: "class variable"
+        decision_log: "Value: 'ndi.setup.daq.reader.mfdaq.stimulus.vhlabvisspike2'. Exact match."
+
+    methods:
+      - name: vhlabvisspike2
+        kind: constructor
+        input_arguments:
+          - name: identifier
+            type_python: "str | None"
+            default: "None"
+          - name: session
+            type_python: "Any | None"
+            default: "None"
+          - name: document
+            type_python: "Any | None"
+            default: "None"
+        output_arguments:
+          - name: reader_obj
+            type_python: "ndi_setup_daq_reader_mfdaq_stimulus_vhlabvisspike2"
+        decision_log: "Inherited from cedspike2, as MATLAB's constructor only calls its parent."
+
+      - name: epochclock
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+        output_arguments:
+          - name: ec
+            type_python: "list[ndi_time_clocktype]"
+        decision_log: "Exact match: a single dev_local_time."
+
+      - name: getchannelsepoch
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+        output_arguments:
+          - name: channels
+            type_python: "list[ChannelInfo]"
+        decision_log: >
+          Exact match: mk1, mk2, mk3 (marker), e1, e2, e3 (event), no time
+          channel. Each ChannelInfo also carries its number, as the other
+          Python readers' do.
+
+      - name: readevents_epochsamples_native
+        input_arguments:
+          - name: channeltype
+            type_python: "str | list[str]"
+          - name: channel
+            type_python: "int | list[int]"
+          - name: epochfiles
+            type_python: "list[str]"
+          - name: t0
+            type_python: "float"
+          - name: t1
+            type_python: "float"
+        output_arguments:
+          - name: timestamps
+            type_python: "np.ndarray | list[np.ndarray]"
+          - name: data
+            type_python: "np.ndarray | list[np.ndarray]"
+        decision_log: >
+          Semantic Parity: channel numbers are 1-based. Same decoding, checks,
+          mapping files, error wording and t0 <= t <= t1 window as MATLAB; one
+          channel returns bare arrays, several return lists. The decoding is
+          factored into the static helper decode_stimulus_records(dirname)
+          (Python-only) so it can be called and tested on its own. One MATLAB
+          quirk is not copied: MATLAB stores marker results at
+          timestamps{i} but appends event results at timestamps{end+1}, so a
+          request mixing the two can misplace entries; here results are
+          returned in request order. A requested 'md' channel returns
+          nothing, as in MATLAB; any other unknown type raises
+          ValueError("Unknown channel.").
+
+      - name: samplerate
+        input_arguments:
+          - name: epochfiles
+            type_python: "list[str]"
+          - name: channeltype
+            type_python: "str | list[str]"
+          - name: channel
+            type_python: "int | list[int]"
+        output_arguments:
+          - name: sr
+            type_python: "np.ndarray"
+        decision_log: >
+          MATLAB returns a scalar NaN ("these are all events"); Python returns
+          NaN per requested channel as an array, the shape every Python
+          samplerate returns.
