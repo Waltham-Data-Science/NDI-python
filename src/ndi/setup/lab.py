@@ -17,6 +17,7 @@ Example::
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 
@@ -90,7 +91,9 @@ def lab(session, lab_name: str, force_update: bool = False) -> None:
         # MATLAB +setup/+daq/addDaqSystems: skip a DAQ system that is
         # already here, or -- with force -- remove it first and install the
         # current definition in its place.
-        existing = session.daqsystem_load(name=name)
+        # ``name`` is a regular expression: anchor it so 'vhneuropixelsGLX'
+        # does not also match 'vhneuropixelsGLX_nidq'.
+        existing = session.daqsystem_load(name="^" + re.escape(name) + "$")
         if existing and force_update:
             for daq in existing if isinstance(existing, list) else [existing]:
                 session.daqsystem_rm(daq)

@@ -72,3 +72,42 @@ class TestDaqsystemLoadName:
         )
         session.daqsystem_load(name="(.*)")
         assert "regexp" not in repr(seen[0])
+
+
+class TestExactNameCallers:
+    """``name`` is a regex, so callers that mean one system anchor it.
+
+    ``daqsystem_rm`` on 'intan1' must not also delete 'intan1_nidq'
+    (vhlab: 'vhneuropixelsGLX' and 'vhneuropixelsGLX_nidq').
+    """
+
+    @pytest.fixture
+    def prefixed(self, session, tmp_path):
+        from ndi.daq.reader.mfdaq import ndi_daq_reader_mfdaq_intan
+        from ndi.daq.system_mfdaq import ndi_daq_system_mfdaq
+        from ndi.file.navigator import ndi_file_navigator
+
+        nav = ndi_file_navigator(session, ["#.rhd"])
+        session.daqsystem_add(
+            ndi_daq_system_mfdaq("intan1_nidq", nav, ndi_daq_reader_mfdaq_intan())
+        )
+        return session
+
+    def test_exact_name_regexp(self):
+        assert ndi_session._exact_name_regexp("intan1") == "^intan1$"
+
+    def test_a_bare_name_is_still_a_regexp(self, prefixed):
+        assert len(prefixed.daqsystem_load(name="intan1")) == 2
+
+    def test_rm_removes_only_the_named_system(self, prefixed):
+        d = prefixed.daqsystem_load(name=ndi_session._exact_name_regexp("intan1"))
+        assert d.name == "intan1"
+        prefixed.daqsystem_rm(d)
+        names = sorted(x.name for x in _as_list(prefixed.daqsystem_load()))
+        assert names == ["intan1_nidq", "intan2"]
+
+
+def _as_list(d):
+    if d is None:
+        return []
+    return d if isinstance(d, list) else [d]

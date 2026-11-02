@@ -407,13 +407,13 @@ class ndi_time_syncrule_commonTriggersOverlappingEpochs(ndi_time_syncrule):
             session = getattr(daqsystem1, "session", None)
             if session is None:
                 return None, None
-            daqsystem2 = session.daqsystem_load("name", p["daqsystem2_name"])
+            daqsystem2 = session.daqsystem_load(name="^" + re.escape(p["daqsystem2_name"]) + "$")
         else:
             daqsystem2 = daqsystem_a
             session = getattr(daqsystem2, "session", None)
             if session is None:
                 return None, None
-            daqsystem1 = session.daqsystem_load("name", p["daqsystem1_name"])
+            daqsystem1 = session.daqsystem_load(name="^" + re.escape(p["daqsystem1_name"]) + "$")
 
         if daqsystem1 is None or daqsystem2 is None:
             if p.get("errorOnFailure", True):
