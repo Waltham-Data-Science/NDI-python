@@ -22,7 +22,7 @@ classes:
   - name: vhlabvisspike2
     type: class
     matlab_path: "+ndi/+setup/+daq/+reader/+mfdaq/+stimulus/vhlabvisspike2.m"
-    matlab_last_sync_hash: "fe64a9f53"
+    matlab_last_sync_hash: "3c80bc32b"
     python_path: "ndi/setup/daq/reader/mfdaq/stimulus/vhlabvisspike2.py"
     python_class: "ndi_setup_daq_reader_mfdaq_stimulus_vhlabvisspike2"
     inherits: "ndi.daq.reader.mfdaq.cedspike2"
@@ -50,17 +50,15 @@ classes:
       stimscript object. ndi.daq.metadatareader.NewStimStims is the companion
       that reads stimulus PARAMETERS from the same stims.mat; it does not
       touch MTI2 timing, so the two do not overlap.
-      THE STIMULUS-MISMATCH MESSAGE FOLLOWS VH-Lab/NDI-matlab#1114 (branch
-      claude/friendly-euler-eugjd9, commit 9fe55861a), not yet merged into
-      NDI-matlab main when this was written: it names the epoch directory
+      THE STIMULUS-MISMATCH MESSAGE FOLLOWS VH-Lab/NDI-matlab#1114 (9fe55861a),
+      written here while #1114 was still open: it names the epoch directory
       first ("Epoch t00006: stimulus number N does not line up ..."), gives
       the path, and points at the two mapping files. MATLAB's identifier
       ndi:setup:daq:reader:mfdaq:stimulus:vhlabvisspike2:StimulusMismatch is
       carried as VHLabVisSpike2StimulusMismatchError.identifier (a
-      ValueError). matlab_branch is deliberately NOT set: the file is on main
-      (section 8 of docs/developer_notes/ndi_matlab_python_bridge.yaml), and
-      when #1114 merges the drift check will flag this entry; re-examine
-      then, and the only change expected is the message this already uses.
+      ValueError). Re-examined against NDI-matlab 3c80bc32b, the merge of
+      #1114 into main: its only change to this file is that message, which
+      this port already uses, so nothing else follows.
       The count-mismatch error carries no MATLAB identifier and is a plain
       ValueError with MATLAB's wording.
 
