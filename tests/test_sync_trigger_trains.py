@@ -16,6 +16,7 @@ than the exception it replaces.
 from __future__ import annotations
 
 import logging
+import re
 
 import numpy as np
 import pytest
@@ -194,8 +195,12 @@ class _FakeSession:
     def __init__(self):
         self.systems: dict[str, _FakeDaqSystem] = {}
 
-    def daqsystem_load(self, field, value):
-        return self.systems.get(value)
+    def daqsystem_load(self, name=None, **kwargs):
+        # like the real session: ``name`` is a regular expression
+        found = [d for n, d in self.systems.items() if re.search(name, n)]
+        if not found:
+            return None
+        return found[0] if len(found) == 1 else found
 
     def database_search(self, query):
         return []
