@@ -1200,11 +1200,9 @@ functions:
       whenever a type was given. MATLAB filters on element.type, and the
       filters now go to getelements as element.name and element.type. And
       MATLAB WARNS naming every epoch id no element claims; the port returned
-      empty lists in silence. THE SIBLING ENTRY filename2epochid HAS THE SAME
-      DEFECT and its record understates it: it reads daqsystem.epoch_table,
-      which is equally absent from every schema, so it too returns nothing for
-      every input. Left for its own change rather than edited from here, since
-      that entry's record is being written on another branch. Two structural
+      empty lists in silence. THE SIBLING ENTRY filename2epochid HAD THE SAME
+      DEFECT (it read daqsystem.epoch_table, equally absent from every schema)
+      and has since been fixed the same way; see its entry. Two structural
       differences that stand: MATLAB returns a cell array the same size as the
       input where this returns a dict keyed by epoch id, and MATLAB drives a
       ProgressBarWindow that has no counterpart in a headless port.
@@ -1225,27 +1223,32 @@ functions:
         type_python: "Any"
       - name: filenames
         type_matlab: "char | cellstr (filename — can be single)"
-        type_python: "list[str]"
+        type_python: "list[str] | str"
     output_arguments:
       - name: result
         type_python: "dict[str, list[str]]"
     decision_log: >
-      Exact match. Maps filenames to their epoch IDs by searching
-      DAQ epoch tables.
+      Maps filenames to their epoch IDs by searching the LIVE epoch tables of
+      the session's DAQ systems.
 
-      Examined against NDI-matlab fe64a9f53, the file's last-touching commit.
-      Two divergences, both structural rather than wrong. MATLAB returns a
-      cell array the same size as the filename input, one entry per filename;
-      the port returns a dict keyed by filename, which is the same information
-      in the shape a Python caller indexes. And MATLAB reads the LIVE
-      epochtable of each loaded daqsystem (session.daqsystem_load, then
-      dev{d}.epochtable) where the port reads daqsystem.epoch_table out of the
-      stored daq_system documents -- the same table when the documents are
-      current, and stale when they are not.
+      Examined against NDI-matlab fe64a9f53 and 774a01f71, AND UNTIL NOW IT
+      COULD NOT FIND ANYTHING. It read daqsystem.epoch_table out of the stored
+      daq_system documents: that field appears in no document schema in
+      ndi_common and nothing writes one, so the lookup came back empty for
+      every filename ever passed in -- the same defect epochid2element had.
+      Now mirrors MATLAB: session.daqsystem_load(), then each system's
+      epochtable(), matching a filename when it is a substring of any of
+      underlying_epochs['underlying'] (MATLAB's contains). A single system
+      (not a list) and a single filename string are both accepted, as MATLAB
+      accepts both. MATLAB WARNS naming every filename no epoch claims, and so
+      does this now. One structural difference stands: MATLAB returns a cell
+      array the same size as the filename input holding one epoch id per
+      filename (the last match wins); the port returns a dict keyed by
+      filename whose value lists every matching epoch id (normally one).
       NDI-matlab 774a01f71 assigns the epoch id to every filename that names
       the epoch (epochid(fileInd) = {...}); it used to fail when several
-      filenames matched one epoch. No-op here: each filename already gets
-      its own list of matching epoch ids.
+      filenames matched one epoch. Mirrored: each filename gets its own list,
+      tested in tests/test_fun.py.
 
   - name: t0_t1cell2array
     type: function

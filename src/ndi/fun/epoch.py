@@ -84,48 +84,75 @@ def epochid2element(
 
 def filename2epochid(
     session: Any,
-    filenames: list[str],
+    filenames: list[str] | str,
 ) -> dict[str, list[str]]:
-    """Map filenames to their epoch IDs by searching DAQ epoch tables.
+    """Map filenames to the epoch IDs of the DAQ epochs whose files they name.
 
     MATLAB equivalent: ndi.fun.epoch.filename2epochid
 
+    Loads every DAQ system of the session (``session.daqsystem_load()``) and
+    asks each for its LIVE ``epochtable()``, as MATLAB does. A filename
+    matches an epoch when it is a substring of any of the epoch's underlying
+    files (``underlying_epochs['underlying']``; MATLAB's ``contains``).
+    Several filenames may name the same epoch (NDI-matlab 774a01f71).
+
+    This used to read ``daqsystem.epoch_table`` out of the stored daq_system
+    documents. No document schema has that field and nothing writes one, so
+    the lookup came back empty for every filename ever passed in.
+
     Args:
         session: An NDI session instance.
-        filenames: List of filename strings.
+        filenames: A filename or list of filename strings.
 
     Returns:
-        Dict mapping each filename to a list of matching epoch IDs.
-    """
-    from ndi.query import ndi_query
+        Dict mapping each filename to the list of matching epoch IDs. MATLAB
+        returns a cell array the same size as the input holding one epoch id
+        per filename; the dict keyed by filename is the same information in
+        the shape a Python caller indexes, and keeps every match rather than
+        only the last.
 
-    # Search for DAQ system documents
-    docs = session.database_search(ndi_query("").isa("daq_system"))
+    Warns:
+        UserWarning: naming any filename no epoch claims, as MATLAB does.
+    """
+    if isinstance(filenames, str):
+        filenames = [filenames]
+
+    devs = session.daqsystem_load()
+    if devs is None:
+        devs = []
+    elif not isinstance(devs, (list, tuple)):
+        devs = [devs]
 
     result: dict[str, list[str]] = {fn: [] for fn in filenames}
 
-    for doc in docs:
-        props = doc.document_properties if hasattr(doc, "document_properties") else doc
-        if not isinstance(props, dict):
-            continue
-
-        et = props.get("daqsystem", {}).get("epoch_table", [])
-        if not isinstance(et, list):
-            et = []
-
-        for entry in et:
+    for dev in devs:
+        et = dev.epochtable()
+        if isinstance(et, tuple):
+            # Some epochtable() implementations return (table, hash).
+            et = et[0]
+        for entry in et or []:
             if not isinstance(entry, dict):
                 continue
             epoch_id = entry.get("epoch_id", "")
-            underlying = entry.get("underlying_files", [])
+            underlying_epochs = entry.get("underlying_epochs") or {}
+            underlying = (
+                underlying_epochs.get("underlying", [])
+                if isinstance(underlying_epochs, dict)
+                else []
+            )
             if isinstance(underlying, str):
                 underlying = [underlying]
-            for uf in underlying:
-                if not isinstance(uf, str):
-                    continue
-                for fn in filenames:
-                    if fn in uf:
-                        result[fn].append(epoch_id)
+            underlying = [str(uf) for uf in underlying or []]
+            for fn in filenames:
+                if any(fn in uf for uf in underlying) and epoch_id not in result[fn]:
+                    result[fn].append(epoch_id)
+
+    missing = [fn for fn in filenames if not result[fn]]
+    if missing:
+        warnings.warn(
+            "No file was found matching the filename(s): \n " + "\n".join(missing),
+            stacklevel=2,
+        )
 
     return result
 
