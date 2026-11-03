@@ -8,6 +8,7 @@ NDI experiments including DAQ systems, database, syncgraph, and probes.
 from __future__ import annotations
 
 import logging
+import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -266,7 +267,9 @@ class ndi_session(ABC):
         if not isinstance(dev, ndi_daq_system):
             raise TypeError("dev must be an ndi.daq.ndi_daq_system")
 
-        daqsys = self.daqsystem_load(name=dev.name)
+        # ``name`` is a regular expression; anchor it so that removing
+        # 'vhneuropixelsGLX' does not also remove 'vhneuropixelsGLX_nidq'.
+        daqsys = self.daqsystem_load(name=self._exact_name_regexp(dev.name))
         if not daqsys:
             raise ValueError(f"No DAQ system named '{dev.name}' found")
 
@@ -310,6 +313,16 @@ class ndi_session(ABC):
 
     #: snake_case alias, as for every MATLAB-named method on this class.
     is_match_all_regexp = isMatchAllRegexp
+
+    @staticmethod
+    def _exact_name_regexp(name: str) -> str:
+        """A ``daqsystem_load`` name regexp that matches NAME and nothing else.
+
+        ``daqsystem_load``'s ``name`` is an unanchored regular expression, so
+        a bare 'vhneuropixelsGLX' also matches 'vhneuropixelsGLX_nidq'.
+        MATLAB callers write ``['^' regexptranslate('escape', name) '$']``.
+        """
+        return "^" + re.escape(str(name)) + "$"
 
     def daqsystem_load(self, name: str | None = None, **kwargs) -> list[Any] | Any | None:
         """
@@ -1077,7 +1090,7 @@ class ndi_session(ABC):
 
         # Check DAQ systems
         if "daqsystem" in classname_lower or "daq" in classname_lower:
-            obj = self.daqsystem_load(name=obj_name)
+            obj = self.daqsystem_load(name=self._exact_name_regexp(obj_name))
             if obj is not None:
                 if not isinstance(obj, list):
                     obj = [obj]
@@ -1108,7 +1121,7 @@ class ndi_session(ABC):
             ):
                 return p
 
-        obj = self.daqsystem_load(name=obj_name)
+        obj = self.daqsystem_load(name=self._exact_name_regexp(obj_name))
         if obj is not None:
             if not isinstance(obj, list):
                 obj = [obj]

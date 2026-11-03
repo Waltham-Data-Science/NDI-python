@@ -168,7 +168,7 @@ classes:
   - name: commonTriggersOverlappingEpochs
     type: class
     matlab_path: "+ndi/+time/+syncrule/commonTriggersOverlappingEpochs.m"
-    matlab_last_sync_hash: "8736980ca"
+    matlab_last_sync_hash: "81cbfd61"
     decision_log: >
       PORTED in NDI-python#223. NDI-matlab 8736980ca stopped a trigger-count
       mismatch from being fatal: it logs the counts and the two epoch ids,
@@ -286,7 +286,7 @@ classes:
   - name: randomPulses
     type: class
     matlab_path: "+ndi/+time/+syncrule/randomPulses.m"
-    matlab_last_sync_hash: "a009ea96"
+    matlab_last_sync_hash: "81cbfd61"
     python_path: "ndi/time/syncrule/random_pulses.py"
     python_class: "ndi_time_syncrule_randomPulses"
     inherits: "ndi.time.syncrule"

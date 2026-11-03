@@ -1320,7 +1320,7 @@ not_applicable:
   # =========================================================================
   - name: setup
     matlab_path: "+ndi/+setup/"
-    matlab_last_sync_hash: "3c80bc32b"
+    matlab_last_sync_hash: "81cbfd61"
     python_path: "ndi/setup/"
     status: ported
     decision_log: >
@@ -1378,6 +1378,12 @@ not_applicable:
       +daq/+reader/+mfdaq/+stimulus/vhlabvisspike2.m, which NDI-python#351
       already ported; see that class's own entry in
       ndi/setup/daq/reader/mfdaq/stimulus/ndi_matlab_python_bridge.yaml.
+
+      NDI-matlab 81cbfd61 anchored the name lookup in
+      +setup/+daq/addDaqSystems (['^' regexptranslate('escape',name) '$']) so
+      'vhneuropixelsGLX' no longer also matches 'vhneuropixelsGLX_nidq'.
+      Ported in the same NDI-python change: ndi/setup/lab.py anchors with '^'
+      + re.escape(name) + '$'.
 
   # =========================================================================
   # ndi.docs namespace — MATLAB documentation generation

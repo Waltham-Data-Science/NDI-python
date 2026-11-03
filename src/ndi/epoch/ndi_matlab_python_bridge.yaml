@@ -77,7 +77,7 @@ functions:
   - name: parse_devicestring
     type: function
     matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_last_sync_hash: "81cbfd61"
     python_path: "ndi/epoch/epochprobemap.py"
     input_arguments:
       - name: devicestring
@@ -90,10 +90,17 @@ functions:
       Extracted as a standalone function in Python. MATLAB has this
       logic inline in the epochprobemap_daqsystem class.
 
+      NDI-matlab 81cbfd61 made the epochprobemap_daqsystem file reader drop
+      empty 'VarN' columns that readtable adds when lines end in a tab.
+      Nothing to port: the Python readers (decode and
+      ndi_file_navigator._load_epochprobemap_file) skip the header and take
+      the first five tab-separated fields by position, so the extra empty
+      field from a trailing tab is ignored.
+
   - name: build_devicestring
     type: function
     matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_last_sync_hash: "81cbfd61"
     python_path: "ndi/epoch/epochprobemap.py"
     input_arguments:
       - name: name
@@ -113,6 +120,13 @@ functions:
     decision_log: >
       Extracted as a standalone function in Python. MATLAB has this
       logic inline in the epochprobemap_daqsystem class.
+
+      NDI-matlab 81cbfd61 made the epochprobemap_daqsystem file reader drop
+      empty 'VarN' columns that readtable adds when lines end in a tab.
+      Nothing to port: the Python readers (decode and
+      ndi_file_navigator._load_epochprobemap_file) skip the header and take
+      the first five tab-separated fields by position, so the extra empty
+      field from a trailing tab is ignored.
 
 # =========================================================================
 # Classes
@@ -553,7 +567,14 @@ classes:
   - name: epochprobemap_daqsystem
     type: class
     matlab_path: "+ndi/+epoch/epochprobemap_daqsystem.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_last_sync_hash: "81cbfd61"
+    decision_log: >
+      NDI-matlab 81cbfd61 made the epochprobemap_daqsystem file reader drop
+      empty 'VarN' columns that readtable adds when lines end in a tab.
+      Nothing to port: the Python readers (decode and
+      ndi_file_navigator._load_epochprobemap_file) skip the header and take
+      the first five tab-separated fields by position, so the extra empty
+      field from a trailing tab is ignored.
     python_path: "ndi/epoch/epochprobemap_daqsystem.py"
     python_class: "ndi_epoch_epochprobemap__daqsystem"
     inherits: "ndi.epoch.epochprobemap"

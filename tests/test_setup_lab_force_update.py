@@ -4,7 +4,7 @@ MATLAB counterpart: ``+ndi/+setup/lab.m`` and ``+ndi/+setup/rayolab.m``,
 which gained a ``'forceUpdate'`` name-value argument, and
 ``+ndi/+setup/+daq/addDaqSystems.m``, which is where the behaviour lives::
 
-    device = S.daqsystem_load('name', deviceNames{i});
+    device = S.daqsystem_load('name', ['^' regexptranslate('escape', deviceNames{i}) '$']);
     if force && ~isempty(device)
         S.daqsystem_rm(device);
         device = [];
@@ -22,6 +22,8 @@ nothing errors, the session simply ends up with duplicates.
 """
 
 from __future__ import annotations
+
+import re
 
 import pytest
 
@@ -72,7 +74,8 @@ class _Session:
         self.sync_rules.append(rule)
 
     def daqsystem_load(self, name=None, **kwargs):
-        found = [daq for daq in self.installed if daq.name == name]
+        # like the real session: ``name`` is a regular expression
+        found = [daq for daq in self.installed if re.search(name, daq.name)]
         if not found:
             return None
         return found[0] if len(found) == 1 else found
@@ -156,3 +159,24 @@ class TestRayolabPassesItThrough:
         rayolab(session)
         rayolab(session)
         assert session.removed == []
+
+
+class TestANameIsNotAPrefixMatch:
+    """``daqsystem_load``'s name is a regular expression, so ``lab`` anchors it.
+
+    vhlab has both ``vhneuropixelsGLX`` and ``vhneuropixelsGLX_nidq``; an
+    unanchored search for the first also finds the second.
+    """
+
+    def test_a_longer_name_does_not_hide_a_missing_system(self, lab_fn):
+        session = _Session(installed=["vhneuropixelsGLX_nidq"])
+        lab_fn(session, "vhlab")
+        assert "vhneuropixelsGLX" in _system_names(session)
+
+    def test_force_removes_each_system_only_for_itself(self, lab_fn):
+        session = _Session()
+        lab_fn(session, "vhlab")
+        installed = _system_names(session)
+        lab_fn(session, "vhlab", force_update=True)
+        assert sorted(session.removed) == installed
+        assert _system_names(session) == sorted(installed + installed)
