@@ -142,7 +142,7 @@ def temporary_dataset(client, home_organization_id):
     from ndi.cloud.api.datasets import createDataset, deleteDataset
 
     name = f"{DATASET_NAME_PREFIX}{uuid.uuid4().hex}"
-    result = _data(createDataset(home_organization_id, name, client=client))
+    result = _data(createDataset(org_id=home_organization_id, name=name, client=client))
     dataset_id = str(result.get("_id", result.get("id", "")))
     assert dataset_id, f"Failed to create dataset {name}, response: {result}"
     yield dataset_id
