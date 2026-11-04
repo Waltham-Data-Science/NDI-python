@@ -494,9 +494,14 @@ functions:
   - name: import.kilosort
     type: package
     matlab_path: "+ndi/+fun/+probe/+import/+kilosort/"
-    matlab_last_sync_hash: "1b99d29"
+    matlab_last_sync_hash: "1fe0c68e0"
     python_path: "ndi/fun/probe/import_/kilosort/"
     decision_log: >
+      NDI-matlab 1fe0c68e0 (VH-Lab/NDI-matlab#1174) added the ExistingNeurons
+      option to probe.m and session.m: probe now calls
+      resolveExistingNeurons before writing, and session passes the option
+      through. Ported -- probe takes ExistingNeurons and ask_existing, and
+      session already forwards extra keywords. See import.resolveExistingNeurons.
       Ported in full: all thirteen MATLAB files. The flat namespace MATLAB's
       package presents is reproduced by the package __init__, so
       kilosort.probe, kilosort.getInfo and kilosort.binaryinfo all resolve
@@ -796,9 +801,14 @@ functions:
   - name: import.kiasort
     type: package
     matlab_path: "+ndi/+fun/+probe/+import/+kiasort/"
-    matlab_last_sync_hash: "1b99d29"
+    matlab_last_sync_hash: "1fe0c68e0"
     python_path: "ndi/fun/probe/import_/kiasort/"
     decision_log: >
+      NDI-matlab 1fe0c68e0 (VH-Lab/NDI-matlab#1174) added the ExistingNeurons
+      option to probe.m and session.m: probe now calls
+      resolveExistingNeurons before writing, and session passes the option
+      through. Ported -- probe takes ExistingNeurons and ask_existing, and
+      session already forwards extra keywords. See import.resolveExistingNeurons.
       PARTIALLY PORTED, and the split is the point. MATLAB's twelve files
       divide cleanly into an import side, which is data on disk, and a driver
       side, which calls the KIASORT toolbox.
@@ -853,6 +863,32 @@ functions:
       questions (exported / run / curated). Python adds Status.words(),
       which orders the states so a caller cannot render "run, exported".
 
+  - name: import.resolveExistingNeurons
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+import/resolveExistingNeurons.m"
+    matlab_last_sync_hash: "19f527c5e"
+    python_path: "ndi/fun/probe/import_/resolve_existing_neurons.py"
+    decision_log: >
+      Ported 1:1 (VH-Lab/NDI-matlab#1174), with resolve_existing_neurons as
+      the readable alias. The importers find an earlier import only through
+      its cluster document, which depends on the probe's CURRENT id; neurons
+      that lookup misses (the probe's id changed, or an import stopped
+      part-way) were left in place and add_multiple wrote a second element
+      document of the same name for each. import_.kilosort.probe and
+      import_.kiasort.probe now call this before they write anything, with
+      the new ExistingNeurons option ('ask' | 'remove' | 'error'); their
+      session wrappers already pass extra keywords through.
+      DIVERGENCES: MATLAB's error id ndi:fun:probe:import:existingNeurons
+      is the ExistingNeuronsError exception class. MATLAB prompts with input()
+      and treats `matlab -batch` as non-interactive; Python prompts with
+      input() and treats a stdin that is not a TTY as non-interactive, and
+      takes an optional 'ask' callable (exposed on the importers as
+      ask_existing) so a GUI or a test can answer, as promptrawbinary's 'ask'
+      does. The MATLAB-side change to ndi.element/load_element_doc's error
+      message has no Python counterpart to port: a Python element carries its
+      document id, so duplicates do not raise here -- they are silently
+      analysed twice, which is why this guard matters in Python too.
+
   - name: import_.epoch_map
     type: module
     matlab_path: "n/a (Python only)"
@@ -877,7 +913,7 @@ functions:
   - name: import.jrclust
     type: package
     matlab_path: "+ndi/+fun/+probe/+import/+jrclust/"
-    matlab_last_sync_hash: "0e8556233"
+    matlab_last_sync_hash: "1fe0c68e0"
     status: porting_deferred
     decision_log: >
       Not ported yet. All fifteen MATLAB files under +jrclust are recorded
@@ -892,10 +928,13 @@ functions:
       answers that question; the split between the two groups is left for
       whoever picks it up, in the same shape as +kiasort. Noted in #204.
 
-      Confirmed against NDI-matlab 0e8556233, the package's last-touching
-      commit, which made the pipeline read JRCLUST's real stage markers
-      instead of inferring them from field presence -- the behaviour status.m
-      reports. Nothing to port while the deferral holds.
+      Confirmed against NDI-matlab 0e8556233, which made the pipeline read
+      JRCLUST's real stage markers instead of inferring them from field
+      presence -- the behaviour status.m reports -- and then against
+      1fe0c68e0 (VH-Lab/NDI-matlab#1174), which added the ExistingNeurons
+      option to probe.m and session.m. Nothing to port while the deferral
+      holds; whoever ports probe.m should call resolveExistingNeurons the way
+      the kilosort and kiasort ports do.
 
   - name: export.jrclust
     type: function

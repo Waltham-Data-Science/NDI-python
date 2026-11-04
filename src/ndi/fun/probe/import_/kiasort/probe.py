@@ -93,6 +93,8 @@ def probe(  # noqa: PLR0912, PLR0915 - one function in MATLAB, kept as one here
     kiasort_version: str = "",
     waveform_source: str = "samples",
     force: bool = False,
+    ExistingNeurons: str = "ask",  # noqa: N803 - MATLAB's parameter name
+    ask_existing: Any = None,
     dryRun: bool = False,  # noqa: N803 - MATLAB's parameter name
     progressbar: bool = False,
     verbose: bool = True,
@@ -112,6 +114,12 @@ def probe(  # noqa: PLR0912, PLR0915 - one function in MATLAB, kept as one here
         waveform_source: ``'samples'`` for KIASORT's per-unit mean waveforms,
             ``'none'`` to import spike trains only.
         force: re-import even when the checksum says nothing changed.
+        ExistingNeurons: what to do with neurons from an earlier import that are
+            not linked to this probe's cluster document and would be duplicated:
+            'ask' (default) whether to remove them, 'remove' them, or 'error'.
+            See :func:`ndi.fun.probe.import_.resolveExistingNeurons`.
+        ask_existing: optional callable answering that question instead of the
+            terminal prompt (given the question, returns the answer).
         dryRun: report what would be imported, touching nothing.
         progressbar: show a progress bar while the neurons are written.
         verbose: report progress.
@@ -172,6 +180,21 @@ def probe(  # noqa: PLR0912, PLR0915 - one function in MATLAB, kept as one here
     existing = S.database_search(
         ndi_query("").isa("kiasort_clusters")
         & ndi_query("").depends_on("element_id", identifier(probe_obj))
+    )
+    # Neurons from an earlier import that the lookup above cannot see (the
+    # probe's id changed, or an earlier import stopped part-way) would be
+    # duplicated by this import; find them and ask what to do first.
+    from ..resolve_existing_neurons import resolveExistingNeurons
+
+    resolveExistingNeurons(
+        S,
+        probe_obj,
+        existing,
+        ExistingNeurons=ExistingNeurons,
+        dryRun=dryRun,
+        verbose=report,
+        importer="ndi.fun.probe.import.kiasort.probe",
+        ask=ask_existing,
     )
     if existing:
         if len(existing) == 1 and not force:

@@ -17,5 +17,17 @@ are not and cannot be (see :mod:`ndi.fun.probe.import_.kiasort`).
 from __future__ import annotations
 
 from . import epoch_map, kiasort, kilosort
+from .resolve_existing_neurons import (
+    ExistingNeuronsError,
+    resolve_existing_neurons,
+    resolveExistingNeurons,
+)
 
-__all__ = ["epoch_map", "kiasort", "kilosort"]
+__all__ = [
+    "ExistingNeuronsError",
+    "epoch_map",
+    "kiasort",
+    "kilosort",
+    "resolveExistingNeurons",
+    "resolve_existing_neurons",
+]
