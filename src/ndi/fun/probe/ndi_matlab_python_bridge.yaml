@@ -494,7 +494,7 @@ functions:
   - name: import.kilosort
     type: package
     matlab_path: "+ndi/+fun/+probe/+import/+kilosort/"
-    matlab_last_sync_hash: "1b99d29"
+    matlab_last_sync_hash: "1fe0c68e0"
     python_path: "ndi/fun/probe/import_/kilosort/"
     decision_log: >
       Ported in full: all thirteen MATLAB files. The flat namespace MATLAB's
@@ -796,7 +796,7 @@ functions:
   - name: import.kiasort
     type: package
     matlab_path: "+ndi/+fun/+probe/+import/+kiasort/"
-    matlab_last_sync_hash: "1b99d29"
+    matlab_last_sync_hash: "1fe0c68e0"
     python_path: "ndi/fun/probe/import_/kiasort/"
     decision_log: >
       PARTIALLY PORTED, and the split is the point. MATLAB's twelve files
@@ -903,7 +903,7 @@ functions:
   - name: import.jrclust
     type: package
     matlab_path: "+ndi/+fun/+probe/+import/+jrclust/"
-    matlab_last_sync_hash: "0e8556233"
+    matlab_last_sync_hash: "1fe0c68e0"
     status: porting_deferred
     decision_log: >
       Not ported yet. All fifteen MATLAB files under +jrclust are recorded
@@ -918,10 +918,13 @@ functions:
       answers that question; the split between the two groups is left for
       whoever picks it up, in the same shape as +kiasort. Noted in #204.
 
-      Confirmed against NDI-matlab 0e8556233, the package's last-touching
-      commit, which made the pipeline read JRCLUST's real stage markers
-      instead of inferring them from field presence -- the behaviour status.m
-      reports. Nothing to port while the deferral holds.
+      Confirmed against NDI-matlab 0e8556233, which made the pipeline read
+      JRCLUST's real stage markers instead of inferring them from field
+      presence -- the behaviour status.m reports -- and then against
+      1fe0c68e0 (VH-Lab/NDI-matlab#1174), which added the ExistingNeurons
+      option to probe.m and session.m. Nothing to port while the deferral
+      holds; whoever ports probe.m should call resolveExistingNeurons the way
+      the kilosort and kiasort ports do.
 
   - name: export.jrclust
     type: function
