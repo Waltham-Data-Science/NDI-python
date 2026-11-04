@@ -116,6 +116,42 @@ functions:
         type_python: "dict[str, Any]"
     decision_log: "Exact match."
 
+  - name: reassignDatasetOrganization
+    matlab_path: "+ndi/+cloud/+api/+datasets/reassignDatasetOrganization.m"
+    matlab_last_sync_hash: "47647f5"
+    python_path: "ndi/cloud/api/datasets.py"
+    input_arguments:
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: organization_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: reason
+        type_matlab: "string {mustBeNonzeroLengthText}"
+        type_python: "NonEmptyStr"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "APIResponse"
+    decision_log: >
+      Ported from NDI-matlab 47647f5. POST
+      /admin/datasets/{datasetId}/organization with body {organizationId,
+      reason}; admin only (ndi-cloud-node admin.router.ts). A whitespace-only
+      reason raises ValueError before any request, as MATLAB raises
+      NDI:Cloud:Datasets:ReasonRequired. Returns an APIResponse, so
+      `b, answer, status, url = reassignDatasetOrganization(...)` unpacks like
+      MATLAB's [b, answer, apiResponse, apiURL]. Where MATLAB returns
+      b = false, Python raises, as every other ndi.cloud.api function does:
+      CloudAuthError on 403, CloudNotFoundError on 404, CloudAPIError with
+      status_code 400 or 409 otherwise. The MATLAB implementation class
+      ReassignDatasetOrganization has no separate Python counterpart, as for
+      the other datasets functions. Tests: tests/test_cloud_api_datasets.py
+      (offline) and tests/test_cloud_dataset_organization_live.py (port of
+      DatasetOrganizationTest.m).
+
   - name: deleteDataset
     matlab_path: "+ndi/+cloud/+api/+datasets/deleteDataset.m"
     matlab_last_sync_hash: "d25e9ade"
@@ -2111,7 +2147,7 @@ not_yet_ported:
 
   - name: url
     matlab_path: "+ndi/+cloud/+api/url.m"
-    matlab_last_sync_hash: "9dc83026"
+    matlab_last_sync_hash: "47647f5"
     status: ported_differently
     decision_log: >
       MATLAB URL builder. Python uses CloudClient._build_url()
@@ -2138,6 +2174,11 @@ not_yet_ported:
       /admin/organizations/{id}/members[/{userId}], /admin/users,
       /admin/users/{id}); each is interpolated at its call site in
       api/admin.py, so there is no route table to update here.
+      2026-11-04: examined against 47647f5 (was 9dc83026). One row added,
+      admin_reassign_dataset_organization
+      (/admin/datasets/{datasetId}/organization); it is interpolated at its
+      call site in api/datasets.py by reassignDatasetOrganization, so there is
+      no route table to update here.
       2026-09-22: examined against 3fce6cb (was 6fdec7e7). NDI-matlab#1004
       (6bf12fc0) added the list_dataset_files route
       (/datasets/{datasetId}/files) and made it keyset-paginated. As above,
