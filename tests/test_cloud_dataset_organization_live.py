@@ -90,7 +90,15 @@ def is_admin(client):
 
 @pytest.fixture(scope="module")
 def home_organization_id(client):
-    return str(testOrganizationID(client))
+    """The organization the tests create datasets in.
+
+    Skips the tests that need it when the account has no organization that
+    allows dataset upload (CI accounts may not), as the other live tests do.
+    """
+    try:
+        return str(testOrganizationID(client))
+    except RuntimeError as exc:
+        pytest.skip(str(exc))
 
 
 @pytest.fixture(scope="module", autouse=True)
