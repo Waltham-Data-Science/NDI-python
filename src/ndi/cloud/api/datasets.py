@@ -17,7 +17,7 @@ from typing import Annotated, Any
 from pydantic import SkipValidation, validate_call
 
 from ..client import APIResponse, CloudClient, _auto_client
-from ._validators import VALIDATE_CONFIG, CloudId, PageNumber, PageSize
+from ._validators import VALIDATE_CONFIG, CloudId, NonEmptyStr, PageNumber, PageSize
 
 _Client = Annotated[CloudClient | None, SkipValidation()]
 
@@ -85,6 +85,59 @@ def updateDataset(
     return client.post(
         "/datasets/{datasetId}",
         json=fields,
+        datasetId=dataset_id,
+    )
+
+
+@_auto_client
+@validate_call(config=VALIDATE_CONFIG)
+def reassignDatasetOrganization(
+    dataset_id: CloudId,
+    organization_id: CloudId,
+    reason: NonEmptyStr,
+    *,
+    client: _Client = None,
+) -> APIResponse:
+    """POST /admin/datasets/{datasetId}/organization -- Move a dataset to another organization (admin only).
+
+    Membership in a dataset's organization is what grants access to it
+    while it is unpublished, so this changes who can see and edit the
+    data. For that reason the server allows it only for accounts with
+    administrator rights, requires a ``reason``, and writes the change,
+    with the old and new organizations and the reason, to its audit log.
+
+    The ordinary metadata update (:func:`updateDataset`) never changes a
+    dataset's organization.
+
+    Args:
+        dataset_id: The ID of the dataset to move.
+        organization_id: The ID of the organization to move it into.
+        reason: Why the dataset is being moved (non-blank text, recorded in
+            the audit log).
+        client: Authenticated cloud client.
+
+    Returns:
+        :class:`~ndi.cloud.client.APIResponse` whose ``data`` is the updated
+        dataset as the admin dataset endpoints return it (``id``, ``name``,
+        ``organizationId``, ...).
+
+    Raises:
+        ValueError: if ``reason`` is only whitespace (MATLAB:
+            ``NDI:Cloud:Datasets:ReasonRequired``).
+        CloudAuthError: 403, the account is not an administrator.
+        CloudNotFoundError: 404, the dataset or organization does not
+            exist, or the dataset is deleted.
+        CloudAPIError: ``status_code`` 400 for a malformed id or a dataset
+            already in that organization; 409 while the dataset is being
+            published or unpublished, or if it changed during the move.
+    """
+    if not reason.strip():
+        raise ValueError(
+            "A non-blank reason is required to move a dataset to another organization."
+        )
+    return client.post(
+        "/admin/datasets/{datasetId}/organization",
+        json={"organizationId": organization_id, "reason": reason},
         datasetId=dataset_id,
     )
 
