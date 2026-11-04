@@ -194,9 +194,9 @@ class ndi_preferences:
             "Cloud",
             "Download",
             "Max_Document_Batch_Count",
-            10000,
+            2000,
             "int",
-            "Maximum number of documents downloaded per batch.",
+            "Maximum number of documents downloaded per batch (the server accepts at most 5000).",
         )
         self._add_item(
             "Cloud",
