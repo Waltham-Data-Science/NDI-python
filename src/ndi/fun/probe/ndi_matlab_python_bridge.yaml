@@ -497,6 +497,11 @@ functions:
     matlab_last_sync_hash: "1fe0c68e0"
     python_path: "ndi/fun/probe/import_/kilosort/"
     decision_log: >
+      NDI-matlab 1fe0c68e0 (VH-Lab/NDI-matlab#1174) added the ExistingNeurons
+      option to probe.m and session.m: probe now calls
+      resolveExistingNeurons before writing, and session passes the option
+      through. Ported -- probe takes ExistingNeurons and ask_existing, and
+      session already forwards extra keywords. See import.resolveExistingNeurons.
       Ported in full: all thirteen MATLAB files. The flat namespace MATLAB's
       package presents is reproduced by the package __init__, so
       kilosort.probe, kilosort.getInfo and kilosort.binaryinfo all resolve
@@ -799,6 +804,11 @@ functions:
     matlab_last_sync_hash: "1fe0c68e0"
     python_path: "ndi/fun/probe/import_/kiasort/"
     decision_log: >
+      NDI-matlab 1fe0c68e0 (VH-Lab/NDI-matlab#1174) added the ExistingNeurons
+      option to probe.m and session.m: probe now calls
+      resolveExistingNeurons before writing, and session passes the option
+      through. Ported -- probe takes ExistingNeurons and ask_existing, and
+      session already forwards extra keywords. See import.resolveExistingNeurons.
       PARTIALLY PORTED, and the split is the point. MATLAB's twelve files
       divide cleanly into an import side, which is data on disk, and a driver
       side, which calls the KIASORT toolbox.
