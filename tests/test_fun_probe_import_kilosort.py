@@ -26,10 +26,11 @@ import sys
 import numpy as np
 import pytest
 
+from ndi.document import ndi_document
 from ndi.element_timeseries import ndi_element_timeseries
 from ndi.fun.file import elementDirectory, elementDirectoryName
 from ndi.fun.probe import extracellularInfo
-from ndi.fun.probe.import_ import kilosort
+from ndi.fun.probe.import_ import ExistingNeuronsError, kilosort, resolveExistingNeurons
 from ndi.fun.probe.import_.kilosort.binary_info import read_params_py
 from ndi.fun.probe.import_.kilosort.recalculate_mean_waveforms import (
     select_spikes,
@@ -870,6 +871,153 @@ class TestImport:
             )
             == []
         )
+
+
+class TestExistingNeurons:
+    """Neurons from an earlier import that the cluster-document lookup misses.
+
+    MATLAB counterpart: ndi.fun.probe.import.resolveExistingNeurons and
+    ResolveExistingNeuronsTest. The importer finds an earlier import through
+    its kilosort_clusters document, which depends on the probe's id. When that
+    lookup misses -- the probe's id changed, or an import stopped part-way --
+    the earlier neurons were left in place and a second import wrote a second
+    element of the same name for each. Deleting the kilosort_clusters document
+    reproduces that state exactly.
+    """
+
+    @staticmethod
+    def _orphan_the_first_import(session, probe):
+        kilosort.probe(session, probe, RecalculateMeanWaveforms=False, verbose=False)
+        kc = session.database_search(ndi_query("").isa("kilosort_clusters"))
+        assert len(kc) == 1
+        session.database_rm(kc)
+
+    @staticmethod
+    def _neuron_names(session):
+        docs = session.database_search(
+            ndi_query("").isa("element")
+            & ndi_query("element.ndi_element_class", "exact_string", "ndi.neuron", "")
+        )
+        return sorted(doc.document_properties["element"]["name"] for doc in docs)
+
+    def test_remove_clears_the_earlier_neurons_so_nothing_is_duplicated(self, sorted_session):
+        session, probe, _, _ = sorted_session
+        self._orphan_the_first_import(session, probe)
+        n = kilosort.probe(
+            session,
+            probe,
+            RecalculateMeanWaveforms=False,
+            ExistingNeurons="remove",
+            verbose=False,
+        )
+        assert n == 2
+        assert self._neuron_names(session) == ["ctx_1_1", "ctx_1_2"]
+        assert len(extracellularInfo(session, probe)[0]) == 2
+
+    def test_error_stops_before_the_database_changes(self, sorted_session):
+        session, probe, _, _ = sorted_session
+        self._orphan_the_first_import(session, probe)
+        with pytest.raises(ExistingNeuronsError):
+            kilosort.probe(
+                session,
+                probe,
+                RecalculateMeanWaveforms=False,
+                ExistingNeurons="error",
+                verbose=False,
+            )
+        assert self._neuron_names(session) == ["ctx_1_1", "ctx_1_2"]
+        assert session.database_search(ndi_query("").isa("kilosort_clusters")) == []
+
+    def test_ask_without_a_terminal_behaves_like_error(self, sorted_session):
+        """The default. pytest's stdin is not a TTY, as a batch job's is not."""
+        session, probe, _, _ = sorted_session
+        self._orphan_the_first_import(session, probe)
+        with pytest.raises(ExistingNeuronsError):
+            kilosort.probe(session, probe, RecalculateMeanWaveforms=False, verbose=False)
+        assert self._neuron_names(session) == ["ctx_1_1", "ctx_1_2"]
+
+    def test_answering_r_removes_and_imports(self, sorted_session):
+        session, probe, _, _ = sorted_session
+        self._orphan_the_first_import(session, probe)
+        questions = []
+
+        def answer(question):
+            questions.append(question)
+            return "r"
+
+        n = kilosort.probe(
+            session, probe, RecalculateMeanWaveforms=False, ask_existing=answer, verbose=False
+        )
+        assert n == 2
+        assert len(questions) == 1
+        assert self._neuron_names(session) == ["ctx_1_1", "ctx_1_2"]
+
+    def test_answering_anything_else_cancels(self, sorted_session):
+        session, probe, _, _ = sorted_session
+        self._orphan_the_first_import(session, probe)
+        with pytest.raises(ExistingNeuronsError, match="cancelled"):
+            kilosort.probe(
+                session,
+                probe,
+                RecalculateMeanWaveforms=False,
+                ask_existing=lambda _q: "c",
+                verbose=False,
+            )
+        assert self._neuron_names(session) == ["ctx_1_1", "ctx_1_2"]
+
+    def test_a_dry_run_reports_and_changes_nothing(self, sorted_session, capsys):
+        session, probe, _, _ = sorted_session
+        self._orphan_the_first_import(session, probe)
+        kilosort.probe(
+            session,
+            probe,
+            RecalculateMeanWaveforms=False,
+            ExistingNeurons="remove",
+            dryRun=True,
+            verbose=False,
+        )
+        out = capsys.readouterr().out
+        assert "found 2 neuron element(s)" in out
+        assert "A real run would remove them" in out
+        assert self._neuron_names(session) == ["ctx_1_1", "ctx_1_2"]
+
+    def test_the_current_import_is_never_reported(self, sorted_session):
+        """A normal re-import (force) still works under ExistingNeurons='error'."""
+        session, probe, _, _ = sorted_session
+        kilosort.probe(session, probe, RecalculateMeanWaveforms=False, verbose=False)
+        n = kilosort.probe(
+            session,
+            probe,
+            RecalculateMeanWaveforms=False,
+            force=True,
+            ExistingNeurons="error",
+            verbose=False,
+        )
+        assert n == 2
+        assert self._neuron_names(session) == ["ctx_1_1", "ctx_1_2"]
+
+    def test_neurons_of_another_probe_are_left_alone(self, sorted_session):
+        session, probe, _, _ = sorted_session
+        self._orphan_the_first_import(session, probe)
+        other = ndi_document(
+            "element",
+            **{
+                "element.ndi_element_class": "ndi.neuron",
+                "element.name": "ctx_2_1",
+                "element.reference": 2,
+                "element.type": "spikes",
+                "element.direct": 0,
+            },
+        )
+        other.set_session_id(session.id())
+        other.set_dependency_value("underlying_element_id", probe.id)
+        other.set_dependency_value("subject_id", probe.subject_id)
+        session.database_add(other)
+        removed = resolveExistingNeurons(
+            session, probe, [], ExistingNeurons="remove", verbose=False
+        )
+        assert removed == 2
+        assert self._neuron_names(session) == ["ctx_2_1"]
 
 
 class TestImportWithRawBinary:

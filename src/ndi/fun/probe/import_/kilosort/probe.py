@@ -126,6 +126,8 @@ def probe(  # noqa: PLR0912, PLR0915 - one function in MATLAB, kept as one here
     RawNumChannels: float = float("nan"),  # noqa: N803
     ask: Any = None,
     force: bool = False,
+    ExistingNeurons: str = "ask",  # noqa: N803 - MATLAB's parameter name
+    ask_existing: Any = None,
     dryRun: bool = False,  # noqa: N803 - MATLAB's parameter name
     progressbar: bool = False,
     verbose: bool = True,
@@ -134,6 +136,13 @@ def probe(  # noqa: PLR0912, PLR0915 - one function in MATLAB, kept as one here
 
     Returns the number of neurons imported (or, under ``dryRun``, that would
     be). ``waveform_source`` is ``'templates'`` or ``'none'``.
+
+    ``ExistingNeurons`` says what to do with neurons from an earlier import
+    that are not linked to this probe's ``kilosort_clusters`` document and
+    would be duplicated: ``'ask'`` (default) whether to remove them,
+    ``'remove'`` them, or ``'error'``; ``ask_existing`` optionally answers
+    that question instead of the terminal prompt. See
+    :func:`ndi.fun.probe.import_.resolveExistingNeurons`.
     """
     if len(quality_labels) != len(quality_values):
         raise ValueError("quality_labels and quality_values must have the same length.")
@@ -184,6 +193,21 @@ def probe(  # noqa: PLR0912, PLR0915 - one function in MATLAB, kept as one here
     existing = session.database_search(
         ndi_query("").isa("kilosort_clusters")
         & ndi_query("").depends_on("element_id", probe_obj.id)
+    )
+    # Neurons from an earlier import that the lookup above cannot see (the
+    # probe's id changed, or an earlier import stopped part-way) would be
+    # duplicated by this import; find them and ask what to do first.
+    from ..resolve_existing_neurons import resolveExistingNeurons
+
+    resolveExistingNeurons(
+        session,
+        probe_obj,
+        existing,
+        ExistingNeurons=ExistingNeurons,
+        dryRun=dryRun,
+        verbose=report,
+        importer="ndi.fun.probe.import.kilosort.probe",
+        ask=ask_existing,
     )
     if existing:
         if len(existing) == 1 and not force:

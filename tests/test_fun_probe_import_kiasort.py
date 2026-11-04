@@ -31,7 +31,7 @@ from scipy.io import savemat
 
 from ndi.element_timeseries import ndi_element_timeseries
 from ndi.fun.file import elementDirectoryName
-from ndi.fun.probe.import_ import kiasort
+from ndi.fun.probe.import_ import ExistingNeuronsError, kiasort
 from ndi.query import ndi_query
 from ndi.session import ndi_session_dir
 from ndi.subject import ndi_subject
@@ -529,6 +529,24 @@ class TestIdempotency:
 
         names = {doc.document_properties["element"]["name"] for doc in _neurons(session)}
         assert names == {"ctx_1_5"}
+
+    def test_neurons_an_earlier_import_left_behind_are_not_duplicated(self, sorted_session):
+        """The kiasort_clusters lookup misses when the probe's id changed or an
+        import stopped part-way; deleting that document reproduces the state.
+        See ndi.fun.probe.import_.resolveExistingNeurons."""
+        session, probe, _kdir, _spikes = sorted_session
+        kiasort.probe(session, probe, verbose=False)
+        session.database_rm(session.database_search(ndi_query("").isa("kiasort_clusters")))
+
+        with pytest.raises(ExistingNeuronsError):
+            kiasort.probe(session, probe, ExistingNeurons="error", verbose=False)
+        assert len(_neurons(session)) == 2
+
+        again = kiasort.probe(session, probe, ExistingNeurons="remove", verbose=False)
+
+        assert again == 2
+        names = sorted(doc.document_properties["element"]["name"] for doc in _neurons(session))
+        assert names == ["ctx_1_1", "ctx_1_2"]
 
     def test_the_cluster_document_records_the_checksum(self, sorted_session):
         session, probe, _kdir, _spikes = sorted_session

@@ -853,6 +853,32 @@ functions:
       questions (exported / run / curated). Python adds Status.words(),
       which orders the states so a caller cannot render "run, exported".
 
+  - name: import.resolveExistingNeurons
+    type: function
+    matlab_path: "+ndi/+fun/+probe/+import/resolveExistingNeurons.m"
+    matlab_last_sync_hash: "19f527c5e"
+    python_path: "ndi/fun/probe/import_/resolve_existing_neurons.py"
+    decision_log: >
+      Ported 1:1 (VH-Lab/NDI-matlab#1174), with resolve_existing_neurons as
+      the readable alias. The importers find an earlier import only through
+      its cluster document, which depends on the probe's CURRENT id; neurons
+      that lookup misses (the probe's id changed, or an import stopped
+      part-way) were left in place and add_multiple wrote a second element
+      document of the same name for each. import_.kilosort.probe and
+      import_.kiasort.probe now call this before they write anything, with
+      the new ExistingNeurons option ('ask' | 'remove' | 'error'); their
+      session wrappers already pass extra keywords through.
+      DIVERGENCES: MATLAB's error id ndi:fun:probe:import:existingNeurons
+      is the ExistingNeuronsError exception class. MATLAB prompts with input()
+      and treats `matlab -batch` as non-interactive; Python prompts with
+      input() and treats a stdin that is not a TTY as non-interactive, and
+      takes an optional 'ask' callable (exposed on the importers as
+      ask_existing) so a GUI or a test can answer, as promptrawbinary's 'ask'
+      does. The MATLAB-side change to ndi.element/load_element_doc's error
+      message has no Python counterpart to port: a Python element carries its
+      document id, so duplicates do not raise here -- they are silently
+      analysed twice, which is why this guard matters in Python too.
+
   - name: import_.epoch_map
     type: module
     matlab_path: "n/a (Python only)"
