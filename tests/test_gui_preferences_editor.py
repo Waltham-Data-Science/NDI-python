@@ -288,7 +288,7 @@ class TestState:
         state.revert()
         assert state.pending == {}
         assert not any(r.pending for r in state.rows())
-        assert prefs.get("Cloud.Download.Max_Document_Batch_Count") == 10000
+        assert prefs.get("Cloud.Download.Max_Document_Batch_Count") == 2000
 
     def test_apply_writes_through_the_store_and_the_file(self, tmp_path):
         prefs = make_prefs(tmp_path)
@@ -458,7 +458,7 @@ class TestWindow:
 
         assert editor.state.pending[index] == "77"
         assert editor.row_labels[index].text().endswith("*")
-        assert prefs.get("Cloud.Download.Max_Document_Batch_Count") == 10000
+        assert prefs.get("Cloud.Download.Max_Document_Batch_Count") == 2000
 
     def test_leaving_a_field_untouched_marks_nothing(self, tmp_path):
         """editingFinished also fires on plain focus loss. Recording that
@@ -513,7 +513,7 @@ class TestWindow:
         editor.on_revert()
 
         assert editor.state.pending == {}
-        assert editor.row_widgets[index].text() == "10000"
+        assert editor.row_widgets[index].text() == "2000"
 
     def test_save_applies_then_closes(self, tmp_path):
         _qt_or_skip()

@@ -205,6 +205,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Bulk document download of large datasets no longer fails with HTTP 500**
+  (mirroring NDI-matlab). `Cloud.Download.Max_Document_Batch_Count` defaulted
+  to 10000, but the server sends a chunk's ids in one SNS message (256 KiB cap,
+  about 9,700 ids), so the first chunk of any dataset over that size failed.
+  The default is now 2000, and `downloadDocumentCollection` reduces any chunk
+  size above the server's limit of 5000 ids (`MAX_BULK_DOWNLOAD_IDS`) to that
+  limit, so a value saved in preferences earlier no longer breaks downloads.
+
 - **Digital-edge events were one sample early.** `ndi_daq_reader_mfdaq`'s
   `dep`, `den`, `dimp` and `dimn` events (the non-ingested read) timed each
   "on" edge at the last sample before the transition; MATLAB, the "off" edges

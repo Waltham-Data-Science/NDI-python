@@ -354,6 +354,35 @@ class TestDocumentCountsComeFromPreferences:
             download.downloadDocumentCollection(CLOUD_ID, ["d1", "d2", "d3"], client=_Client())
         assert chunks == [["d1", "d2"], ["d3"]]
 
+    def test_download_chunk_size_is_capped_at_the_server_limit(self, monkeypatch):
+        # A preference saved when the default was 10000 must not produce
+        # requests the server refuses (one SNS message holds ~9,700 ids).
+        from ndi.cloud import download
+        from ndi.cloud.api import documents as docs_api
+
+        monkeypatch.setattr(download, "MAX_BULK_DOWNLOAD_IDS", 2)
+        monkeypatch.setattr(
+            ndi.preferences,
+            "get",
+            lambda path: 10000 if path == "Cloud.Download.Max_Document_Batch_Count" else None,
+        )
+        chunks = []
+
+        def _url(dataset_id, ids, client=None):
+            chunks.append(list(ids))
+            return ""
+
+        monkeypatch.setattr(docs_api, "getBulkDownloadURL", _url)
+        with pytest.raises(RuntimeError, match="incomplete"):
+            download.downloadDocumentCollection(CLOUD_ID, ["d1", "d2", "d3"], client=_Client())
+        assert chunks == [["d1", "d2"], ["d3"]]
+
+    def test_server_limit_fits_one_sns_message(self):
+        from ndi.cloud import download
+
+        # 24-hex id + quotes + comma per entry, against SNS's 256 KiB cap.
+        assert download.MAX_BULK_DOWNLOAD_IDS * 27 < 256 * 1024
+
     @pytest.mark.usefixtures("serial_document_upload")
     def test_upload_chunk_defaults_to_the_preference(self, monkeypatch):
         from ndi.cloud.api import documents as docs_api

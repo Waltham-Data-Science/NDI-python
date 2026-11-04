@@ -210,6 +210,11 @@ def _download_chunk_zip(
     raise TimeoutError(msg)
 
 
+# The server refuses more document ids than this in one bulk-download
+# request: the ids travel in a single SNS message, which is capped at 256 KiB.
+MAX_BULK_DOWNLOAD_IDS = 5000
+
+
 def downloadDocumentCollection(
     dataset_id: str,
     doc_ids: list[str] | None = None,
@@ -234,6 +239,8 @@ def downloadDocumentCollection(
         chunk_size: Number of documents per bulk-download request.
             ``None`` (default) reads the preference
             ``Cloud.Download.Max_Document_Batch_Count``, as MATLAB does.
+            Values above the server's per-request limit
+            (:data:`MAX_BULK_DOWNLOAD_IDS`) are reduced to that limit.
         timeout: Seconds to wait for each chunk's ZIP to become
             available. Default 60 matches MATLAB.
         retry_interval: Seconds between polling attempts for each
@@ -274,6 +281,9 @@ def downloadDocumentCollection(
         chunk_size = int(preferences.get("Cloud.Download.Max_Document_Batch_Count"))
     if chunk_size <= 0:
         raise ValueError(f"chunk_size must be positive (got {chunk_size!r})")
+    # A chunk size saved before the default was lowered (10000) would make
+    # every chunk of a large dataset fail with a server error.
+    chunk_size = min(chunk_size, MAX_BULK_DOWNLOAD_IDS)
 
     # Split into chunks
     num_chunks = math.ceil(len(doc_ids) / chunk_size)
