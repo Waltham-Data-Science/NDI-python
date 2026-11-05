@@ -19,7 +19,7 @@ functions:
   - name: check
     type: function
     matlab_path: "+ndi/+update/check.m"
-    matlab_last_sync_hash: "749b1a266"
+    matlab_last_sync_hash: "d2efa6e63"
     python_path: "ndi/update/check.py"
     input_arguments:
       - name: IncludeDependencies
@@ -81,6 +81,10 @@ functions:
       so both fields are present and always empty / False. MATLAB's Python
       field gains CurrentVersion, LatestVersion and CommitsBehind; this
       function is that check, and already returns them.
+      2026-11-05: NDI-matlab d2efa6e63 (VH-Lab/NDI-matlab#1180): NDIcalc-vis-matlab
+      is now in requirements.txt, so Calculators leaves out a calculator
+      already checked under Dependencies, to avoid listing it twice. Nothing
+      to port: Calculators is always empty here (see above).
 
   - name: install
     type: function
