@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from ndi.update import check
+from ndi.update.check import INSTALLER_COMMANDS
 from ndi.update.install_type import read_receipt
 
 INSTALLED = "a" * 40
@@ -42,8 +43,16 @@ def fake_api(installed: str, ahead_by: int = 0, commits_since: int = 0):
     return api
 
 
+def write_commands(home: Path, names=INSTALLER_COMMANDS) -> None:
+    """The commands the installer puts in ~/.ndi/bin (empty stand-ins)."""
+    suffix = ".exe" if os.name == "nt" else ""
+    (home / "bin").mkdir(parents=True, exist_ok=True)
+    for name in names:
+        (home / "bin" / f"{name}{suffix}").write_text("")
+
+
 def write_receipt(home: Path, **fields) -> None:
-    home.mkdir(parents=True, exist_ok=True)
+    write_commands(home)
     (home / "install.json").write_text(json.dumps(fields), encoding="utf-8")
 
 
@@ -85,6 +94,7 @@ def test_receipt_without_commit_counts_commits_since_install(tmp_path):
 
 
 def test_install_older_than_receipts_uses_uv_time(tmp_path):
+    write_commands(tmp_path)
     uv_receipt = tmp_path / "venvs" / "ndi" / "uv-receipt.toml"
     uv_receipt.parent.mkdir(parents=True)
     uv_receipt.write_text("[tool]\n")
@@ -97,6 +107,7 @@ def test_install_older_than_receipts_uses_uv_time(tmp_path):
 
 
 def test_no_version_information_is_unknown(tmp_path):
+    write_commands(tmp_path)
     r = run(tmp_path, fake_api(""))
     assert r["Status"] == "unknown"
     assert r["UpdateAvailable"] is False
@@ -124,3 +135,27 @@ def test_receipt_with_byte_order_mark_is_rejected_not_crashed(tmp_path):
     # The installer writes UTF-8 without a BOM; a BOM is unreadable, not fatal.
     (tmp_path / "install.json").write_bytes(b"\xef\xbb\xbf" + json.dumps({"commit": "x"}).encode())
     assert read_receipt(tmp_path) is None
+
+
+def test_missing_command_is_an_incomplete_install(tmp_path):
+    # An earlier install stopped part-way: the napari commands never arrived.
+    write_receipt(tmp_path, commit=LATEST)
+    suffix = ".exe" if os.name == "nt" else ""
+    (tmp_path / "bin" / f"napariViewLightsheet{suffix}").unlink()
+    api = fake_api(LATEST)
+    r = run(tmp_path, api)
+    assert r["Status"] == "incomplete"
+    assert r["NeedsInstall"] is True
+    assert r["MissingCommands"] == ["napariViewLightsheet"]
+    assert r["UpdateAvailable"] is False
+    assert r["CanInstall"] is True
+    assert "napariViewLightsheet" in r["Message"]
+    assert "ndi.update.install()" in r["Message"]
+    assert api.calls == []  # the installer repairs and updates; GitHub is not asked
+
+
+def test_complete_install_needs_no_install(tmp_path):
+    write_receipt(tmp_path, commit=LATEST)
+    r = run(tmp_path, fake_api(LATEST))
+    assert r["NeedsInstall"] is False
+    assert r["MissingCommands"] == []

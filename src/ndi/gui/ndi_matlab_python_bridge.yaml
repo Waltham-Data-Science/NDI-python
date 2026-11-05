@@ -748,7 +748,7 @@ ported_late:
 
   - name: ndiPane
     matlab_path: "+ndi/+gui/+nav/ndiPane.m"
-    matlab_last_sync_hash: "749b1a266"
+    matlab_last_sync_hash: "d2efa6e63"
     python_path: "ndi/gui/nav/ndi_pane.py"
     decision_log: >
       The NDI-branded pane. Ported in #88.
@@ -776,10 +776,15 @@ ported_late:
       install, that the installer has opened in its own window). The old
       pure update_dialog() decisions are gone with MATLAB's old dialogs;
       updated_message() builds the closing alert.
+      2026-11-05: NDI-matlab 7025d5eee: the closing alert says "Installed:
+      ..." for packages that were "Not installed" or an "Incomplete
+      install", and "Updated: ..." for the rest. Ported in updated_message()
+      (only "Incomplete install" can occur here). Nothing else changed up to
+      d2efa6e63.
 
   - name: updateDialog
     matlab_path: "+ndi/+gui/+nav/updateDialog.m"
-    matlab_last_sync_hash: "749b1a266"
+    matlab_last_sync_hash: "d2efa6e63"
     python_path: "ndi/gui/nav/update_dialog.py"
     python_class: "UpdateDialog"
     decision_log: >
@@ -797,6 +802,11 @@ ported_late:
       without Qt; ask(result, parent) returns (go, packages). Tick boxes are
       checkable only on Selectable rows, so a row that cannot be updated
       cannot be ticked rather than snapping back.
+      2026-11-05: NDI-matlab 7025d5eee / c94a03aaf: help text only -- NDI-python
+      is listed even when it is not installed or incomplete, and starts
+      ticked. Nothing to port in the dialog: the rows and their ticks come
+      from packageStatus, where the incomplete case was ported. Nothing else
+      changed up to d2efa6e63.
 
   - name: datasetsPane
     matlab_path: "+ndi/+gui/+nav/datasetsPane.m"

@@ -56,7 +56,14 @@ def updated_message(result: dict[str, Any], packages: list[str]) -> str:
     names = [r["Name"] for r in rows if r["Name"] in packages]
     if result.get("InstallType") == "installer" and os.name == "nt":
         return "The NDI installer has opened in a new window. Close NDI to let it finish."
-    return f"Updated: {', '.join(names)}.\n\nRestart NDI to make sure the new versions are used."
+    added = [r["Name"] for r in rows if r["Name"] in names and r["Status"] == "Incomplete install"]
+    updated = [n for n in names if n not in added]
+    parts = []
+    if updated:
+        parts.append(f"Updated: {', '.join(updated)}.")
+    if added:
+        parts.append(f"Installed: {', '.join(added)}.")
+    return f"{' '.join(parts)}\n\nRestart NDI to make sure the new versions are used."
 
 
 class NdiPane(NavPane):

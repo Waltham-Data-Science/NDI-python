@@ -142,6 +142,26 @@ class TestPackageStatusOther:
         assert "Restart NDI after updating." in row["Notes"]
         assert summary["CanUpdate"] is True
 
+    def test_incomplete_installer_install_is_reinstalled(self):
+        r = {
+            "InstallType": "installer",
+            "Status": "incomplete",
+            "UpdateAvailable": False,
+            "NeedsInstall": True,
+            "MissingCommands": ["napariViewGEF"],
+            "CanInstall": True,
+            "Message": "Not fully installed.",
+        }
+        rows, summary = packageStatus(r)
+        row = rows[0]
+        assert row["Status"] == "Incomplete install"
+        assert row["WillUpdate"] is True
+        assert row["Selected"] is True
+        assert row["Optional"] is False
+        assert row["NoteLevel"] == "warning"
+        assert "missing napariViewGEF" in row["Notes"][0]
+        assert summary["CanUpdate"] is True
+
     def test_pip_install_cannot_check(self):
         rows, summary = packageStatus({"InstallType": "pip", "Message": "pip says no.\nmore"})
         assert rows[0]["Status"] == "Could not check"

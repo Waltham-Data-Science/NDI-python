@@ -23,6 +23,7 @@ lacks". How that is found depends on the install (see
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,12 +42,17 @@ REPOSITORY = "Waltham-Data-Science/NDI-python"
 
 INSTALL_HINT = "Run ndi.update.install() (or `ndi update` in a terminal) to update."
 
+#: The commands the NDI installer puts in ``~/.ndi/bin`` (``.exe`` on Windows).
+INSTALLER_COMMANDS = ("ndi", "napariViewGEF", "napariViewLightsheet")
+
 
 def _empty_result(install_type: str, repo_root: str) -> dict[str, Any]:
     return {
         "InstallType": install_type,
         "Status": "unknown",
         "UpdateAvailable": False,
+        "NeedsInstall": False,
+        "MissingCommands": [],
         "CanInstall": False,
         "CurrentVersion": "",
         "LatestVersion": "",
@@ -94,7 +100,8 @@ def check(
 
     Returns:
         A dict with MATLAB's field names: ``InstallType``, ``Status``
-        (``"upToDate"``, ``"updateAvailable"``, ``"ahead"`` or ``"unknown"``),
+        (``"upToDate"``, ``"updateAvailable"``, ``"ahead"``, ``"incomplete"``
+        or ``"unknown"``),
         ``UpdateAvailable``, ``CurrentVersion``, ``LatestVersion``,
         ``Message``, ``Branch``, ``CommitsBehind``, ``CommitsAhead``,
         ``HasModifications``, ``Modifications`` (one dict per repository
@@ -109,9 +116,16 @@ def check(
 
     Python-specific Notes:
         Also ``CanInstall`` (``ndi.update.install`` can update this kind of
-        install) and ``InstalledAt`` (the install time, when that is all an
-        installer receipt gives), the fields NDI-matlab's ``checkPython``
-        reports for this same install. A missing count is None where MATLAB
+        install), ``InstalledAt`` (the install time, when that is all an
+        installer receipt gives), ``NeedsInstall`` and ``MissingCommands``,
+        the fields NDI-matlab's ``checkPython`` reports for this same install.
+        An installer install with one of ``ndi``, ``napariViewGEF`` or
+        ``napariViewLightsheet`` missing from ``~/.ndi/bin`` (an earlier
+        install stopped part-way) has Status ``"incomplete"``,
+        ``NeedsInstall`` True and the missing names in ``MissingCommands``;
+        GitHub is not asked, since running the installer again both repairs
+        and updates it. MATLAB's ``"notInstalled"`` case has no counterpart:
+        this code runs inside NDI-python. A missing count is None where MATLAB
         has NaN. MATLAB's ``ReleaseUrl``, ``MltbxUrl`` and ``BothInstalled``
         belong to its packaged toolbox, which NDI-python does not have.
         ``Calculators`` is always empty and ``CalculatorUpdateAvailable``
@@ -335,6 +349,17 @@ def _check_installer(
 ) -> dict[str, Any]:
     result["CanInstall"] = True
     home = Path(info["NdiHome"])
+    missing = _missing_commands(home)
+    if missing:
+        result["Status"] = "incomplete"
+        result["NeedsInstall"] = True
+        result["MissingCommands"] = missing
+        result["Message"] = (
+            f"NDI-python is not fully installed: {', '.join(missing)} missing from "
+            f"{home / 'bin'}. Run ndi.update.install() (or `ndi update` in a "
+            "terminal) to install it again."
+        )
+        return result
     receipt = info.get("Receipt") or {}
     repo = f"repos/{REPOSITORY}"
     try:
@@ -380,6 +405,12 @@ def _check_installer(
         result["Status"] = "upToDate"
         result["Message"] = f"NDI-python is up to date with main ({result['LatestVersion']})."
     return result
+
+
+def _missing_commands(home: Path) -> list[str]:
+    """The installer's commands that are not in HOME/bin."""
+    suffix = ".exe" if os.name == "nt" else ""
+    return [c for c in INSTALLER_COMMANDS if not (home / "bin" / f"{c}{suffix}").is_file()]
 
 
 def _install_time(receipt: dict[str, Any], home: Path) -> datetime | None:

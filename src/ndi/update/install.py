@@ -128,7 +128,7 @@ def install(
     sel = _select_packages(result, Packages)
     kind = result["InstallType"]
     if sel["All"]:
-        if not result["UpdateAvailable"] and not Force:
+        if not (result["UpdateAvailable"] or result.get("NeedsInstall")) and not Force:
             return result
     elif not sel["Ndi"] and not sel["DepNames"]:
         return result
@@ -310,7 +310,7 @@ def _select_packages(result: dict[str, Any], packages: list[str] | None) -> dict
         if result["InstallType"] == "git":
             sel["Ndi"] = (result["CommitsBehind"] or 0) > 0
         else:
-            sel["Ndi"] = bool(result["UpdateAvailable"])
+            sel["Ndi"] = bool(result["UpdateAvailable"] or result.get("NeedsInstall"))
     sel["DepNames"] = [
         d["Name"]
         for d in result["Dependencies"]
@@ -320,12 +320,20 @@ def _select_packages(result: dict[str, Any], packages: list[str] | None) -> dict
 
 
 def _install_installer(result: dict[str, Any], confirm: bool, ask: Callable) -> None:
+    repair = bool(result.get("NeedsInstall"))
     if confirm:
-        prompt = (
-            f"This will run the NDI installer to update NDI-python "
-            f"({result['CurrentVersion']} -> {result['LatestVersion']}).\n"
-            "Continue? Y/N [Y]: "
-        )
+        if repair:
+            prompt = (
+                "NDI-python is not fully installed (missing: "
+                f"{', '.join(result.get('MissingCommands', []))}). This will run "
+                "the NDI installer again.\nContinue? Y/N [Y]: "
+            )
+        else:
+            prompt = (
+                f"This will run the NDI installer to update NDI-python "
+                f"({result['CurrentVersion']} -> {result['LatestVersion']}).\n"
+                "Continue? Y/N [Y]: "
+            )
         if not _confirmed(ask, prompt):
             print("Update cancelled.")
             return
