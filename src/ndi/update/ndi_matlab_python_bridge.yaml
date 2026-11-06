@@ -19,7 +19,7 @@ functions:
   - name: check
     type: function
     matlab_path: "+ndi/+update/check.m"
-    matlab_last_sync_hash: "749b1a266"
+    matlab_last_sync_hash: "d2efa6e63"
     python_path: "ndi/update/check.py"
     input_arguments:
       - name: IncludeDependencies
@@ -81,11 +81,21 @@ functions:
       so both fields are present and always empty / False. MATLAB's Python
       field gains CurrentVersion, LatestVersion and CommitsBehind; this
       function is that check, and already returns them.
+      2026-11-05: NDI-matlab d2efa6e63 (VH-Lab/NDI-matlab#1180): NDIcalc-vis-matlab
+      is now in requirements.txt, so Calculators leaves out a calculator
+      already checked under Dependencies, to avoid listing it twice. Nothing
+      to port: Calculators is always empty here (see above).
+      2026-11-05: NDI-matlab 7025d5eee: the Python field gains NeedsInstall
+      and MissingCommands (see checkPython). Ported onto this result, which
+      is that check: an installer install with ndi, napariViewGEF or
+      napariViewLightsheet missing from ~/.ndi/bin is Status "incomplete",
+      NeedsInstall true, MissingCommands the missing names, and GitHub is
+      not asked. MATLAB's "notInstalled" has no counterpart here.
 
   - name: install
     type: function
     matlab_path: "+ndi/+update/install.m"
-    matlab_last_sync_hash: "749b1a266"
+    matlab_last_sync_hash: "d2efa6e63"
     python_path: "ndi/update/install.py"
     input_arguments:
       - name: Confirm
@@ -146,6 +156,12 @@ functions:
       With no Packages, ndi_install.py --update runs as before, and main is
       pulled only when NDI-python is behind (as MATLAB now pulls NDI-matlab
       only when behind). Calculators and "NDI-matlab" have no counterpart.
+      2026-11-05: NDI-matlab 7025d5eee: ndi.update.install reruns the
+      NDI-python installer for an incomplete install, and installs a missing
+      NDI-python when "NDI-python" is named. Ported the first: an installer
+      install with NeedsInstall is reinstalled (with or without Packages),
+      with its own confirmation prompt. The second has no counterpart. Up to
+      d2efa6e63 nothing else changed in the file.
 
   - name: installType
     type: function
@@ -194,7 +210,7 @@ functions:
   - name: checkOnStartup
     type: function
     matlab_path: "+ndi/+update/checkOnStartup.m"
-    matlab_last_sync_hash: "19b8ab573"
+    matlab_last_sync_hash: "d2efa6e63"
     python_path: "ndi/update/check_on_startup.py"
     output_arguments:
       - name: line
@@ -212,11 +228,16 @@ functions:
       (CalculatorUpdateAvailable). Nothing to port: NDI-python has no
       calculator clones (see check), and a dependency behind already sets
       UpdateAvailable here.
+      2026-11-05: NDI-matlab 7025d5eee: an incomplete NDI-python install (one
+      of the installer's commands missing) is reported like an update; a
+      missing NDI-python is not. Ported: an "incomplete" result
+      (NeedsInstall) prints its line too. Up to d2efa6e63 nothing else
+      changed in the file.
 
   - name: checkPython
     type: function
     matlab_path: "+ndi/+update/checkPython.m"
-    matlab_last_sync_hash: "e2a3d8e57"
+    matlab_last_sync_hash: "d2efa6e63"
     python_path: "ndi/update/check.py"
     status: ported_differently
     decision_log: >
@@ -224,6 +245,12 @@ functions:
       ndi.update.check itself (its installer branch), using the same receipt,
       the same fallback to the install time (the receipt's installedAt, then
       uv's file time; NDI-matlab e2a3d8e57) and the same result fields.
+      2026-11-05: NDI-matlab 7025d5eee: NeedsInstall / MissingCommands, and
+      Status "incomplete" when an installer install lacks one of ndi,
+      napariViewGEF, napariViewLightsheet in ~/.ndi/bin (GitHub not asked).
+      Ported into check's installer branch. Status "notInstalled" with
+      NeedsInstall true (and CanInstall true) has no counterpart: this code
+      runs inside NDI-python. Nothing else changed up to d2efa6e63.
 
   - name: compareVersions
     type: function
@@ -278,7 +305,7 @@ functions:
   - name: packageStatus
     type: function
     matlab_path: "+ndi/+update/packageStatus.m"
-    matlab_last_sync_hash: "749b1a266"
+    matlab_last_sync_hash: "d2efa6e63"
     python_path: "ndi/update/package_status.py"
     input_arguments:
       - name: result
@@ -303,6 +330,15 @@ functions:
       missing): MATLAB also requires UpdateAvailable, which a dependency
       behind always sets here. A snake_case alias package_status is bound to
       the same function.
+      2026-11-05: NDI-matlab 7025d5eee / c94a03aaf: the NDI-python row is
+      listed when it is missing or incomplete; an incomplete install reads
+      "Incomplete install", with a warning note naming the missing commands,
+      and starts ticked; a missing one is marked Optional (new row field),
+      also starts ticked, and changes the summary message. Ported for the
+      installer row: an incomplete install is "Incomplete install" with the
+      same note and WillUpdate. Optional is on every row and always false,
+      and the summary's not-installed wording never applies, since
+      NDI-python cannot be missing here. Nothing else up to d2efa6e63.
 
   - name: findCalculators
     type: function

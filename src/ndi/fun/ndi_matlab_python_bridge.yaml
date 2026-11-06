@@ -3478,7 +3478,7 @@ not_applicable:
 
   - name: find_calc_directories
     matlab_path: "+ndi/+fun/find_calc_directories.m"
-    matlab_last_sync_hash: "5b9e08493"
+    matlab_last_sync_hash: "d2efa6e63"
     status: ported_differently
     python_path: "ndi/fun/utils.py"
     input_arguments: []
@@ -3491,9 +3491,9 @@ not_applicable:
       each one containing ndi_common/{database,schema}_documents, and warns
       and returns what it could rather than erroring -- but found a different
       way. MATLAB goes three directories up from ndi.toolboxdir and globs
-      sibling NDIcalc*-matlab folders, which works only because MATLAB
-      toolboxes are installed side by side. A pip/uv install has no such
-      layout, so a calculator package declares an entry point in the
+      sibling NDIcalc*-matlab folders, and also takes the root of any
+      NDIcalc*-matlab folder on the MATLAB path -- both rely on MATLAB's
+      folder layout and path. A pip/uv install has neither, so a calculator package declares an entry point in the
       `ndi.calc` group whose value returns its toolbox directory
       (ndicalc-vis-matlab: `NDIcalc-vis-matlab = ndicalc_vis_matlab:toolbox_dir`),
       and this reads importlib.metadata.entry_points(group="ndi.calc"),
@@ -3508,6 +3508,14 @@ not_applicable:
       ndi_install.py used to do by copying NDIcalc-vis-matlab's trees into
       src/ndi/ndi_common -- something a pip/uv install never runs.
       Examined against NDI-matlab 5b9e08493, the file's last-touching commit.
+
+      2026-11-05: NDI-matlab d2efa6e63 (VH-Lab/NDI-matlab#1180) makes
+      NDIcalc-vis-matlab a regular requirements.txt dependency and has
+      find_calc_directories also search the MATLAB path, so a MatBox install
+      into a separate add-ons folder is found. Nothing to port: NDI-python
+      already installs ndicalc-vis-matlab as a pip dependency and finds it
+      through its entry point. The "MATLAB" description above and the
+      docstring's note were updated to match.
 
   - name: plot_extracellular_spikeshapes
     matlab_path: "+ndi/+fun/plot_extracellular_spikeshapes.m"

@@ -31,7 +31,8 @@ def checkOnStartup() -> str:
     If the preference ``Update.CheckOnStartup`` is true and at least
     ``Update.CheckIntervalDays`` days have passed since the last check
     (``Update.Python.LastCheckTime``), runs :func:`ndi.update.check` quietly
-    and prints one line if an update is available. It never raises: a failed
+    and prints one line if an update is available (or the installer install
+    is incomplete). It never raises: a failed
     check (for example, no network) is ignored until the next interval.
 
     Skipped when the environment variable ``CI`` is set, so automated test
@@ -71,7 +72,9 @@ def checkOnStartup() -> str:
         preferences.set(LAST_CHECK_PREFERENCE, now.strftime(_FORMAT))
 
         result = check(Verbose=False, Timeout=5)
-        if not result["UpdateAvailable"]:
+        # An installer install that stopped part-way is reported like an
+        # update.
+        if not (result["UpdateAvailable"] or result.get("NeedsInstall")):
             return ""
         first = result["Message"].splitlines()[0]
         if result["CanInstall"]:

@@ -172,9 +172,9 @@ def find_calc_directories() -> list[Path]:
 
     Python-specific Notes:
         MATLAB scans the folder three levels above ``ndi.toolboxdir`` for
-        sibling ``NDIcalc*-matlab`` directories, which works because MATLAB
-        toolboxes are installed side by side. A pip/uv install has no such
-        layout, so a calculator package instead registers an entry point in
+        sibling ``NDIcalc*-matlab`` directories, and also takes the root of
+        any ``NDIcalc*-matlab`` folder on the MATLAB path. A pip/uv install
+        has neither that layout nor a MATLAB path, so a calculator package instead registers an entry point in
         the ``ndi.calc`` group (:data:`CALC_ENTRY_POINT_GROUP`) whose value is
         a callable returning its toolbox directory -- for NDIcalc-vis-matlab,
         ``ndicalc_vis_matlab:toolbox_dir``. Results are ordered by entry-point

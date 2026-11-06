@@ -32,6 +32,7 @@ from ndi.gui.nav.ndi_pane import (
     PREFS_WIDTH,
     UPDATE_WIDTH,
     NdiPane,
+    updated_message,
 )
 from ndi.gui.nav.pane import HEADER_HEIGHT, TRIANGLE_DOWN, TRIANGLE_RIGHT, NavPane
 
@@ -510,3 +511,19 @@ class TestBuild:
         p.broom_button.click()
         assert common._cache_singleton is None
         assert nav.alerts and nav.alerts[-1][2] is True
+
+
+def test_updated_message_says_installed_for_an_incomplete_install(monkeypatch):
+    # Repairing a part-finished installer install is "Installed", as in MATLAB.
+    monkeypatch.setattr("os.name", "posix")
+    result = {
+        "InstallType": "installer",
+        "Status": "incomplete",
+        "NeedsInstall": True,
+        "MissingCommands": ["ndi"],
+        "CanInstall": True,
+        "Message": "Not fully installed.",
+    }
+    text = updated_message(result, ["NDI-python"])
+    assert text.startswith("Installed: NDI-python.")
+    assert "Updated:" not in text

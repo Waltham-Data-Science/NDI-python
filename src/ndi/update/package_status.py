@@ -39,7 +39,9 @@ def packageStatus(result: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[st
         ``Blocked``, ``TouchesChanges`` (updating stashes, merges or
         overwrites code you changed), ``Files`` (``"changed:    ..."`` /
         ``"in the way: ..."``), ``Selectable`` (``WillUpdate`` and not
-        ``Blocked``) and ``Selected`` (starts ticked: selectable and not
+        ``Blocked``), ``Optional`` (always False here: MATLAB sets it for a
+        missing NDI-python, which cannot happen inside NDI-python) and
+        ``Selected`` (starts ticked: selectable and not
         touching your changes). ``summary`` has ``CanUpdate``, ``AnyUpdate``,
         ``Blocked``, ``HasUserChanges`` and ``Message``.
 
@@ -138,10 +140,21 @@ def _installer_row(result: dict[str, Any]) -> dict[str, Any]:
     r = _new_row("NDI-python", "installer", "")
     r["Installed"] = result.get("CurrentVersion", "")
     r["Latest"] = result.get("LatestVersion", "")
-    r["WillUpdate"] = bool(result.get("UpdateAvailable") and result.get("CanInstall"))
+    needs_install = bool(result.get("NeedsInstall"))
+    r["WillUpdate"] = bool(
+        (result.get("UpdateAvailable") or needs_install) and result.get("CanInstall")
+    )
     status = result.get("Status")
     behind = result.get("CommitsBehind")
-    if status == "updateAvailable":
+    if needs_install:
+        r["Status"] = "Incomplete install"
+        _add_note(
+            r,
+            "warning",
+            f"Not fully installed (missing {', '.join(result.get('MissingCommands', []))}); "
+            "it will be installed again.",
+        )
+    elif status == "updateAvailable":
         r["Status"] = _commits_text(behind) if behind else "Update available"
     elif status == "upToDate":
         r["Status"] = "Up to date"
@@ -262,4 +275,5 @@ def _new_row(name: str, kind: str, folder: str) -> dict[str, Any]:
         "Files": [],
         "Selectable": False,
         "Selected": False,
+        "Optional": False,
     }
