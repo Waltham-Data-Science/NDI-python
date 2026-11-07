@@ -105,7 +105,7 @@ functions:
   - name: preferencesEditor
     type: function
     matlab_path: "+ndi/+gui/preferencesEditor.m"
-    matlab_last_sync_hash: "80ea2081b"
+    matlab_last_sync_hash: "5f5960c3b"
     python_path: "ndi/gui/preferences_editor.py"
     python_name: "preferences_editor"
     input_arguments:
@@ -146,6 +146,13 @@ functions:
       (e) MATLAB's alias `preferencesEditor` is exported alongside the
       snake_case `preferences_editor`.
       Synchronized with MATLAB main as of 2026-09-01.
+      2026-11-07: NDI-matlab 5f5960c3b added a "Tools folder..." button at
+      the bottom left (onToolsFolder / toolsFolderTarget), which shows the
+      tools folder and moves it with ndi.update.moveToolsFolder after two
+      confirmations. Ported as PreferencesEditor.on_tools_folder and
+      ndi.update.tools_folder.tools_folder_target, with the dialogs in
+      _confirm / _pick_folder so the flow is tested without a display; a
+      wait cursor stands in for MATLAB's indeterminate uiprogressdlg.
 
       Read against NDI-matlab 80ea2081b, the file's last-touching commit.
       CONTEXT FOR EVERY ENTRY IN THIS FILE: PySide6 is an optional extra and

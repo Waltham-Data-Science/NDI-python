@@ -26,6 +26,34 @@ python ndi_install.py
 The installer clones all dependencies, installs packages, and validates your setup.
 Run `python -m ndi check` at any time to verify your installation.
 
+### Choosing where the dependencies are cloned
+
+`ndi_install.py` clones the dependencies that are not on PyPI into a tools
+folder, `~/.ndi/tools` by default. To put them somewhere else, give the folder:
+
+```bash
+python ndi_install.py --tools-dir /path/to/ndi-tools
+```
+
+The installer records the folder in an `ndi-deps.pth` file in your
+environment, so Python finds the tools, and later runs of `ndi_install.py` (and
+`ndi.update.install()`) keep using it without `--tools-dir`.
+
+To move an existing tools folder, click **Tools folder...** in the preferences
+editor (`ndi.gui.preferences_editor()`), or from Python:
+
+```python
+import ndi.update
+ndi.update.toolsFolder()                          # where the tools are now
+ndi.update.moveToolsFolder("/path/to/ndi-tools")  # move them; restart Python afterwards
+```
+
+This copies the folder and checks the copy, points `ndi-deps.pth` at the new
+folder (keeping the old file as `ndi-deps.pth.bak`) and deletes the old
+folder. If something goes wrong before `ndi-deps.pth` is changed, nothing is
+changed. The NDI installer (`install/`) always uses `~/.ndi` and has no tools
+folder to move.
+
 ## Basic Usage
 
 ### Creating Documents
