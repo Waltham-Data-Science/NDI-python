@@ -61,6 +61,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `Kind` and `work()` and get run / pause / resume / restart / interrupted
   detection.
 
+- **Choosing and moving the tools folder** (mirroring VH-Lab/NDI-matlab
+  5f5960c3b). `ndi.update.toolsFolder()` says where `ndi_install.py` cloned the
+  dependencies (read from the `ndi-deps.pth` it writes), and
+  `ndi.update.moveToolsFolder(newFolder)` moves them: it copies and checks the
+  copy, rewrites `ndi-deps.pth` (keeping a `.bak`), updates `sys.path` and
+  deletes the old folder, changing nothing if a check or the copy fails. The
+  preferences editor has a matching **Tools folder...** button.
+  `ndi_install.py` with no `--tools-dir` now reuses the folder an earlier run
+  used, and `ndi.update.check`/`install` follow it instead of assuming
+  `~/.ndi/tools`.
+
 - **`vhneuropixelsGLX_nidq` vhlab DAQ system** (mirroring VH-Lab/NDI-matlab#1127).
   Reads the SpikeGLX NI-DAQ stream (`*.nidq.bin` / `*.nidq.meta`) with the NDR
   `neuropixelsGLX` reader, so probes on NI-DAQ digital lines can be described

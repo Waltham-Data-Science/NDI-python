@@ -11,6 +11,12 @@ GitHub, so an update is always "the commits main has that this copy lacks".
 
 From a terminal: ``ndi update --check`` and ``ndi update``.
 
+A git install keeps the dependencies ``ndi_install.py`` clones in a tools
+folder (``~/.ndi/tools`` unless ``--tools-dir`` says otherwise).
+``ndi.update.toolsFolder()`` says where, and
+``ndi.update.moveToolsFolder(newFolder)`` moves it, as does the "Tools
+folder..." button in the preferences editor.
+
 NDI-matlab's ``ndi.update.check`` also checks an NDI-python that the NDI
 installer put in ``~/.ndi`` (its ``checkPython``), reading the same
 ``~/.ndi/install.json`` receipt this package does.
@@ -22,6 +28,7 @@ from .install import UpdateError, install
 from .install_type import installType
 from .modification_summary import modificationSummary
 from .package_status import packageStatus
+from .tools_folder import moveToolsFolder, toolsFolder
 
 __all__ = [
     "check",
@@ -29,6 +36,8 @@ __all__ = [
     "install",
     "installType",
     "modificationSummary",
+    "moveToolsFolder",
     "packageStatus",
+    "toolsFolder",
     "UpdateError",
 ]

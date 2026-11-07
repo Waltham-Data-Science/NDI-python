@@ -9,11 +9,14 @@ Usage:
     python ndi_install.py                    # Fresh install
     python ndi_install.py --update           # Update existing deps
     python ndi_install.py --tools-dir DIR    # Custom clone location
+                                             # (default: where an earlier run put
+                                             # them, else ~/.ndi/tools)
     python ndi_install.py --verbose          # Detailed output
 
 What it does:
     1. Checks prerequisites (git, Python >= 3.10)
-    2. Clones vhlab-toolbox-python to ~/.ndi/tools/ (not on PyPI)
+    2. Clones vhlab-toolbox-python to ~/.ndi/tools/ (not on PyPI), or to
+       --tools-dir; an existing installation's folder is reused
     3. Writes a .pth file so Python finds it automatically
     4. Installs NDI-python and all pip dependencies (DID-python via pip),
        including Pyraview from its pre-built release wheels (never compiled)
@@ -47,6 +50,34 @@ DEPENDENCIES = [
 DEFAULT_TOOLS_DIR = Path.home() / ".ndi" / "tools"
 
 PTH_FILENAME = "ndi-deps.pth"
+
+
+def existing_tools_dir(site_packages: Path | None) -> Path | None:
+    """The tools folder an earlier run recorded in ndi-deps.pth, or None.
+
+    Without --tools-dir, an existing installation is updated where it is --
+    it may have been installed with --tools-dir, or moved with
+    ndi.update.moveToolsFolder -- rather than cloned again into the default
+    folder. Mirrors ndi.update.tools_folder.tools_folder_from_pth, which this
+    script cannot import before NDI-python is installed.
+    """
+    if site_packages is None:
+        return None
+    try:
+        lines = (site_packages / PTH_FILENAME).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#") or line.startswith("import "):
+            continue
+        path = Path(line)
+        for candidate in (path, *path.parents):
+            if (candidate / ".git").exists():
+                return candidate.parent
+        return path.parent
+    return None
+
 
 # Pyraview (multi-resolution signal pyramids, a C++ core behind ctypes) is not
 # on PyPI. Its release carries one wheel per platform and CPython version with
@@ -507,8 +538,11 @@ def main() -> int:
     parser.add_argument(
         "--tools-dir",
         type=Path,
-        default=DEFAULT_TOOLS_DIR,
-        help=f"Where to clone VH-Lab dependencies (default: {DEFAULT_TOOLS_DIR})",
+        default=None,
+        help=(
+            "Where to clone VH-Lab dependencies (default: the folder an earlier run "
+            f"used, else {DEFAULT_TOOLS_DIR})"
+        ),
     )
     parser.add_argument(
         "--update",
@@ -556,7 +590,11 @@ def main() -> int:
 
     # ── Step 2: Clone dependencies ─────────────────────────────────────
     print("\n[2/5] Setting up VH-Lab dependencies...")
-    tools_dir = args.tools_dir.expanduser().resolve()
+    if args.tools_dir is not None:
+        tools_dir = args.tools_dir.expanduser().resolve()
+    else:
+        tools_dir = existing_tools_dir(get_site_packages()) or DEFAULT_TOOLS_DIR
+        tools_dir = tools_dir.expanduser().resolve()
     all_cloned = True
 
     for dep in DEPENDENCIES:

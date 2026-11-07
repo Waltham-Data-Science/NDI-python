@@ -34,6 +34,7 @@ from pydantic import ConfigDict, validate_call
 from ._git import git_available, run_git
 from ._github import github_api
 from .install_type import installType, read_receipt
+from .tools_folder import _tools_folder
 
 __all__ = ["check", "REPOSITORY"]
 
@@ -88,7 +89,8 @@ def check(
 
     Args:
         IncludeDependencies: Also check the repositories ``ndi_install.py``
-            cloned into ``~/.ndi/tools`` (git installs only).
+            cloned into the tools folder, ``~/.ndi/tools`` by default (git
+            installs only; see ``ndi.update.toolsFolder``).
         Verbose: Print the summary.
         Timeout: Seconds to wait for GitHub.
         RepoRoot: Check the NDI-python git clone in this folder instead of
@@ -132,7 +134,8 @@ def check(
         False: MATLAB checks the NDIcalc-*-matlab git clones beside
         NDI-matlab, while NDI-python gets the calculator definitions it uses
         (ndicalc-vis-matlab) as a pip dependency, updated with NDI-python.
-        A dependency's ``Url`` is ``""``: the clones in ``~/.ndi/tools`` come
+        A dependency's ``Url`` is ``""``: the clones in the tools folder
+        (``~/.ndi/tools`` by default, see ``ndi.update.toolsFolder``) come
         from ``ndi_install.py``, not from a requirements.txt line.
     """
     api = GitHubApi or github_api
@@ -146,7 +149,7 @@ def check(
 
     result = _empty_result(install_type, info.get("RepoRoot", ""))
     if install_type == "git":
-        result = _check_git(result, info, IncludeDependencies)
+        result = _check_git(result, info, IncludeDependencies, NdiHome)
     elif install_type == "installer":
         result = _check_installer(result, info, api, Timeout)
     elif install_type == "pip":
@@ -170,7 +173,9 @@ def check(
 # ---------------------------------------------------------------------------
 
 
-def _check_git(result: dict[str, Any], info: dict[str, Any], include_deps: bool) -> dict[str, Any]:
+def _check_git(
+    result: dict[str, Any], info: dict[str, Any], include_deps: bool, ndi_home: str = ""
+) -> dict[str, Any]:
     repo = info["RepoRoot"]
     if not git_available():
         result["Message"] = (
@@ -202,7 +207,9 @@ def _check_git(result: dict[str, Any], info: dict[str, Any], include_deps: bool)
         "NDI-python", repo, result["CommitsAhead"], _incoming_new_files(repo, "origin/main")
     )
     if include_deps:
-        tools = Path(info.get("NdiHome") or Path.home() / ".ndi") / "tools"
+        # The folder ndi-deps.pth points into (ndi_install.py --tools-dir, or
+        # ndi.update.moveToolsFolder); <NdiHome>/tools when a test names one.
+        tools = _tools_folder(ndi_home)
         deps, dep_mods = _check_dependencies(tools)
         result["Dependencies"] = deps
         mods.extend(dep_mods)

@@ -91,6 +91,16 @@ functions:
       napariViewLightsheet missing from ~/.ndi/bin is Status "incomplete",
       NeedsInstall true, MissingCommands the missing names, and GitHub is
       not asked. MATLAB's "notInstalled" has no counterpart here.
+      2026-11-07: NDI-matlab 5f5960c3b: ndi_install with no PATHNAME now
+      updates an existing installation in the folder that holds NDI-matlab,
+      rather than cloning again into [userpath filesep 'tools'], and the new
+      ndi.update.moveToolsFolder can move that folder. Nothing in check.m
+      changed. Ported the same idea here: the dependency clones are now taken
+      from ndi.update.toolsFolder's folder (the one ndi-deps.pth points into,
+      so --tools-dir and moveToolsFolder are honoured) instead of always
+      ~/.ndi/tools; NdiHome, when a test passes it, still means
+      <NdiHome>/tools. Where this entry says ~/.ndi/tools above, read "the
+      tools folder, ~/.ndi/tools by default".
 
   - name: install
     type: function
@@ -162,6 +172,15 @@ functions:
       install with NeedsInstall is reinstalled (with or without Packages),
       with its own confirmation prompt. The second has no counterpart. Up to
       d2efa6e63 nothing else changed in the file.
+      2026-11-07: NDI-matlab 5f5960c3b: ndi_install with no PATHNAME now
+      updates an existing installation where it is instead of cloning a
+      second copy into the default folder (install.m itself, which already
+      passes the folder holding NDI-matlab, is unchanged). Ported to
+      ndi_install.py, which install runs: with no --tools-dir it now reuses
+      the folder recorded in ndi-deps.pth (existing_tools_dir), so
+      ndi_install.py --update keeps a folder chosen with --tools-dir or
+      moved with ndi.update.moveToolsFolder. Named dependencies are pulled
+      in that tools folder, as check now reports it.
 
   - name: installType
     type: function
@@ -339,6 +358,74 @@ functions:
       same note and WillUpdate. Optional is on every row and always false,
       and the summary's not-installed wording never applies, since
       NDI-python cannot be missing here. Nothing else up to d2efa6e63.
+      2026-11-07: NDI-matlab 5f5960c3b (ndi_install updates in place;
+      moveToolsFolder): no change to packageStatus.m. The "dependency" rows
+      here are now the clones in the tools folder ndi-deps.pth points into
+      (see check), ~/.ndi/tools by default.
+
+  - name: toolsFolder
+    type: function
+    matlab_path: "+ndi/+update/toolsFolder.m"
+    matlab_last_sync_hash: "5f5960c3b"
+    python_path: "ndi/update/tools_folder.py"
+    output_arguments:
+      - name: folder
+        type_matlab: "string"
+        type_python: "str"
+    decision_log: >
+      Ported 2026-11-07 together with the MATLAB function (NDI-matlab
+      5f5960c3b). Both return "" unless the install is a git clone. MATLAB's
+      tools folder holds NDI-matlab itself (ndi_install.m clones it there), so
+      it is the parent of the running clone; ndi_install.py runs from a clone
+      the user made wherever they liked, so Python's holds only the dependency
+      clones and is read from the ndi-deps.pth that ndi_install.py writes into
+      site-packages, falling back to ~/.ndi/tools. check, install and
+      ndi_install.py --update (with no --tools-dir) now use this folder rather
+      than assuming ~/.ndi/tools.
+
+  - name: moveToolsFolder
+    type: function
+    matlab_path: "+ndi/+update/moveToolsFolder.m"
+    matlab_last_sync_hash: "5f5960c3b"
+    python_path: "ndi/update/tools_folder.py"
+    input_arguments:
+      - name: newFolder
+        type_matlab: "string"
+        type_python: "str"
+      - name: Confirm
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: DeleteOld
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: UpdatePath
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: From
+        type_matlab: "string"
+        type_python: "str"
+      - name: StartupFile
+        type_matlab: "string"
+        decision_log: "Python rewrites ndi-deps.pth, not startup.m: see PthFile."
+      - name: PthFile
+        type_python: "str"
+        decision_log: "Python's StartupFile: the ndi-deps.pth to rewrite (tests)."
+    output_arguments:
+      - name: result
+        type_matlab: "struct"
+        type_python: "dict"
+    decision_log: >
+      Ported 2026-11-07 together with the MATLAB function (NDI-matlab
+      5f5960c3b). Same five steps in the same order (check everything, copy
+      and verify, rewrite the record of where the tools are with a .bak
+      beside it, update this process's path, delete the old folder with a
+      warning on failure), the same refusals, and the same error identifiers
+      (UpdateError.identifier), except that the record is ndi-deps.pth rather
+      than startup.m: noStartupFile, noStartupLine and startupWriteFailed are
+      noPthFile, noPthLine and pthWriteFailed, and the result's StartupFile /
+      StartupBackup are PthFile / PthBackup. A ~ in newFolder is expanded
+      (MATLAB refuses it because MATLAB does not expand ~). The preferences
+      editor's "Tools folder..." button calls it, as in MATLAB.
 
   - name: findCalculators
     type: function
