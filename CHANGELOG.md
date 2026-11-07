@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Keep the computer awake while a job runs** (`ndi.util.keep_awake.ndi_util_KeepAwake`,
+  MATLAB `ndi.util.KeepAwake`). It uses caffeinate on macOS, systemd-inhibit on
+  Linux and SetThreadExecutionState on Windows. A job holds it while it runs
+  unless the preference `Jobs.KeepComputerAwake` is false. The navigator's NDI
+  pane has MATLAB's coffee-cup button to keep the computer awake by hand, and the
+  cup shows when something is holding it.
+
 - **Jobs pane in the navigator** (`ndi.gui.nav.JobsPane`, MATLAB
   `ndi.gui.nav.jobsPane`): every job on this computer, with its state,
   percent done, time left and last update, and Pause / Resume / Restart /

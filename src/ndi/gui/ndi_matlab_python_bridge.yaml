@@ -788,6 +788,19 @@ ported_late:
       redrawn on KeepAwake's Changed event. Not ported yet: it is a view of
       ndi.util.KeepAwake, which is porting_deferred (src/ndi/util/), and a
       cup that cannot keep anything awake would mislead. Ports with it.
+      2026-11-07: ported with ndi.util.KeepAwake (now
+      ndi.util.keep_awake.ndi_util_KeepAwake), still against 745333162 (the
+      latest commit touching ndiPane.m). A 28-pixel cup_button between the
+      broom and Update (right_width 156 -> 188, as MATLAB); its click is
+      toggle_awake (KeepAwake.instance().toggleManual()) and show_awake draws
+      coffee_hot_icon.svg while isOn() and coffee_cold_icon.svg otherwise,
+      with describe() as the tooltip. The SVGs are byte-for-byte copies of
+      MATLAB's, in src/ndi/gui/ beside the other mirrored icons. MATLAB's
+      Changed listener is KeepAwake.addListener: the callback emits a Qt
+      signal so a change made off the GUI thread (a job) is redrawn on it,
+      and the listener is removed when the button is destroyed. The choice
+      of icon and tooltip is the pure cup_appearance() / cup_icon_file(),
+      tested without Qt (tests/test_gui_nav_ndi_pane.py).
 
   - name: jobsPane
     matlab_path: "+ndi/+gui/+nav/jobsPane.m"

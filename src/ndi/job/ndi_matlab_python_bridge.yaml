@@ -51,11 +51,19 @@ classes:
       and end of a run, at most every 5 s from beat, it refreshes every open
       navigator's Jobs pane and lets Qt process events (MATLAB's drawnow
       limitrate); it looks only if ndi.gui.navigator is already imported, so
-      a job run without the GUI never loads Qt. Not ported: the keep-awake
-      hold (ndi.util.KeepAwake is porting_deferred, and
-      Jobs.KeepComputerAwake with it). Covered by tests/test_job.py,
+      a job run without the GUI never loads Qt. Covered by tests/test_job.py,
       including a record validated against job.schema.json and the
       schema's own MATLAB example loading as a foreign job.
+      2026-11-07: the keep-awake hold is ported. run holds
+      ndi.util.keep_awake.ndi_util_KeepAwake under the key 'job:<id>' (label
+      'job "<title>" is running') when the preference Jobs.KeepComputerAwake
+      is true (true if it cannot be read, as MATLAB's keepAwakeWanted), and
+      releases it in a finally around the work, so it is let go on done,
+      paused, failed and Ctrl+C alike (MATLAB's onCleanup awakeGuard). The
+      private static helpers keepAwakeWanted and letSleep are _keepAwakeWanted
+      and _letSleep, plus _holdAwake, which, like the release, swallows any
+      failure: staying awake never stops a job. Covered by
+      tests/test_util_keep_awake.py.
     methods:
       - name: folder
       - name: run

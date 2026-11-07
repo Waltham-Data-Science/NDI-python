@@ -1226,6 +1226,11 @@ classes:
       above: SessionWriter and KeepAwake are porting_deferred, and the Python
       ndi_job_Job.run does not keep the computer awake, so no Python code
       would read them. A Python save keeps them in the shared file.
+      2026-11-07: Jobs.KeepComputerAwake is now ported, reversing the above
+      for that one item, because Python code now reads it: ndi_job_Job.run
+      holds ndi.util.keep_awake.ndi_util_KeepAwake (ported) while a job runs
+      unless it is false. Same key, default (true) and description as
+      MATLAB, registered as "bool", so one setting governs both languages.
 
     properties:
       - name: Items

@@ -240,6 +240,21 @@ class ndi_preferences:
             "NDI_FROM_MATLAB=1, the console script itself drops MATLAB's "
             "library paths before loading anything.",
         )
+        # Jobs.KeepComputerAwake is the key NDI-matlab registers, so one
+        # setting governs jobs run by either language.
+        self._add_item(
+            "Jobs",
+            "",
+            "KeepComputerAwake",
+            True,
+            "bool",
+            "Keep the computer from going to sleep while an NDI job "
+            "(ndi.job.Job) runs, such as a lightsheet upload to NDI Cloud, and "
+            "let it sleep again when the job stops. Uses caffeinate (macOS), "
+            "systemd-inhibit (Linux) or SetThreadExecutionState (Windows); see "
+            "ndi.util.KeepAwake. The display may still sleep, and closing a "
+            "laptop's lid still sleeps it.",
+        )
         # The Parallel items are the same keys NDI-matlab registers, so one
         # setting in the shared file governs both languages. Python has no
         # parpool that stays open between calls, so "a pool you have already

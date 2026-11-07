@@ -140,7 +140,10 @@ class ndi_job_Job:
         Returns when the job is done, paused or failed; the outcome is in
         ``state`` (and ``lastError``). Refused while another process is
         running the same job. Ctrl+C (KeyboardInterrupt) is recorded as
-        'interrupted' and re-raised.
+        'interrupted' and re-raised. While it runs, the computer is kept from
+        sleeping (:class:`ndi.util.keep_awake.ndi_util_KeepAwake`, key
+        ``job:<id>``) unless the preference Jobs.KeepComputerAwake is false,
+        and released however the run ends.
         """
         if self.effectiveState() == "running":
             raise RuntimeError(
@@ -162,26 +165,35 @@ class ndi_job_Job:
         self._beats = 0
         self.save()
         self._refreshPane(True)
+        # Keep the computer from sleeping until the job stops, however it
+        # stops (the finally runs on Ctrl+C too).
+        awakeKey = f"job:{self.id}"
+        awake = ndi_job_Job._keepAwakeWanted()
+        if awake:
+            ndi_job_Job._holdAwake(awakeKey, f'job "{self.title}" is running')
         try:
-            self.work()
-            self.state = "done"
-            self.progress = 1.0
-            self.message = "Done."
-        except _JobPaused:
-            self.state = "paused"
-            self.message = f"Paused at {ndi_job_Job.percentText(self.progress)}."
-            self._clearPause()
-        except KeyboardInterrupt:
-            self.state = "interrupted"
-            self.message = f"Interrupted at {ndi_job_Job.percentText(self.progress)}."
-            self.pid = 0
-            self.save()
-            self._refreshPane(True)
-            raise
-        except Exception as exc:  # noqa: BLE001 -- any failure of the work is recorded
-            self.state = "failed"
-            self.message = str(exc)
-            self.lastError = "".join(traceback.format_exception(exc))
+            try:
+                self.work()
+                self.state = "done"
+                self.progress = 1.0
+                self.message = "Done."
+            except _JobPaused:
+                self.state = "paused"
+                self.message = f"Paused at {ndi_job_Job.percentText(self.progress)}."
+                self._clearPause()
+            except KeyboardInterrupt:
+                self.state = "interrupted"
+                self.message = f"Interrupted at {ndi_job_Job.percentText(self.progress)}."
+                self.pid = 0
+                self.save()
+                self._refreshPane(True)
+                raise
+            except Exception as exc:  # noqa: BLE001 -- any failure of the work is recorded
+                self.state = "failed"
+                self.message = str(exc)
+                self.lastError = "".join(traceback.format_exception(exc))
+        finally:
+            ndi_job_Job._letSleep(awakeKey, awake)
         self.pid = 0
         self.save()
         self._refreshPane(True)
@@ -225,6 +237,37 @@ class ndi_job_Job:
         self._refreshPane(False)
         if self.pauseRequested():
             raise _JobPaused(f'Job "{self.title}" was paused.')
+
+    @staticmethod
+    def _keepAwakeWanted() -> bool:
+        """The preference Jobs.KeepComputerAwake (true if it cannot be read)."""
+        try:
+            from ndi import preferences
+
+            return bool(preferences.get("Jobs.KeepComputerAwake"))
+        except Exception:  # noqa: BLE001 -- as MATLAB: default to keeping awake
+            return True
+
+    @staticmethod
+    def _holdAwake(key: str, label: str) -> None:
+        """Hold ndi.util.KeepAwake for KEY; never stops the job."""
+        try:
+            from ndi.util.keep_awake import ndi_util_KeepAwake
+
+            ndi_util_KeepAwake.instance().hold(key, label)
+        except Exception:  # noqa: BLE001 -- staying awake is a courtesy
+            pass
+
+    @staticmethod
+    def _letSleep(key: str, held: bool) -> None:
+        """Release KEY's keep-awake hold, if it was taken."""
+        if held:
+            try:
+                from ndi.util.keep_awake import ndi_util_KeepAwake
+
+                ndi_util_KeepAwake.instance().release(key)
+            except Exception:  # noqa: BLE001
+                pass
 
     def _refreshPane(self, force: bool) -> None:
         """Keep an open navigator's Jobs pane current (at most every 5 s), and let it redraw.

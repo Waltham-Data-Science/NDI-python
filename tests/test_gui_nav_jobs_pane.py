@@ -72,6 +72,8 @@ class FakeNavigator:
 @pytest.fixture(autouse=True)
 def jobs_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("NDI_JOBS_DIR", str(tmp_path / "jobs"))
+    # No real keep-awake helper (caffeinate / systemd-inhibit) from a test run.
+    monkeypatch.setattr(ndi_job_Job, "_holdAwake", staticmethod(lambda key, label: None))
     yield tmp_path / "jobs"
 
 
