@@ -293,6 +293,12 @@ def worldTransform(session: Any, pyramid_doc: Any) -> tuple[list[float], list[fl
     ``scale * 2**level`` (or whatever the level document's own
     ``voxel_size`` says, when it does not agree with a power-of-two
     ladder).
+
+    The document records where the CORNER of voxel 0 sits
+    (lightsheetZarrPyramid.md / lightsheetZarrLevel.md); napari's
+    ``translate`` places the CENTRE of pixel 0. So along each spatial axis
+    (z, y, x) the translate is the recorded translation plus half a voxel;
+    the time and channel axes are left as they are.
     """
     _ = session  # signature parity with genepyramid; kept for a future world-frame lookup
     p = pyramid_doc.document_properties["lightsheetZarrPyramid"]
@@ -300,6 +306,9 @@ def worldTransform(session: Any, pyramid_doc: Any) -> tuple[list[float], list[fl
     translation = [float(v) for v in p.get("translation_level0", [])]
     if not translation and scale:
         translation = [0.0] * len(scale)
+    axes = str(p.get("axes_order", "")).lower()
+    if len(axes) == len(translation) == len(scale):
+        translation = [t + s / 2 if a in "zyx" else t for a, t, s in zip(axes, translation, scale)]
     return scale, translation
 
 

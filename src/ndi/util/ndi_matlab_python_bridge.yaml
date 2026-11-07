@@ -729,6 +729,19 @@ not_applicable:
 # =============================================================================
 # Deferred MATLAB functions
 # =============================================================================
+  - name: startProcess
+    matlab_path: "+ndi/+util/startProcess.m"
+    matlab_last_sync_hash: "97910a0f7"
+    status: matlab_only
+    decision_log: >-
+      Starts a program with java.lang.ProcessBuilder (no shell, so nothing
+      to quote; output to files; MATLAB's own library paths taken out of the
+      child's environment on Linux and macOS) and returns the Process, which
+      can be asked whether it is alive. It works around MATLAB's system(),
+      which runs through a shell, blocks, and hands children MATLAB's
+      LD_LIBRARY_PATH. Python needs nothing: subprocess.Popen with an argv
+      list does all of it.
+
 porting_deferred:
 
   - name: hdf5Contents
@@ -751,3 +764,20 @@ porting_deferred:
       h5py makes the port straightforward whenever a Python-side ingest
       GUI wants the same answer; it is the printing and the verdict
       wording that would need mirroring, not the walk.
+
+  - name: KeepAwake
+    type: class
+    matlab_path: "+ndi/+util/KeepAwake.m"
+    matlab_last_sync_hash: "97910a0f7"
+    status: porting_deferred
+    decision_log: >-
+      Keeps the computer from sleeping while anything holds it (a running
+      job, the navigator's coffee-cup button): one helper process tied to
+      MATLAB's pid -- caffeinate -ims -w <pid> on macOS, systemd-inhibit on
+      Linux, a hidden PowerShell calling SetThreadExecutionState on Windows
+      -- so it ends with MATLAB however MATLAB ends. A singleton with a
+      Changed event. Portable (the same helpers, started with
+      subprocess.Popen and tied to os.getpid()), but deferred: nothing in
+      Python holds it yet. ndi.job.ndi_job_Job.run does not keep the
+      computer awake (a Python job kind is the first caller), and the
+      coffee cup waits with the ndiPane change (src/ndi/gui/).
