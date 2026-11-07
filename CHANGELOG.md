@@ -265,18 +265,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   counts any that are never recorded as failed, so their documents are not
   marked synced. A PUT returning 200 only means S3 has the bytes.
 
-- **Waiting for bulk uploads no longer stalls on abandoned or old jobs**
-  (mirroring VH-Lab/NDI-matlab#1189). `waitForAllBulkUploads` ignores a
-  `queued` job older than `stale_after` (default one hour: an upload whose
-  zip never arrived), still waits for every `extracting` job, and counts only
-  failures from that same window, so one old failure no longer fails every
-  later wait. `listActiveBulkUploads` takes `since`.
-
 - **Lightsheet viewer: pyramids drawn half a voxel short.** A lightsheet
   pyramid records where voxel 0's corner sits (now written down in
   `lightsheetZarrLevel.md`, mirroring NDI-matlab 1b7876574); napari places
   pixel centres, so `ndi.pyramid.multiscale.worldTransform` now adds half a
   voxel along z, y and x.
+
+- **`waitForAllBulkUploads` no longer sits out its deadline on abandoned
+  uploads** (mirroring VH-Lab/NDI-matlab#1189; server side
+  Waltham-Data-Science/ndi-cloud-node#172). The server creates a `queued`
+  bulk-upload job as soon as an upload URL is requested, and an upload that
+  failed or was interrupted left that job `queued` forever, so every sync on a
+  real dataset waited the full deadline at its bulk-upload boundary. New
+  `stale_after` (default 3600 s): `queued` jobs created longer ago are ignored
+  and returned in `staleJobs`; `extracting` jobs are always waited for.
+  `require_all_complete` now counts only failures from the last `stale_after`
+  seconds instead of the listing's 24 h history. `listActiveBulkUploads` takes
+  an optional `since` (sent with each poll; older servers ignore it).
 
 - **Bulk document download of large datasets no longer fails with HTTP 500**
   (mirroring NDI-matlab). `Cloud.Download.Max_Document_Batch_Count` defaulted

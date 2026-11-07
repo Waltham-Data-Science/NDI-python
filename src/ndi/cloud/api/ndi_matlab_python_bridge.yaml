@@ -1174,7 +1174,7 @@ functions:
 
   - name: listActiveBulkUploads
     matlab_path: "+ndi/+cloud/+api/+files/listActiveBulkUploads.m"
-    matlab_last_sync_hash: "7f7200034"
+    matlab_last_sync_hash: "cb0134b"
     python_path: "ndi/cloud/api/files.py"
     input_arguments:
       - name: dataset_id
@@ -1186,7 +1186,7 @@ functions:
         default: "'active'"
       - name: since
         type_matlab: "datetime"
-        type_python: "datetime.datetime | None"
+        type_python: "datetime | None"
         default: "None"
       - name: client
         type_python: "_Client"
@@ -1197,11 +1197,10 @@ functions:
     decision_log: >
       Ported from MATLAB main as of 2026-05-11 (matlab HEAD 2566fe4d).
       GET /datasets/{datasetId}/bulk-uploads[?state=...].
-      2026-11-07: synchronized with NDI-matlab 7c6e9ed09 / 7f7200034
-      (VH-Lab/NDI-matlab#1189): an optional 'since' limits terminal jobs to
-      those completed at or after it, sent as UTC yyyy-MM-ddTHH:mm:ss.SSSZ
-      (an unzoned datetime is taken as UTC, as MATLAB does). MATLAB's empty
-      datetime default is None here.
+      Synchronized with MATLAB main as of 2026-11-07 (cb0134b,
+      VH-Lab/NDI-matlab#1189): optional `since` limits terminal jobs to
+      those completed at or after it (ndi-cloud-node#172). Sent as ISO 8601
+      UTC with a Z; a naive datetime is taken as UTC, as in MATLAB.
 
   - name: waitForBulkUpload
     matlab_path: "+ndi/+cloud/+api/+files/waitForBulkUpload.m"
@@ -1286,7 +1285,7 @@ functions:
 
   - name: waitForAllBulkUploads
     matlab_path: "+ndi/+cloud/+api/+files/waitForAllBulkUploads.m"
-    matlab_last_sync_hash: "7f7200034"
+    matlab_last_sync_hash: "cb0134b"
     python_path: "ndi/cloud/api/files.py"
     input_arguments:
       - name: dataset_id
@@ -1310,7 +1309,7 @@ functions:
         default: "True"
       - name: stale_after
         type_matlab: "double"
-        type_python: "float"
+        type_python: "float (> 0)"
         default: "3600.0"
       - name: client
         type_python: "_Client"
@@ -1323,20 +1322,21 @@ functions:
       Polls listActiveBulkUploads until the active set drains.
       Sync-pipeline callers use this to ensure remote inventories are
       stable before reading them.
-      2026-11-07: synchronized with NDI-matlab 7c6e9ed09 / 7f7200034
-      (VH-Lab/NDI-matlab#1189). stale_after (MATLAB staleAfter, default
-      3600 s): a 'queued' job created longer ago than that is an abandoned
-      upload and no longer holds up the wait (reported in staleJobs); an
-      'extracting' job is always waited for; and with require_all_complete
-      only failures completed within that window count (asked for with
-      'since' and filtered here too, for servers without the filter). The
-      static helpers partitionStaleJobs and jobsCompletedSince are module
-      functions in files.py, and parseTimestamp is _parse_timestamp
-      (returning None where MATLAB returns NaT). Python still answers both
-      questions from one 'all' listing per poll where MATLAB lists 'active'
-      and then 'failed', and keeps its 'unavailable' state for a first poll
-      that fails. Tested in tests/test_cloud_bulk_uploads_stale_jobs.py,
-      mirroring WaitForAllBulkUploadsStaleJobsTest.m.
+      Synchronized with MATLAB main as of 2026-11-07 (cb0134b,
+      VH-Lab/NDI-matlab#1189). `stale_after` (MATLAB staleAfter, default
+      3600 s): 'queued' jobs created longer ago are abandoned uploads and
+      no longer hold the wait; they are returned in `staleJobs`.
+      'extracting' jobs are always waited for (the server fails stalled
+      ones, ndi-cloud-node#172). require_all_complete counts only failures
+      completed within stale_after before the wait began. Before this, a
+      leftover 'queued' job made every sync on a real dataset sit out the
+      full deadline, and one failure kept reporting 'failed' for the
+      listing's 24 h history window. Kept the Python port's single
+      state='all' poll (MATLAB polls 'active', then 'failed' once): it now
+      carries `since`, and the cutoff is also applied client-side for
+      servers that predate it. Result keys mirror MATLAB's answer struct
+      (state, jobs, elapsed, staleJobs); 'unavailable' on a first-poll
+      failure is Python-only, as before.
 
   # --- file-tier family (files.py) ---
   - name: setFileTier
