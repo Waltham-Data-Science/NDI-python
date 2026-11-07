@@ -4,7 +4,11 @@ MATLAB counterpart: ``src/ndi/+ndi/+gui/preferencesEditor.m``
 
 A window over the preferences singleton: a tree of categories (with
 subcategories as children) on the left, one editor row per preference on the
-right, and Revert / Apply / Save along the bottom.
+right, and Revert / Apply / Save along the bottom. A "Tools folder..." button
+at the bottom left shows where ndi_install.py keeps its dependency clones and
+offers to move them (``ndi.update.toolsFolder`` /
+``ndi.update.moveToolsFolder``); it acts at once, after asking, and is not a
+pending edit.
 
 EDITS ARE DEFERRED
 A changed widget records a PENDING edit inside the editor and marks its row
@@ -38,8 +42,10 @@ DEVIATIONS FROM MATLAB
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from .cloud_colors import cloud_colors, rgb_to_hex
@@ -568,11 +574,17 @@ class PreferencesEditor:
         return self.rows_area
 
     def _build_button_row(self) -> Any:
-        """Revert | Apply | Save, right-aligned."""
+        """Tools folder... on the left; Revert | Apply | Save, right-aligned."""
         from PySide6 import QtWidgets
 
         row = QtWidgets.QHBoxLayout()
         row.setSpacing(6)
+        tools = QtWidgets.QPushButton("Tools folder...")
+        tools.setObjectName("ndiPrefToolsFolderButton")
+        tools.setToolTip("See where the NDI-python tools are installed, and move them")
+        tools.clicked.connect(self.on_tools_folder)
+        self._accent_button(tools)
+        row.addWidget(tools)
         row.addStretch(1)
         for text, slot in (
             ("Revert", self.on_revert),
@@ -734,6 +746,101 @@ class PreferencesEditor:
         if result.ok:
             self.close()
         return result
+
+    def on_tools_folder(self) -> dict[str, Any] | None:
+        """Tools folder...: show the tools folder, and offer to move it.
+
+        MATLAB counterpart: ``onToolsFolder`` in ``preferencesEditor.m``.
+        Shows the folder ndi_install.py cloned the dependencies into; if the
+        user picks a new folder and confirms, calls
+        :func:`ndi.update.moveToolsFolder` with ``Confirm=False`` (this has
+        already asked). Returns its result, or None if nothing was moved.
+        """
+        from ..update import tools_folder as tf
+        from ..update.install import UpdateError
+
+        current = tf.toolsFolder()
+        if not current:
+            self._alert(
+                "NDI-python was installed with the NDI installer (which keeps it in "
+                "~/.ndi) or with pip. Only a git clone set up with ndi_install.py has "
+                "a tools folder that can be moved.",
+                "Tools folder",
+            )
+            return None
+        if not self._confirm(
+            f"The tools NDI-python uses are in\n\n{current}\n\n"
+            "To move them, choose the folder to put them in.",
+            "Tools folder",
+            "Choose new folder...",
+        ):
+            return None
+        picked = self._pick_folder(str(Path(current).parent))
+        if not picked:
+            return None
+        target = tf.tools_folder_target(picked, current)
+        if not self._confirm(
+            f"The NDI-python tools will be moved\n\nfrom  {current}\nto    {target}\n\n"
+            "This copies the folder, checks the copy, points ndi-deps.pth at the new "
+            "folder, and deletes the old folder. Restart Python afterwards.",
+            "Move the tools folder",
+            "Move",
+        ):
+            return None
+        try:
+            with self._busy():
+                result = tf.moveToolsFolder(target, Confirm=False)
+        except UpdateError as exc:
+            self._alert(str(exc), "Could not move the tools folder", success=False)
+            return None
+        message = f"The NDI-python tools are now in\n\n{result['To']}\n\nPlease restart Python."
+        if not result["OldDeleted"]:
+            message += (
+                f"\n\nThe old folder {result['From']} could not be deleted completely. "
+                "Delete it yourself after restarting Python."
+            )
+        self._alert(message, "Tools folder moved")
+        return result
+
+    def _confirm(self, message: str, title: str, ok_text: str) -> bool:
+        """Ask with OK_TEXT and Cancel (the default); True for OK_TEXT."""
+        if self.figure is None:
+            return False
+        from PySide6 import QtWidgets
+
+        box = QtWidgets.QMessageBox(self.figure)
+        box.setWindowTitle(title)
+        box.setText(message)
+        box.setIcon(QtWidgets.QMessageBox.Icon.Question)
+        ok = box.addButton(ok_text, QtWidgets.QMessageBox.ButtonRole.AcceptRole)
+        cancel = box.addButton(QtWidgets.QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(cancel)
+        box.exec()
+        return box.clickedButton() is ok
+
+    def _pick_folder(self, start: str) -> str:
+        """A folder chosen in a dialog, or "" if cancelled."""
+        if self.figure is None:
+            return ""
+        from PySide6 import QtWidgets
+
+        return QtWidgets.QFileDialog.getExistingDirectory(
+            self.figure, "Choose where to put the NDI-python tools", start
+        )
+
+    @contextmanager
+    def _busy(self) -> Iterator[None]:
+        """A wait cursor while a long operation runs (none without a window)."""
+        if self.figure is None:
+            yield
+            return
+        from PySide6 import QtCore, QtWidgets
+
+        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
+        try:
+            yield
+        finally:
+            QtWidgets.QApplication.restoreOverrideCursor()
 
     # -- window --------------------------------------------------------
     def show(self) -> None:
