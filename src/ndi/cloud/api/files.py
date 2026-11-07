@@ -1333,6 +1333,64 @@ def waitForBulkUpload(
 
 @_auto_client
 @validate_call(config=VALIDATE_CONFIG)
+def waitForFileUpload(
+    dataset_id: CloudId,
+    file_uids: list[str] | str,
+    *,
+    timeout: float = 120.0,
+    initial_interval: float = 1.0,
+    max_interval: float = 10.0,
+    backoff_factor: float = 2.0,
+    client: _Client = None,
+) -> dict[str, Any]:
+    """Wait until NDI Cloud has recorded single-file uploads.
+
+    A PUT to a signed upload URL returning 200 means S3 has the object; NDI
+    Cloud records the upload (``uploaded``) shortly after. This polls
+    :func:`lookupFiles` for the uids not yet recorded, with exponential
+    backoff, until all are or ``timeout`` seconds pass.
+
+    Returns:
+        ``{"state": "complete" | "timeout", "files": [...], "pending": [...],
+        "elapsed": seconds}``: the lookup rows of the recorded files (and, on
+        timeout, the latest rows of the rest), and the uids still pending.
+        Success is ``state == "complete"``.
+
+    MATLAB equivalent: +cloud/+api/+files/waitForFileUpload.m (which returns
+    ``[b, answer]``; here ``b`` is ``answer["state"] == "complete"``).
+    """
+    uids = [file_uids] if isinstance(file_uids, str) else list(file_uids)
+    pending = list(dict.fromkeys(str(u) for u in uids))
+    done: list[dict[str, Any]] = []
+    latest: list[dict[str, Any]] = []
+    start = time.monotonic()
+    interval = initial_interval
+    while pending:
+        try:
+            result = lookupFiles(dataset_id, pending, client=client)
+            rows = result.get("files", []) if hasattr(result, "get") else []
+            rows = [r for r in rows or [] if isinstance(r, dict)]
+            up = [r for r in rows if r.get("uploaded")]
+            latest = [r for r in rows if not r.get("uploaded")]
+            done.extend(up)
+            recorded = {str(r.get("uid")) for r in up}
+            pending = [u for u in pending if u not in recorded]
+            if not pending:
+                break
+        except Exception:  # noqa: BLE001 -- a failed poll is retried until the deadline
+            pass
+        elapsed = time.monotonic() - start
+        if elapsed >= timeout:
+            return {"state": "timeout", "files": done + latest, "pending": pending,
+                    "elapsed": elapsed}  # fmt: skip
+        time.sleep(min(interval, max_interval, timeout - elapsed))
+        interval = min(interval * backoff_factor, max_interval)
+    return {"state": "complete", "files": done, "pending": [],
+            "elapsed": time.monotonic() - start}  # fmt: skip
+
+
+@_auto_client
+@validate_call(config=VALIDATE_CONFIG)
 def waitForAllBulkUploads(
     dataset_id: CloudId,
     *,

@@ -37,7 +37,14 @@ CLOUD_ID = "65a1b2c3d4e5f60718293a4b"
 
 @pytest.fixture(autouse=True)
 def _no_bulk_settling(monkeypatch):
+    from ndi.cloud.api import files as files_api
+
     monkeypatch.setattr(ops, "_settle_bulk_uploads", lambda *a, **k: None)
+    # The serial upload path waits for NDI Cloud to record its files
+    # (waitForFileUpload, NDI-matlab#1027); the fake cloud records at once.
+    monkeypatch.setattr(
+        files_api, "waitForFileUpload", lambda ds, uids, **k: {"state": "complete", "pending": []}
+    )
 
 
 class _Config:

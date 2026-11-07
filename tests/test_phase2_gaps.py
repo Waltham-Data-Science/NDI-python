@@ -437,6 +437,7 @@ class TestUploadSingleFile:
         mock_files = MagicMock()
         mock_files.getFileUploadURL.return_value = "https://s3.example.com/upload"
         mock_files.putFiles.return_value = None
+        mock_files.waitForFileUpload.return_value = {"state": "complete"}
 
         with (
             patch.dict("sys.modules", {"ndi.cloud.api.files": mock_files}),

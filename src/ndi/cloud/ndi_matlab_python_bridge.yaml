@@ -1113,6 +1113,11 @@ functions:
       then waits once, through waitForFileUpload, for NDI Cloud to record
       them all. Not ported: Python has no waitForFileUpload yet (recorded
       as porting_deferred in ndi/cloud/api); Python's uploads do not wait.
+      2026-11-07: now ported. The serial path sends every file, then waits
+      once through ndi.cloud.api.files.waitForFileUpload; a file NDI Cloud
+      has not recorded in time counts as failed (its document joins
+      failed_document_ids, so the sync index does not record it), with
+      MATLAB's message.
       2026-09-25: NDI-matlab 4e45d96e added verbose stage prints and a listFiles-not-yet-uploaded diagnostic. Python code is silent in the same way it was; no behavioural change.
 
       2026-09-15: added a ``dataset`` kwarg. On MATLAB, +sync/+internal/
@@ -1152,6 +1157,10 @@ functions:
         type_matlab: "logical"
         type_python: "bool"
         default: "True"
+      - name: wait_for_upload
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "True"
       - name: client
         type_python: "CloudClient | None"
         default: "None"
@@ -1166,6 +1175,11 @@ functions:
       waitForFileUpload until NDI Cloud records the upload. Not ported yet:
       Python returns once the PUT succeeds; see waitForFileUpload
       (porting_deferred) in ndi/cloud/api.
+      2026-11-07: ported as wait_for_upload (default True): a single-file
+      upload waits through waitForFileUpload and fails with MATLAB's message
+      if NDI Cloud does not record it in time; a bulk upload waits for its
+      zip extraction job (putFiles wait_for_completion), as MATLAB's
+      waitForCompletion does.
       Exact match.
       2026-10-12: synced to NDI-matlab 8fa6ea5e (claude/file-crc32-lookup,
       NDI-matlab#1025): 'checksum' (default true) computes the file's CRC-32
@@ -2247,8 +2261,9 @@ porting_deferred:
       (and .name, as a Python file object has) is the cached path; report and
       timing are dicts; the Api is a dict of callables answering as MATLAB's
       struct of handles does, documents are passed as property dicts rather
-      than JSON text; the default API polls lookupFiles in place of
-      waitForFileUpload, which Python has not ported; MATLAB's destructor is
+      than JSON text; the default API's waitForFileUpload is
+      ndi.cloud.api.files.waitForFileUpload (ported 2026-11-07; at first it
+      polled lookupFiles itself); MATLAB's destructor is
       delete(), also run by weakref.finalize and on leaving a with block.
       The preferences Cloud.Upload.Parallel_Uploads and
       Send_Batches_As_Zip are read through ndi.preferences when present (a

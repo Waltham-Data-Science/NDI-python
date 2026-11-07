@@ -258,6 +258,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Uploads wait for NDI Cloud to record them** (mirroring VH-Lab/NDI-matlab#1027).
+  `ndi.cloud.api.files.waitForFileUpload` polls until uploaded files are
+  recorded. `uploadSingleFile` waits through it by default
+  (`wait_for_upload`). The serial upload path waits once for all its files and
+  counts any that are never recorded as failed, so their documents are not
+  marked synced. A PUT returning 200 only means S3 has the bytes.
+
 - **Waiting for bulk uploads no longer stalls on abandoned or old jobs**
   (mirroring VH-Lab/NDI-matlab#1189). `waitForAllBulkUploads` ignores a
   `queued` job older than `stale_after` (default one hour: an upload whose

@@ -1605,21 +1605,15 @@ class SessionWriter:
             return pair(lambda: files_api.lookupFiles(str(d), list(uids), client=get_client()))
 
         def wait_for_file_upload(d: str, uids: list[str], timeout: float) -> tuple[bool, Any]:
-            # ndi.cloud.api.files.waitForFileUpload is not ported yet: poll
-            # lookupFiles until every uid is recorded as uploaded, as it does.
-            deadline = time.monotonic() + float(timeout)
-            pause = 1.0
-            while True:
-                ok, answer = lookup_files(d, uids)
-                if ok:
-                    up = {str(r.get("uid")) for r in _rows(answer) if r.get("uploaded")}
-                    if all(str(u) in up for u in uids):
-                        return True, {"state": "complete"}
-                left = deadline - time.monotonic()
-                if left <= 0:
-                    return False, {"state": "timeout"}
-                _sleep(min(pause, left))
-                pause = min(10.0, pause * 2)
+            from .api import files as files_api
+
+            try:
+                answer = files_api.waitForFileUpload(
+                    str(d), list(uids), timeout=float(timeout), client=get_client()
+                )
+            except Exception as exc:
+                return False, str(exc)
+            return answer.get("state") == "complete", answer
 
         def download_file(d: str, uid: str, p: str) -> tuple[bool, str]:
             from .api import files as files_api
