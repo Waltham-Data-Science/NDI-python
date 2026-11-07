@@ -205,6 +205,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **`waitForAllBulkUploads` no longer sits out its deadline on abandoned
+  uploads** (mirroring VH-Lab/NDI-matlab#1189; server side
+  Waltham-Data-Science/ndi-cloud-node#172). The server creates a `queued`
+  bulk-upload job as soon as an upload URL is requested, and an upload that
+  failed or was interrupted left that job `queued` forever, so every sync on a
+  real dataset waited the full deadline at its bulk-upload boundary. New
+  `stale_after` (default 3600 s): `queued` jobs created longer ago are ignored
+  and returned in `staleJobs`; `extracting` jobs are always waited for.
+  `require_all_complete` now counts only failures from the last `stale_after`
+  seconds instead of the listing's 24 h history. `listActiveBulkUploads` takes
+  an optional `since` (sent with each poll; older servers ignore it).
+
 - **Bulk document download of large datasets no longer fails with HTTP 500**
   (mirroring NDI-matlab). `Cloud.Download.Max_Document_Batch_Count` defaulted
   to 10000, but the server sends a chunk's ids in one SNS message (256 KiB cap,
