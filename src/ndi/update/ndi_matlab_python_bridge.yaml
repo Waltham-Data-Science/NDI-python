@@ -91,6 +91,16 @@ functions:
       napariViewLightsheet missing from ~/.ndi/bin is Status "incomplete",
       NeedsInstall true, MissingCommands the missing names, and GitHub is
       not asked. MATLAB's "notInstalled" has no counterpart here.
+      2026-11-07: NDI-matlab 5f5960c3b: ndi_install with no PATHNAME now
+      updates an existing installation in the folder that holds NDI-matlab,
+      rather than cloning again into [userpath filesep 'tools'], and the new
+      ndi.update.moveToolsFolder can move that folder. Nothing in check.m
+      changed. Ported the same idea here: the dependency clones are now taken
+      from ndi.update.toolsFolder's folder (the one ndi-deps.pth points into,
+      so --tools-dir and moveToolsFolder are honoured) instead of always
+      ~/.ndi/tools; NdiHome, when a test passes it, still means
+      <NdiHome>/tools. Where this entry says ~/.ndi/tools above, read "the
+      tools folder, ~/.ndi/tools by default".
 
   - name: install
     type: function
@@ -162,6 +172,15 @@ functions:
       install with NeedsInstall is reinstalled (with or without Packages),
       with its own confirmation prompt. The second has no counterpart. Up to
       d2efa6e63 nothing else changed in the file.
+      2026-11-07: NDI-matlab 5f5960c3b: ndi_install with no PATHNAME now
+      updates an existing installation where it is instead of cloning a
+      second copy into the default folder (install.m itself, which already
+      passes the folder holding NDI-matlab, is unchanged). Ported to
+      ndi_install.py, which install runs: with no --tools-dir it now reuses
+      the folder recorded in ndi-deps.pth (existing_tools_dir), so
+      ndi_install.py --update keeps a folder chosen with --tools-dir or
+      moved with ndi.update.moveToolsFolder. Named dependencies are pulled
+      in that tools folder, as check now reports it.
 
   - name: installType
     type: function
@@ -339,6 +358,10 @@ functions:
       same note and WillUpdate. Optional is on every row and always false,
       and the summary's not-installed wording never applies, since
       NDI-python cannot be missing here. Nothing else up to d2efa6e63.
+      2026-11-07: NDI-matlab 5f5960c3b (ndi_install updates in place;
+      moveToolsFolder): no change to packageStatus.m. The "dependency" rows
+      here are now the clones in the tools folder ndi-deps.pth points into
+      (see check), ~/.ndi/tools by default.
 
   - name: toolsFolder
     type: function
