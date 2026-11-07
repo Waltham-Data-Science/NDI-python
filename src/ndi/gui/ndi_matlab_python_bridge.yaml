@@ -748,7 +748,7 @@ ported_late:
 
   - name: ndiPane
     matlab_path: "+ndi/+gui/+nav/ndiPane.m"
-    matlab_last_sync_hash: "d2efa6e63"
+    matlab_last_sync_hash: "745333162"
     python_path: "ndi/gui/nav/ndi_pane.py"
     decision_log: >
       The NDI-branded pane. Ported in #88.
@@ -781,6 +781,31 @@ ported_late:
       install", and "Updated: ..." for the rest. Ported in updated_message()
       (only "Incomplete install" can occur here). Nothing else changed up to
       d2efa6e63.
+      2026-11-07: examined against NDI-matlab 745333162 (VH-Lab/NDI-matlab#1178):
+      a coffee-cup button between the broom and Update (pane 156 -> 188 pixels)
+      that toggles a manual ndi.util.KeepAwake hold and shows whether the
+      computer is being kept awake (steaming cup) or may sleep (empty cup),
+      redrawn on KeepAwake's Changed event. Not ported yet: it is a view of
+      ndi.util.KeepAwake, which is porting_deferred (src/ndi/util/), and a
+      cup that cannot keep anything awake would mislead. Ports with it.
+
+  - name: jobsPane
+    matlab_path: "+ndi/+gui/+nav/jobsPane.m"
+    matlab_last_sync_hash: "475eaf4c8"
+    status: porting_deferred
+    decision_log: >-
+      The navigator's collapsible Jobs pane: a table of every job on this
+      computer (ndi.job.Job.list) with columns Job, State, Done (percent,
+      rounded down so 100% means done), Left (a time-left estimate from the
+      run's pace) and Updated (time of day), and Pause / Resume / Restart /
+      Remove buttons; it opens itself when a job exists. Not ported yet. The
+      model it shows is ported (ndi.job.ndi_job_Job: list, effectiveState,
+      percentText, remainingSeconds, requestPause), so a Python pane is a
+      table over it; deferred because Python runs no job kind yet (every
+      MATLAB job lists here as an ndi_job_ForeignJob that can be paused but
+      not resumed), and because PySide6 is absent from CI, so a Qt pane
+      would land untested. The navigator's jobsPaneHandle (navigator entry)
+      waits with it.
 
   - name: updateDialog
     matlab_path: "+ndi/+gui/+nav/updateDialog.m"
@@ -912,9 +937,15 @@ ported_late:
   # --- ndi.gui top level -------------------------------------------------
   - name: navigator
     matlab_path: "+ndi/+gui/navigator.m"
-    matlab_last_sync_hash: "be84180d"
+    matlab_last_sync_hash: "fdf45c7d3"
     python_path: "ndi/gui/navigator.py"
-    decision_log: "The navigator window and its layout arithmetic. #105."
+    decision_log: >-
+      The navigator window and its layout arithmetic. #105.
+      2026-11-07: examined against NDI-matlab fdf45c7d3 (VH-Lab/NDI-matlab#1178):
+      a Jobs pane (ndi.gui.nav.jobsPane) joins the pane stack, and
+      jobsPaneHandle returns it so a running job can refresh it. Not ported
+      yet: both wait for the jobsPane port (porting_deferred, see that
+      entry). The rest of the window is unchanged.
 
   - name: profileEditor
     matlab_path: "+ndi/+gui/profileEditor.m"

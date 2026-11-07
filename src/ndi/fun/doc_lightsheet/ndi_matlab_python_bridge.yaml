@@ -31,7 +31,7 @@ functions:
 
   - name: fromOMEZarr
     matlab_path: "+ndi/+fun/+doc/+lightsheet/fromOMEZarr.m"
-    matlab_last_sync_hash: "5c9e8a83"
+    matlab_last_sync_hash: "1b7876574"
     status: porting_deferred
     decision_log: >-
       MATLAB probes an OME-Zarr store with ndr.format.omezarr.listPyramids,
@@ -55,10 +55,21 @@ functions:
       follow: this function has no Python counterpart yet, and the
       Python viewer only reads the levels MATLAB wrote. The Python port
       must use the 32 MB default when it lands.
+      2026-11-07: examined against NDI-matlab 1b7876574 (VH-Lab/NDI-matlab#1045
+      and #1178, merged). Three changes the Python port must carry when it
+      lands. (1) The target may be an ndi.cloud.upload.SessionWriter instead
+      of a session: chunks are then always materialized and streamed to a
+      session of an NDI Cloud dataset (see the SessionWriter entry under
+      src/ndi/cloud/). (2) 1b7876574: translations are recorded as voxel
+      CORNERS (lightsheetZarrLevel.md), so the store's NGFF translations,
+      which place voxel CENTRES, have half a voxel of each level subtracted
+      along the spatial axes (centresToCorners); INFO.pyramids keeps the
+      store's own. (3) profileLog and resume options are forwarded to
+      makePyramid. Still porting_deferred with the group.
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makePyramid.m"
-    matlab_last_sync_hash: "04ce18f9"
+    matlab_last_sync_hash: "a3fcbbc48"
     status: porting_deferred
     decision_log: >-
       The worker fromOMEZarr calls; writes one lightsheetZarrPyramid
@@ -103,10 +114,27 @@ functions:
       'smartspim' slices, or 'reduce' from an earlier level's stored
       chunks) and channelNames, for fromSPIM. Default behaviour is
       unchanged; the Python port must carry levelSources when it lands.
+      2026-11-07: examined against NDI-matlab a3fcbbc48 (VH-Lab/NDI-matlab#1045
+      and #1178, merged). Much has changed, all of it for streaming a large
+      build to NDI Cloud; the Python port must match the DOCUMENTS it writes,
+      and should follow the rest when it lands. Documents: dtype is written as
+      the Zarr dtype string ('<u2'; dtypeName), whatever the source spells it,
+      and read in either form; translations are voxel corners (fromOMEZarr).
+      Build: a streaming target (SessionWriter: declare each level, then
+      streamMembers per batch, verified a batch later); whole-row super-blocks
+      (planSuperBlocks); level 1 of both ladders folded into level 0 from the
+      same reads of the SmartSPIM slices (buildFolded / planFoldCells, option
+      foldLevel1), or built together from one more read (twins); parallel
+      reads of z-slabs on readWorkers workers of their own, beside numWorkers
+      compressing (the pool is numWorkers + readWorkers); work-weighted
+      progress (chunkWeight); per-batch timing (BuildProfile, option
+      profileLog); resume (option resume: adopt the levels already in the
+      cloud and build only their missing chunks). Still porting_deferred with
+      the group; the Python napari viewer reads what this writes.
 
   - name: fromSPIM
     matlab_path: "+ndi/+fun/+doc/+lightsheet/fromSPIM.m"
-    matlab_last_sync_hash: "668beb13"
+    matlab_last_sync_hash: "1dcf98ec7"
     status: porting_deferred
     decision_log: >-
       Builds a lightsheetZarrPyramid straight from a SmartSPIM
@@ -119,6 +147,15 @@ functions:
       ndr-python's smartspim All_Channels reader.
       2026-10-12: examined against 668beb13 (was 04ce18f9): preallocation of
       the ladder arrays only; no behaviour change, nothing to port.
+      2026-11-07: examined against NDI-matlab 1dcf98ec7 (VH-Lab/NDI-matlab#1045
+      and #1178, merged). Adds a cloud target (an ndi.cloud.upload.SessionWriter,
+      level 1 reduced straight from the slices since level 0 does not stay on
+      disk) and the options readWorkers, splitReadsWithoutPool, foldLevel1,
+      profileLog and resume, forwarded to makePyramid. Every level's
+      translation is 0, the corner of voxel 0 (see lightsheetZarrLevel.md).
+      NDR-matlab ea26242 (VH-Lab/NDR-matlab#149, ported to NDR-python #38)
+      also accepts All_Channels slices named <z>_ch<k>.tiff. Still
+      porting_deferred with the group.
 
   - name: reduceBlocks
     matlab_path: "+ndi/+fun/+doc/+lightsheet/reduceBlocks.m"
@@ -200,10 +237,10 @@ functions:
 
   - name: viewCommand
     matlab_path: "+ndi/+fun/+doc/+lightsheet/viewCommand.m"
-    matlab_last_sync_hash: "d96fd856"
+    matlab_last_sync_hash: "b2af80d09"
     status: porting_deferred
     decision_log: >-
-      Pure command builder that ndi.gui.app.LightsheetZarrManager calls
+      Pure command builder that ndi.gui.app.LightsheetManager calls
       to construct the /usr/local/bin/napariViewLightsheet invocation.
       The flag set here defines the CLI in
       ndi.gui.app.lightsheetZarr.cli exactly, so if a Python-hosted
@@ -223,9 +260,13 @@ functions:
       2026-10-17: NDI-matlab d96fd856 (VH-Lab/NDI-matlab#1032) only rewords
       the no-launcher error to point at ndi.python.install(); nothing for this
       deferred port to follow.
+      2026-11-07: examined against NDI-matlab b2af80d09: a See also line
+      renamed (ndi.gui.app.LightsheetZarrManager is now LightsheetManager);
+      no behaviour change, nothing to port.
+
   - name: view
     matlab_path: "+ndi/+fun/+doc/+lightsheet/view.m"
-    matlab_last_sync_hash: "d96fd856"
+    matlab_last_sync_hash: "b2af80d09"
     status: porting_deferred
     decision_log: >-
       MATLAB caller that pairs viewCommand + SYSTEM: builds the
@@ -257,10 +298,13 @@ functions:
       ndi.python.launch with NDI_FROM_MATLAB=1. Both concern starting the
       console script from MATLAB; a Python port would call the viewer
       directly. Still deferred.
+      2026-11-07: examined against NDI-matlab b2af80d09: a See also line
+      renamed (ndi.gui.app.LightsheetZarrManager is now LightsheetManager);
+      no behaviour change, nothing to port.
 
   - name: launchViewer
     matlab_path: "+ndi/+fun/+doc/+lightsheet/launchViewer.m"
-    matlab_last_sync_hash: "2f9b0eaf"
+    matlab_last_sync_hash: "b2af80d09"
     status: matlab_only
     decision_log: >-
       MATLAB-side launch of the Python viewer: runs a viewCommand line
@@ -272,6 +316,9 @@ functions:
       ndi.gui.app.lightsheetZarr.viewer.openPyramid) with its output on
       the caller's own stderr, and the in-viewer log buffer
       (ndi.gui.feedback) already keeps it for problem reports.
+      2026-11-07: examined against NDI-matlab b2af80d09: a See also line
+      renamed (LightsheetZarrManager is now LightsheetManager); no behaviour
+      change.
 
   - name: viewerLogFile
     matlab_path: "+ndi/+fun/+doc/+lightsheet/viewerLogFile.m"
@@ -295,3 +342,33 @@ functions:
       NDI_FROM_MATLAB=1 to the shell line, so the console script drops
       MATLAB's library paths itself (src/_ndi_launch.py). Still MATLAB-only:
       Python starts no viewer through a shell line.
+
+  - name: dtypeName
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/dtypeName.m"
+    matlab_last_sync_hash: "67e985640"
+    status: porting_deferred
+    decision_log: >-
+      A voxel type as a Zarr (NumPy) dtype string ('<u2') or a MATLAB class
+      ('uint16'), from either form or a Zarr v3 name: makePyramid writes the
+      first into lightsheetZarrPyramid / lightsheetZarrLevel documents and
+      works with the second. Deferred with the group, as the documents'
+      writer it serves is. The Python reader needs no port of it: NumPy
+      takes either spelling, and ndi.pyramid.multiscale already maps
+      MATLAB class names to NumPy codes when reading a level's dtype, so
+      pyramids written before the dtype was normalized ('uint16') and after
+      ('<u2') both read.
+
+classes:
+
+  - name: BuildProfile
+    type: class
+    matlab_path: "+ndi/+fun/+doc/+lightsheet/BuildProfile.m"
+    matlab_last_sync_hash: "df55d3f4f"
+    status: porting_deferred
+    decision_log: >-
+      makePyramid's per-batch timings (read-wait, assemble, compress and how
+      busy the workers were, upload split into URLs / staging+CRC / waiting
+      for curl / cloud check, progress), summarized every 10 minutes and at
+      the end of each level, and appended as CSV rows to profileLog (a
+      job's profile.csv). It only measures makePyramid, so it ports with
+      makePyramid and the rest of the group.

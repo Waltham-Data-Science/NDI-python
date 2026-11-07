@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **`ndi.job`: the job record shared with NDI-matlab** (mirroring
+  VH-Lab/NDI-matlab#1178). `ndi_job_Job` reads and writes `job.json`
+  (`ndi_common/job_schema/job.schema.json`) the way `ndi.job.Job` does, so
+  `ndi_job_Job.list()` shows every job on this computer, including MATLAB's
+  lightsheet uploads, with `effectiveState`, `percentText` and
+  `remainingSeconds`, and `requestPause()` pauses one from Python. A job kind
+  Python does not run (every MATLAB kind, for now) loads as
+  `ndi_job_ForeignJob`: listed and pausable, never run. Subclasses define
+  `Kind` and `work()` and get run / pause / resume / restart / interrupted
+  detection.
+
 - **`vhneuropixelsGLX_nidq` vhlab DAQ system** (mirroring VH-Lab/NDI-matlab#1127).
   Reads the SpikeGLX NI-DAQ stream (`*.nidq.bin` / `*.nidq.meta`) with the NDR
   `neuropixelsGLX` reader, so probes on NI-DAQ digital lines can be described
@@ -204,6 +215,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `fileInfo`. `listFiles` and `getFileDetails` already pass `crc32` through.
 
 ### Fixed
+
+- **Lightsheet viewer: pyramids drawn half a voxel short.** A lightsheet
+  pyramid records where voxel 0's corner sits (now written down in
+  `lightsheetZarrLevel.md`, mirroring NDI-matlab 1b7876574); napari places
+  pixel centres, so `ndi.pyramid.multiscale.worldTransform` now adds half a
+  voxel along z, y and x.
 
 - **Bulk document download of large datasets no longer fails with HTTP 500**
   (mirroring NDI-matlab). `Cloud.Download.Max_Document_Batch_Count` defaulted

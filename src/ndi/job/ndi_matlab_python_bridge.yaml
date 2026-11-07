@@ -1,0 +1,123 @@
+# ndi_matlab_python_bridge.yaml — src/ndi/job/
+# The Primary Contract for the ndi.job namespace.
+
+project_metadata:
+  bridge_version: "1.1"
+  naming_policy: "Strict MATLAB Mirror"
+  indexing_policy: "Semantic Parity (1-based for user concepts, 0-based for internal data)"
+
+# =========================================================================
+# +ndi/+job -- long pieces of work that can be paused, resumed, restarted
+# (VH-Lab/NDI-matlab#1178). A job is a folder under $NDI_JOBS_DIR or
+# ~/.ndi/jobs with a job.json whose format is shared by both languages:
+# ndi_common/job_schema/job.schema.json. The Python port reads and writes
+# the same record, so a job either language runs is listed by the other,
+# and either can ask it to pause (a pause.request file the runner sees at
+# its next heartbeat).
+# =========================================================================
+
+classes:
+
+  - name: Job
+    type: class
+    matlab_path: "+ndi/+job/Job.m"
+    matlab_last_sync_hash: "8179b5849"
+    python_path: "ndi/job/job.py"
+    python_class: "ndi_job_Job"
+    inherits: "handle"
+    decision_log: >-
+      Ported, 2026-11-07, against NDI-matlab 8179b5849 (the file's
+      last-touching commit; merged in VH-Lab/NDI-matlab#1178). Same
+      job.json fields, in the same order (savedFields), the same states and
+      the same rules: run refuses a job running elsewhere; a job saved as
+      running on this computer whose pid is gone reads 'interrupted'; one
+      running on another computer is taken at its word; pausing is
+      cooperative through pause.request; beat saves at most every 5 s and
+      keeps a resumed run's place while it recounts (catch-up, up to 30
+      minutes); remainingSeconds paces from runStarted / runStartProgress;
+      percentText rounds down. Python registers no kinds yet, so every
+      MATLAB job (lightsheetToCloud) loads here as an ndi_job_ForeignJob:
+      listed and pausable, not run. Differences, each forced by the
+      language: the paused signal is a private exception (_JobPaused)
+      instead of the error id 'NDI:job:paused'; Ctrl+C is a
+      KeyboardInterrupt, caught to record 'interrupted' and re-raised
+      (MATLAB uses onCleanup); runtime is written as 'python'; fromUtc
+      returns None where MATLAB returns NaT; processAlive uses os.kill(pid,
+      0) on POSIX and OpenProcess on Windows (os.kill would terminate the
+      process there); host names are compared without case or domain
+      (_sameHost), because MATLAB records Java's host name and Python the
+      socket one, which on one Mac can differ by '.local'. Not ported: the
+      keep-awake hold (ndi.util.KeepAwake is porting_deferred, and
+      Jobs.KeepComputerAwake with it) and the navigator refresh
+      (jobsPane is porting_deferred). Covered by tests/test_job.py,
+      including a record validated against job.schema.json and the
+      schema's own MATLAB example loading as a foreign job.
+    methods:
+      - name: folder
+      - name: run
+      - name: beat
+      - name: requestPause
+      - name: pauseRequested
+      - name: restart
+      - name: remove
+      - name: effectiveState
+      - name: remainingSeconds
+      - name: canResume
+      - name: save
+      - name: initialize
+      - name: setCheckpoint
+      - name: percentText
+        kind: static
+      - name: root
+        kind: static
+      - name: load
+        kind: static
+      - name: list
+        kind: static
+      - name: register
+        kind: static
+      - name: classForKind
+        kind: static
+      - name: processId
+        kind: static
+      - name: processAlive
+        kind: static
+      - name: now
+        kind: static
+      - name: localTime
+        kind: static
+      - name: fromUtc
+        kind: static
+      - name: hostName
+        kind: static
+
+  - name: ForeignJob
+    type: class
+    matlab_path: "+ndi/+job/ForeignJob.m"
+    matlab_last_sync_hash: "a7b1d5c32"
+    python_path: "ndi/job/foreign_job.py"
+    python_class: "ndi_job_ForeignJob"
+    inherits: "ndi_job_Job"
+    decision_log: >-
+      Ported, 2026-11-07. A job this language can list but not run: its kind
+      has no registered class here, or its formatVersion is newer than this
+      code reads. run and restart raise; canResume is false; requestPause and
+      remove work, since they only touch the job's folder. In Python this is
+      every MATLAB lightsheetToCloud job.
+
+  - name: LightsheetToCloud
+    type: class
+    matlab_path: "+ndi/+job/LightsheetToCloud.m"
+    matlab_last_sync_hash: "9ad835013"
+    status: porting_deferred
+    decision_log: >-
+      The Lightsheet Manager's Add to a cloud session as a job (kind
+      'lightsheetToCloud'): fromSPIM or fromOMEZarr through an
+      ndi.cloud.upload.SessionWriter, every uploaded document saved in the
+      job folder so a later run adopts what is in the cloud, the writer's
+      cache in the job folder, profile.csv beside it, and spec fields
+      numWorkers and readWorkers. Deferred: its work is makePyramid streaming
+      to the cloud, which is porting_deferred with the rest of
+      ndi.fun.doc.lightsheet and ndi.cloud.upload.SessionWriter. Until it is
+      ported, Python lists these jobs as ndi_job_ForeignJob (and can pause
+      them); MATLAB runs them.
