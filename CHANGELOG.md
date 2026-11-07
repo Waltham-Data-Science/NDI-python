@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Jobs pane in the navigator** (`ndi.gui.nav.JobsPane`, MATLAB
+  `ndi.gui.nav.jobsPane`): every job on this computer, with its state,
+  percent done, time left and last update, and Pause / Resume / Restart /
+  Remove. It opens itself when a job exists. A running job refreshes it and
+  lets the window redraw at every heartbeat. Jobs MATLAB runs are listed and
+  can be paused from here.
+
 - **`ndi.job`: the job record shared with NDI-matlab** (mirroring
   VH-Lab/NDI-matlab#1178). `ndi_job_Job` reads and writes `job.json`
   (`ndi_common/job_schema/job.schema.json`) the way `ndi.job.Job` does, so

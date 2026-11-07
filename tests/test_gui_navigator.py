@@ -406,8 +406,15 @@ class TestNavigatorQt:
             "NDI",
             "NDI Cloud",
             "Datasets",
+            "Jobs",
             "Progress",
         ]
+
+    def test_jobs_pane_is_findable(self):
+        _qt_or_skip()
+        from ndi.gui.nav.jobs_pane import JobsPane
+
+        assert isinstance(Navigator().jobs_pane_handle(), JobsPane)
 
     def test_progress_pane_is_findable(self):
         _qt_or_skip()

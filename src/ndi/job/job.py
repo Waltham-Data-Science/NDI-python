@@ -117,6 +117,7 @@ class ndi_job_Job:
         self._beats = 0
         self._catchingUp = False
         self._runBegan: float | None = None
+        self._lastPaneRefresh: float | None = None
 
     # -- the work --------------------------------------------------------
 
@@ -160,6 +161,7 @@ class ndi_job_Job:
         self._runBegan = time.monotonic()
         self._beats = 0
         self.save()
+        self._refreshPane(True)
         try:
             self.work()
             self.state = "done"
@@ -174,6 +176,7 @@ class ndi_job_Job:
             self.message = f"Interrupted at {ndi_job_Job.percentText(self.progress)}."
             self.pid = 0
             self.save()
+            self._refreshPane(True)
             raise
         except Exception as exc:  # noqa: BLE001 -- any failure of the work is recorded
             self.state = "failed"
@@ -181,6 +184,7 @@ class ndi_job_Job:
             self.lastError = "".join(traceback.format_exception(exc))
         self.pid = 0
         self.save()
+        self._refreshPane(True)
 
     def beat(self, fraction: float, text: str = "") -> None:
         """WORK's regular sign of life: progress, and the chance to pause.
@@ -218,8 +222,49 @@ class ndi_job_Job:
             self.requestPause()
         if self._lastSaved is None or time.monotonic() - self._lastSaved >= 5:
             self.save()
+        self._refreshPane(False)
         if self.pauseRequested():
             raise _JobPaused(f'Job "{self.title}" was paused.')
+
+    def _refreshPane(self, force: bool) -> None:
+        """Keep an open navigator's Jobs pane current (at most every 5 s), and let it redraw.
+
+        MATLAB's refreshPane plus its ``drawnow limitrate``: a job runs in the
+        GUI's thread, so this is when Pause and the progress column respond.
+        Looks only if the navigator module is already loaded, so a job run
+        without the GUI never imports Qt.
+        """
+        nav_module = sys.modules.get("ndi.gui.navigator")
+        if nav_module is None:
+            return
+        if (
+            not force
+            and self._lastPaneRefresh is not None
+            and time.monotonic() - self._lastPaneRefresh < 5
+        ):
+            self._processEvents()
+            return
+        self._lastPaneRefresh = time.monotonic()
+        try:
+            for nav in nav_module.Navigator.find_open():
+                pane = nav.jobs_pane_handle()
+                if pane is not None:
+                    pane.refresh()
+        except Exception:  # noqa: BLE001 -- a GUI hiccup must not stop the work
+            pass
+        self._processEvents()
+
+    @staticmethod
+    def _processEvents() -> None:
+        qt = sys.modules.get("PySide6.QtWidgets")
+        if qt is None:
+            return
+        try:
+            app = qt.QApplication.instance()
+            if app is not None:
+                app.processEvents()
+        except Exception:  # noqa: BLE001
+            pass
 
     def requestPause(self) -> None:
         """Ask a running job to stop at its next heartbeat (from any process)."""
