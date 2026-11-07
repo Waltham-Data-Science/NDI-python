@@ -10,6 +10,7 @@ MATLAB equivalents: +ndi/+cloud/+api/+files/*.m,
 
 from __future__ import annotations
 
+import datetime
 import logging
 import re
 import time
@@ -1172,9 +1173,10 @@ def listActiveBulkUploads(
     dataset_id: CloudId,
     *,
     state: Literal["active", "all", "queued", "extracting", "complete", "failed"] = "active",
+    since: datetime.datetime | None = None,
     client: _Client = None,
 ) -> dict[str, Any]:
-    """GET /datasets/{datasetId}/bulk-uploads[?state=...]
+    """GET /datasets/{datasetId}/bulk-uploads[?state=...&since=...]
 
     List bulk upload jobs the server is tracking for *dataset_id*.
 
@@ -1184,6 +1186,11 @@ def listActiveBulkUploads(
             ``queued + extracting``), ``'all'`` (includes recent
             history), ``'queued'``, ``'extracting'``, ``'complete'``,
             ``'failed'``.
+        since: Only return terminal (``'complete'``/``'failed'``) jobs
+            whose ``completedAt`` is at or after this time; active jobs
+            are always returned.  A datetime without a time zone is
+            taken as UTC.  Default: no limit.  Servers that predate this
+            filter ignore it.
 
     Returns:
         Dict with fields ``datasetId`` and ``jobs`` (a list of job
@@ -1191,11 +1198,85 @@ def listActiveBulkUploads(
 
     MATLAB equivalent: +cloud/+api/+files/listActiveBulkUploads.m
     """
+    params: dict[str, str] = {"state": state}
+    if since is not None:
+        params["since"] = _utc_iso_millis(since)
     return client.get(
         "/datasets/{datasetId}/bulk-uploads",
-        params={"state": state},
+        params=params,
         datasetId=dataset_id,
     )
+
+
+def _utc_iso_millis(t: datetime.datetime) -> str:
+    """T as UTC ``yyyy-MM-ddTHH:mm:ss.SSSZ`` (an unzoned T is taken as UTC), as MATLAB sends it."""
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=datetime.timezone.utc)
+    t = t.astimezone(datetime.timezone.utc)
+    return t.strftime("%Y-%m-%dT%H:%M:%S.") + f"{t.microsecond // 1000:03d}Z"
+
+
+def _parse_timestamp(value: Any) -> datetime.datetime | None:
+    """An ISO 8601 server timestamp as a UTC datetime; None if empty or unreadable.
+
+    MATLAB: ``WaitForAllBulkUploads.parseTimestamp``. Fractional seconds are
+    dropped, a trailing Z is UTC, and a time without an offset is taken as UTC.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = re.sub(r"(:\d{2})\.\d+", r"\1", value.strip())
+    text = re.sub(r"[zZ]$", "+00:00", text)
+    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+        try:
+            t = datetime.datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=datetime.timezone.utc)
+        return t.astimezone(datetime.timezone.utc)
+    return None
+
+
+def _is_before(job: Any, fields: tuple[str, ...], cutoff: datetime.datetime) -> bool:
+    """True if the first readable timestamp among FIELDS is before CUTOFF; False if none is."""
+    if not isinstance(job, dict):
+        return False
+    for f in fields:
+        t = _parse_timestamp(job.get(f))
+        if t is not None:
+            return t < cutoff
+    return False
+
+
+def partitionStaleJobs(
+    jobs: list[Any], staleAfter: float, nowUtc: datetime.datetime
+) -> tuple[list[Any], list[Any]]:
+    """Split active bulk-upload jobs into (live, stale).
+
+    A job is stale (an abandoned upload) when its state is ``'queued'`` and
+    its ``createdAt`` is more than STALEAFTER seconds before NOWUTC. Jobs in
+    any other state, or with no readable ``createdAt``, are live.
+
+    MATLAB: ``ndi.cloud.api.implementation.files.WaitForAllBulkUploads.partitionStaleJobs``.
+    """
+    cutoff = nowUtc - datetime.timedelta(seconds=staleAfter)
+    live: list[Any] = []
+    stale: list[Any] = []
+    for j in jobs or []:
+        queued = isinstance(j, dict) and str(j.get("state", "")).lower() == "queued"
+        (stale if queued and _is_before(j, ("createdAt",), cutoff) else live).append(j)
+    return live, stale
+
+
+def jobsCompletedSince(jobs: list[Any], sinceUtc: datetime.datetime) -> list[Any]:
+    """The jobs that finished at or after SINCEUTC (by ``completedAt``, else ``createdAt``).
+
+    Jobs with neither timestamp readable are kept, so an unexpected server
+    response errs toward reporting a failure.
+
+    MATLAB: ``ndi.cloud.api.implementation.files.WaitForAllBulkUploads.jobsCompletedSince``.
+    """
+    return [j for j in jobs or [] if not _is_before(j, ("completedAt", "createdAt"), sinceUtc)]
 
 
 @_auto_client
@@ -1260,6 +1341,7 @@ def waitForAllBulkUploads(
     max_interval: float = 30.0,
     backoff_factor: float = 2.0,
     require_all_complete: bool = True,
+    stale_after: float = 3600.0,
     client: _Client = None,
 ) -> dict[str, Any]:
     """Wait for every bulk-upload job on a dataset to finish.
@@ -1277,53 +1359,83 @@ def waitForAllBulkUploads(
         initial_interval: First sleep between polls (s).  Default 1.
         max_interval: Cap on the per-poll sleep (s).  Default 30.
         backoff_factor: Multiplier applied after each poll.  Default 2.
-        require_all_complete: If True, return ``state='failed'`` when
-            any job on the dataset ended in ``'failed'``.  If False,
-            return ``state='complete'`` as soon as the active set
-            drains, regardless of failure history.  Default True.
+        require_all_complete: If True, return ``state='failed'`` when a
+            job on the dataset failed recently: its ``completedAt`` is no
+            more than ``stale_after`` seconds before this call began, or
+            later.  Older failures are history and are ignored.  If False,
+            return ``state='complete'`` as soon as the active set drains.
+            Default True.
+        stale_after: Seconds after which a ``'queued'`` job is treated as
+            abandoned and ignored (the server creates a queued job whenever
+            a bulk upload URL is requested, and it stays queued until the
+            zip arrives).  Measured from ``createdAt``.  ``'extracting'``
+            jobs are always waited for.  Also sets the window for recent
+            failures.  Default 3600 (1 hour).
 
     Returns:
         Dict describing the final state with fields ``state``
         (``'complete'``, ``'failed'``, or ``'timeout'``), ``jobs``
-        (active or failed jobs), and ``elapsed`` (wall-clock seconds).
+        (active or recently failed jobs), ``elapsed`` (wall-clock
+        seconds), and, once a poll has succeeded, ``staleJobs`` (the
+        queued jobs ignored as abandoned).
 
     MATLAB equivalent: +cloud/+api/+files/waitForAllBulkUploads.m
     """
     start = time.monotonic()
     interval = initial_interval
     last_jobs: list[dict[str, Any]] = []
+    stale_jobs: list[Any] = []
     ever_listed = False
+    failed_since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        seconds=stale_after
+    )
     while True:
         elapsed = time.monotonic() - start
         try:
-            scope = "all" if require_all_complete else "active"
-            listing = listActiveBulkUploads(dataset_id, state=scope, client=client)
+            if require_all_complete:
+                # One listing for both questions; 'since' limits the terminal
+                # jobs to recent ones (active jobs are always returned).
+                listing = listActiveBulkUploads(
+                    dataset_id, state="all", since=failed_since, client=client
+                )
+            else:
+                listing = listActiveBulkUploads(dataset_id, state="active", client=client)
             jobs = listing.get("jobs", []) if hasattr(listing, "get") else []
-            last_jobs = list(jobs) if jobs else []
+            jobs = list(jobs) if jobs else []
             ever_listed = True
 
             active_jobs = [
                 j
-                for j in last_jobs
+                for j in jobs
                 if (j.get("state", "") if isinstance(j, dict) else "") in _ACTIVE_BULK_STATES
             ]
-            failed_jobs = [
-                j
-                for j in last_jobs
-                if (j.get("state", "") if isinstance(j, dict) else "") == "failed"
-            ]
+            last_jobs, stale_jobs = partitionStaleJobs(
+                active_jobs, stale_after, datetime.datetime.now(datetime.timezone.utc)
+            )
+            # Applied here as well as by the server, for servers that
+            # predate the 'since' filter.
+            failed_jobs = jobsCompletedSince(
+                [
+                    j
+                    for j in jobs
+                    if (j.get("state", "") if isinstance(j, dict) else "") == "failed"
+                ],
+                failed_since,
+            )
 
-            if not active_jobs:
+            if not last_jobs:
                 if require_all_complete and failed_jobs:
                     return {
                         "state": "failed",
                         "jobs": failed_jobs,
                         "elapsed": time.monotonic() - start,
+                        "staleJobs": stale_jobs,
                     }
                 return {
                     "state": "complete",
                     "jobs": [],
                     "elapsed": time.monotonic() - start,
+                    "staleJobs": stale_jobs,
                 }
         except Exception as exc:
             # A blip after we have seen the listing work is worth riding out:
@@ -1348,6 +1460,7 @@ def waitForAllBulkUploads(
                 "state": "timeout",
                 "jobs": last_jobs,
                 "elapsed": time.monotonic() - start,
+                "staleJobs": stale_jobs,
             }
         time.sleep(interval)
         interval = min(interval * backoff_factor, max_interval)

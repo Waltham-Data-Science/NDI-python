@@ -223,6 +223,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Waiting for bulk uploads no longer stalls on abandoned or old jobs**
+  (mirroring VH-Lab/NDI-matlab#1189). `waitForAllBulkUploads` ignores a
+  `queued` job older than `stale_after` (default one hour: an upload whose
+  zip never arrived), still waits for every `extracting` job, and counts only
+  failures from that same window, so one old failure no longer fails every
+  later wait. `listActiveBulkUploads` takes `since`.
+
 - **Lightsheet viewer: pyramids drawn half a voxel short.** A lightsheet
   pyramid records where voxel 0's corner sits (now written down in
   `lightsheetZarrLevel.md`, mirroring NDI-matlab 1b7876574); napari places
