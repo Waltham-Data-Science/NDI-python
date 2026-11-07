@@ -822,9 +822,10 @@ ported_late:
       and the actions (pause_selected, resume_selected, ...) run without Qt,
       so tests/test_gui_nav_jobs_pane.py covers them without a display; the
       Qt build is tested when PySide6 is present. durationText rounds half
-      away from zero, as MATLAB does (Python's round would not). Until Python
-      runs a job kind, a MATLAB job listed here can be paused but not resumed
-      (Resume is disabled: it is an ndi_job_ForeignJob).
+      away from zero, as MATLAB does (Python's round would not). A job of a
+      kind only MATLAB defines can be paused but not resumed here (Resume is
+      disabled: it is an ndi_job_ForeignJob); lightsheetToCloud jobs, ported,
+      are resumed here like any other.
 
   - name: updateDialog
     matlab_path: "+ndi/+gui/+nav/updateDialog.m"

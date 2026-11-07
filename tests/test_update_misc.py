@@ -190,6 +190,11 @@ def test_cli_update_reports_refusal(monkeypatch, capsys):
 # ---- the navigator's Update button -------------------------------------------
 
 
-def test_pane_is_wide_enough_for_three_buttons():
+def test_pane_is_wide_enough_for_its_buttons():
+    """Broom, coffee cup (keep awake), Update and Prefs, with a spacing between each."""
+    from ndi.gui.nav.ndi_pane import CUP_WIDTH
+
     pane = NdiPane()
-    assert pane.right_width() == BROOM_WIDTH + UPDATE_WIDTH + PREFS_WIDTH + 2 * BUTTON_SPACING
+    assert pane.right_width() == (
+        BROOM_WIDTH + CUP_WIDTH + UPDATE_WIDTH + PREFS_WIDTH + 3 * BUTTON_SPACING
+    )

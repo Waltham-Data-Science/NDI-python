@@ -139,13 +139,16 @@ class TestCupButton:
 
     def test_listener_goes_with_the_button(self, keep_awake, qt_layout):
         app, _, layout = qt_layout
-        from PySide6 import QtCore
 
         p = NdiPane()
         p.build(layout, 0)
         assert len(keep_awake._listeners) == 1
-        p.cup_button.deleteLater()
-        app.sendPostedEvents(None, QtCore.QEvent.Type.DeferredDelete)
+        # Delete just this button, now. (Flushing every deferred delete with
+        # sendPostedEvents(None, DeferredDelete) also frees widgets other tests
+        # still hold, which crashed a full run.)
+        from shiboken6 import Shiboken
+
+        Shiboken.delete(p.cup_button)
         app.processEvents()
         assert keep_awake._listeners == []
         keep_awake.hold("a")  # must not touch the deleted button

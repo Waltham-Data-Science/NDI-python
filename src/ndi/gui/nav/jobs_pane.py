@@ -17,8 +17,9 @@ and when it last updated.
 A job runs in this process, so while one runs the window is busy; the job
 lets the window redraw at every heartbeat (``ndi_job_Job._refreshPane``),
 which is when Pause and the progress column respond. Jobs MATLAB runs are
-listed too: Python can pause them (MATLAB sees the request at its next
-heartbeat) but not resume them, since Python has no class for their kind.
+listed too, and Python can pause them (MATLAB sees the request at its next
+heartbeat) and resume them -- except a kind only MATLAB defines, which loads
+as an ndi_job_ForeignJob and can only be paused.
 
 As elsewhere in this package, what the pane shows -- the rows, the duration
 and time text, which buttons are enabled -- is plain Python and tested

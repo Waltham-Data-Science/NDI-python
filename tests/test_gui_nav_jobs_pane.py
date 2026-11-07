@@ -169,8 +169,9 @@ class TestThePane:
         assert p.selected_job().id == b.id
         assert {j.id for j in p.jobs} == {a.id, b.id}
 
-    def test_a_matlab_job_can_be_paused_not_resumed(self, jobs_dir):
+    def test_a_foreign_job_can_be_paused_not_resumed(self, jobs_dir):
         rec = json.loads(SCHEMA.read_text())["examples"][0]
+        rec["kind"] = "someMatlabOnlyKind"  # one Python has no class for
         (jobs_dir / rec["id"]).mkdir(parents=True)
         (jobs_dir / rec["id"] / "job.json").write_text(json.dumps(rec))
         p = JobsPane()

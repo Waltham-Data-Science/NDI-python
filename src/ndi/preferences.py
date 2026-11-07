@@ -214,6 +214,33 @@ class ndi_preferences:
             "float",
             "Maximum size of file batch upload in bytes (default 250 MB).",
         )
+        # The two streamed-upload items NDI-matlab registers for
+        # ndi.cloud.upload.SessionWriter, same keys and defaults, so one
+        # setting governs either language's writer.
+        self._add_item(
+            "Cloud",
+            "Upload",
+            "Send_Batches_As_Zip",
+            False,
+            "bool",
+            "When NDI streams files to a cloud session in batches (a lightsheet pyramid's "
+            "chunks; ndi.cloud SessionWriter), send each batch as one uncompressed zip "
+            "through the bulk upload instead of one signed upload per file. One request per "
+            "batch instead of one per file, but the server must unpack each zip before its "
+            "files are there. Off by default while it is being measured.",
+        )
+        self._add_item(
+            "Cloud",
+            "Upload",
+            "Parallel_Uploads",
+            4,
+            "int",
+            "How many files NDI sends to cloud storage at once when it streams files in "
+            "batches (a lightsheet pyramid's chunks; ndi.cloud SessionWriter). More can help "
+            "on a fast network where one connection cannot fill the link (try 8 or 16); 1 "
+            "sends one file at a time and waits. A running job picks a change up when it is "
+            "resumed.",
+        )
         self._add_item(
             "GUI",
             "Navigator",

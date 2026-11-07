@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Stream files to an NDI Cloud session** (`ndi.cloud.session_writer.SessionWriter`,
+  MATLAB `ndi.cloud.upload.SessionWriter`). To the lightsheet builders it looks
+  like a session. Chunks are sent in the background as they are made,
+  CRC-32-signed, `Cloud.Upload.Parallel_Uploads` at a time (on a thread pool
+  where MATLAB uses a background curl). Each batch is checked with the cloud a
+  batch later, late-recorded files are rechecked, failed sends are resent at
+  once, and a resumed build adopts what the cloud has.
+  `ndi.cloud.signed_upload_urls.signedUploadURLs` gets a batch's upload URLs
+  concurrently. The preferences `Cloud.Upload.Parallel_Uploads` and
+  `Cloud.Upload.Send_Batches_As_Zip` are shared with NDI-matlab.
+
 - **Build lightsheet pyramids in Python** (`ndi.fun.doc_lightsheet`, MATLAB
   `ndi.fun.doc.lightsheet`). `fromSPIM` builds from a SmartSPIM acquisition's
   `All_Channels` slices, `fromOMEZarr` from an OME-Zarr store, and both use
@@ -41,8 +52,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `ndi_job_Job.list()` shows every job on this computer, including MATLAB's
   lightsheet uploads, with `effectiveState`, `percentText` and
   `remainingSeconds`, and `requestPause()` pauses one from Python. A job kind
-  Python does not run (every MATLAB kind, for now) loads as
-  `ndi_job_ForeignJob`: listed and pausable, never run. Subclasses define
+  Python does not run (a kind only MATLAB defines) loads as
+  `ndi_job_ForeignJob`: listed and pausable, never run. `lightsheetToCloud`
+  (`ndi_job_LightsheetToCloud`) is ported: a SmartSPIM or OME-Zarr image built
+  straight into a session of an NDI Cloud dataset through
+  `ndi.cloud.session_writer.SessionWriter`, resumable from where it stopped,
+  and started, paused or resumed from either language. Subclasses define
   `Kind` and `work()` and get run / pause / resume / restart / interrupted
   detection.
 

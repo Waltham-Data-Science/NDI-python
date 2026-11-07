@@ -624,7 +624,7 @@ class _Build:
     """State of one makePyramid call (MATLAB's nested-function workspace)."""
 
     def __init__(self, session, pyramids, perEntryReduction, o: dict):
-        self.session = session
+        self.target = session  # a session, or a streaming target (ndi.cloud SessionWriter)
         self.pyramids = pyramids
         self.o = o
         self.levelSources: dict = o["levelSources"] or {}
@@ -740,9 +740,9 @@ class _Build:
             # Each stored chunk resolved to its file once, here on this thread
             # (the database belongs to it); the readers then read plain files.
             for i in range(1, nFrom + 1):
-                fh = self.session.database_openbinarydoc(frm, f"chunk.bin_{i}")
+                fh = self.target.database_openbinarydoc(frm, f"chunk.bin_{i}")
                 paths.append(str(getattr(fh, "name", "")))
-                self.session.database_closebinarydoc(fh)
+                self.target.database_closebinarydoc(fh)
             source.update(
                 fromShape=_int_row(fp["shape"]),
                 fromChunks=_int_row(fp["chunks"]),
@@ -757,7 +757,7 @@ class _Build:
         raise ValueError(f"Unknown level source kind '{kind}' for level {p}.")
 
     def newStream(self, p: str, levelIndex: int, reductionFn: str, readers: dict) -> dict:
-        s = {"session": self.session, "retain": readers.get(p, 0) > 0, "existing": None}
+        s = {"session": self.target, "retain": readers.get(p, 0) > 0, "existing": None}
         if self.o["resume"]:
             s["existing"] = _resumedLevel(self.o["resume"], levelIndex, reductionFn)
         return s
@@ -781,7 +781,7 @@ def _prepareLevel(
     o = b.o
     nChunksStored = int(np.prod(grid)) if o["materializeChunks"] else 0
     pre = "lightsheetZarrLevel."
-    levelDoc = b.session.newdocument(
+    levelDoc = b.target.newdocument(
         "lightsheetZarrLevel",
         **{
             pre + "label": f"{entry['name']} level {levelIndex} ({reductionFn})",
@@ -816,8 +816,8 @@ def _prepareLevel(
         nChunks = int(np.prod(grid))
         if stream["existing"] is not None:
             levelDoc = stream["existing"]
-            b.session.adopt(levelDoc)
-            stream["only"] = [int(i) for i in b.session.missingMembers(levelDoc, "chunk.bin")]
+            b.target.adopt(levelDoc)
+            stream["only"] = [int(i) for i in b.target.missingMembers(levelDoc, "chunk.bin")]
             if not stream["only"]:
                 doneChunks += nChunks * _chunkWeight(source)
                 _cleanupTmp(tmpRoot)
@@ -827,7 +827,7 @@ def _prepareLevel(
         else:
             planned = [os.path.join(tmpRoot, f"chunk_{i}.bin") for i in range(1, nChunks + 1)]
             levelDoc = _addFileSeries(levelDoc, "chunk.bin", planned, list(range(1, nChunks + 1)))
-            b.session.declare(levelDoc)
+            b.target.declare(levelDoc)
             stream["only"] = []
         stream["levelDoc"] = levelDoc
         stream["tmpRoot"] = tmpRoot
@@ -1285,7 +1285,7 @@ def _makeOneLevel(
             if twin is not None:
                 twinDoc = twin["levelDoc"]
         if stream is None:
-            b.session.database_add(levelDoc)
+            b.target.database_add(levelDoc)
         return levelDoc, doneChunks, twinDoc, foldDocs
     finally:
         for t in tmps:

@@ -3,8 +3,8 @@
 MATLAB counterpart: ``+ndi/+job/ForeignJob.m``.
 
 :meth:`ndi.job.job.ndi_job_Job.load` returns one for a job.json whose kind no
-class here is registered for (a job made by NDI-matlab, such as a
-``lightsheetToCloud`` build), or whose formatVersion is newer than this code
+class here is registered for (a kind only NDI-matlab defines), or whose
+formatVersion is newer than this code
 reads. Its state and progress can be listed, and it can be asked to pause
 (the runner is another process, which sees the request at its next
 heartbeat); run, restart and resume are refused, and remove only deletes the

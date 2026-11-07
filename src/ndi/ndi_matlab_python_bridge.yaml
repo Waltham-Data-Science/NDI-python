@@ -1231,6 +1231,12 @@ classes:
       holds ndi.util.keep_awake.ndi_util_KeepAwake (ported) while a job runs
       unless it is false. Same key, default (true) and description as
       MATLAB, registered as "bool", so one setting governs both languages.
+      2026-11-07: Cloud.Upload.Send_Batches_As_Zip (bool, false) and
+      Cloud.Upload.Parallel_Uploads (int, 4) are now ported too, because the
+      Python SessionWriter (ndi.cloud.session_writer, ported) reads them: same
+      keys, defaults and descriptions as MATLAB. Only
+      GUI.LightsheetManager.ViewerLauncher stays unregistered (read only by
+      the MATLAB-only LightsheetManager).
 
     properties:
       - name: Items

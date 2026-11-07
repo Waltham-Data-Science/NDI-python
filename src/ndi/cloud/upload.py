@@ -803,3 +803,11 @@ def uploadSingleFile(
 # whose whole subject was regression coverage for those two shims.
 # The bridge YAML entries under the same names in
 # src/ndi/cloud/ndi_matlab_python_bridge.yaml record the retirement.
+
+
+# MATLAB's +ndi/+cloud/+upload package also holds the streaming cloud writer
+# (SessionWriter, CurlSender, signedUploadURLs). They live in their own
+# modules and are re-exported here, so ndi.cloud.upload.SessionWriter reads as
+# MATLAB's ndi.cloud.upload.SessionWriter does.
+from .session_writer import SessionWriter, SessionWriterError, ThreadSender  # noqa: E402,F401
+from .signed_upload_urls import signedUploadURLs  # noqa: E402,F401

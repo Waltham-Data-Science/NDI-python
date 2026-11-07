@@ -2,8 +2,9 @@
 
 MATLAB counterpart: tests/+ndi/+unittest/+job/TestJob.m. The job.json
 format is ndi_common/job_schema/job.schema.json; a record written here must
-validate against it, and one MATLAB writes (the schema's own example, a
-lightsheetToCloud build) must load here as a listed, unrunnable job.
+validate against it, and a MATLAB record of a kind Python lacks must load
+here as a listed, unrunnable job (the schema's own lightsheetToCloud
+example, a kind Python runs too, is tested in test_job_lightsheet_to_cloud).
 """
 
 from __future__ import annotations
@@ -191,14 +192,15 @@ class TestTheSharedFormat:
         assert list(record) == list(ndi_job_Job._SAVED_FIELDS), "written in the MATLAB order"
         assert record["runtime"] == "python"
 
-    def test_a_matlab_job_is_listed_but_not_run(self, jobs_dir):
+    def test_a_kind_python_lacks_is_listed_but_not_run(self, jobs_dir):
         rec = matlab_example()
+        rec["kind"] = "someMatlabOnlyKind"
         write_record(jobs_dir / rec["id"], rec)
         jobs = ndi_job_Job.list()
         assert len(jobs) == 1
         job = jobs[0]
         assert isinstance(job, ndi_job_ForeignJob)
-        assert job.kind == "lightsheetToCloud"
+        assert job.kind == "someMatlabOnlyKind"
         assert job.runtime == "matlab"
         assert job.spec["numWorkers"] == 12
         assert not job.canResume()

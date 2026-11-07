@@ -12,7 +12,7 @@ the other way round.
 THE FORMAT IS SHARED WITH NDI-MATLAB: ``ndi_common/job_schema/job.schema.json``
 (formatVersion 1). ``kind`` is a language-neutral name mapped to a class by
 each language's registry (:meth:`ndi_job_Job.register`); a job whose kind this
-Python does not know (a MATLAB-only kind such as ``lightsheetToCloud``), or
+Python does not know (a kind only MATLAB defines), or
 whose formatVersion is newer than it reads, loads as an
 :class:`ndi.job.foreign_job.ndi_job_ForeignJob`: listed, never run.
 
