@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Build lightsheet pyramids in Python** (`ndi.fun.doc_lightsheet`, MATLAB
+  `ndi.fun.doc.lightsheet`). `fromSPIM` builds from a SmartSPIM acquisition's
+  `All_Channels` slices, `fromOMEZarr` from an OME-Zarr store, and both use
+  `makePyramid`. They write the same `lightsheetZarrPyramid` /
+  `lightsheetZarrLevel` documents and chunk bytes as NDI-matlab: `<u2` dtype,
+  corner translations, C-order chunks with Blosc-Zstd. That covers
+  levelSources, whole-row super-blocks, level 1 folded into level 0, twin
+  levels, streaming to a cloud target and resume. Compression and slice
+  reads run on thread pools (`numWorkers`, `readWorkers`). The helpers are
+  ported too: `dtypeName`, `reduceBlocks`, `chooseTileShape`, `chooseLevel`,
+  `levelTable`, `makeSourceFile`, `viewCommand`, `view` and `BuildProfile`
+  (`profile.csv` with MATLAB's columns).
+
 - **Keep the computer awake while a job runs** (`ndi.util.keep_awake.ndi_util_KeepAwake`,
   MATLAB `ndi.util.KeepAwake`). It uses caffeinate on macOS, systemd-inhibit on
   Linux and SetThreadExecutionState on Windows. A job holds it while it runs

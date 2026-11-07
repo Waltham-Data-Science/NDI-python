@@ -11,28 +11,27 @@ project_metadata:
 # (VH-Lab/NDI-matlab claude/lightsheet-zarr-ndi-viewer-djp5vk).
 #
 # A group of MATLAB functions that build lightsheetZarrPyramid +
-# lightsheetZarrLevel documents from an OME-Zarr store and read them
-# back through the NDI cloud cache. None have a Python counterpart yet.
-# The napari viewer they enable is on the Python side already
-# (src/ndi/gui/app/lightsheetZarr/), but its reader queries the same
-# documents through the standard NDI query API rather than through a
-# ported wrapper: the Python surface a viewer needs and the Python
-# surface a script needs are different, and the second waits until
-# there is a caller.
+# lightsheetZarrLevel documents from an OME-Zarr store (or SmartSPIM
+# slices) and read them back through the NDI cloud cache.
 #
-# When the ingest boundary is drawn on the Python side, these functions
-# port as a group into a doc_lightsheet.py flat file, mirroring how
-# doc_gene.py mirrors +ndi/+fun/+doc/+gene. Deferred as a group rather
-# than a file at a time because they call each other -- fromOMEZarr
-# drives makePyramid + makeSourceFile, and readViewport-style callers
-# will need chooseLevel + levelTable.
+# 2026-11-07: the helpers are ported, one module per MATLAB file under
+# src/ndi/fun/doc_lightsheet/ (the layout of ndr.format.omezarr):
+# dtypeName, reduceBlocks, chooseTileShape, chooseLevel, levelTable,
+# makeSourceFile, viewCommand, view and the BuildProfile class; and the
+# builders that call them -- makePyramid, fromSPIM, fromOMEZarr -- as
+# modules of the same package, writing the same documents and chunk bytes
+# as MATLAB (tests/test_fun_doc_lightsheet_build.py).
+# launchViewer, viewerLogFile and viewerShellCommand stay matlab_only:
+# Python starts the viewer directly (view.py), with no shell line or
+# temp log. The napari viewer the documents feed is
+# src/ndi/gui/app/lightsheetZarr/.
 # =========================================================================
 functions:
 
   - name: fromOMEZarr
     matlab_path: "+ndi/+fun/+doc/+lightsheet/fromOMEZarr.m"
     matlab_last_sync_hash: "1b7876574"
-    status: porting_deferred
+    python_path: "ndi/fun/doc_lightsheet/fromOMEZarr.py"
     decision_log: >-
       MATLAB probes an OME-Zarr store with ndr.format.omezarr.listPyramids,
       writes ONE lightsheetZarrPyramid document (per source volume), and
@@ -66,11 +65,23 @@ functions:
       along the spatial axes (centresToCorners); INFO.pyramids keeps the
       store's own. (3) profileLog and resume options are forwarded to
       makePyramid. Still porting_deferred with the group.
+      2026-11-07: ported against NDI-matlab 1b7876574. Same steps: listPyramids,
+      pyramidNames filter, centresToCorners on spatial axes (type 'space', or
+      named x/y/z when untyped), pickReduction (reductionMap by name then
+      type; 'max' for a max type or name, else 'mean' with a warning for an
+      unknown type), makeSourceFile unless sourceFileID, a cloud target
+      (anything with streamMembers and commit: ndi.cloud's SessionWriter)
+      always materializes and is committed into info['cloud']. reductionMap
+      is a dict (MATLAB: struct or containers.Map). progressFcn 'default'
+      opens a ProgressBarWindow bar only when a Qt application is running and
+      otherwise prints to standard error every 10 s (_progress.py); MATLAB
+      always tries the window. info['reductions'] is sorted, as MATLAB's
+      unique returns it.
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makePyramid.m"
     matlab_last_sync_hash: "a3fcbbc48"
-    status: porting_deferred
+    python_path: "ndi/fun/doc_lightsheet/makePyramid.py"
     decision_log: >-
       The worker fromOMEZarr calls; writes one lightsheetZarrPyramid
       parent (describes the source volume, reduction-agnostic) plus one
@@ -131,11 +142,37 @@ functions:
       profileLog); resume (option resume: adopt the levels already in the
       cloud and build only their missing chunks). Still porting_deferred with
       the group; the Python napari viewer reads what this writes.
+      2026-11-07: ported against NDI-matlab a3fcbbc48: the same documents
+      (every field, '<u2' dtypes, corner translations, chunk_index_origin 1,
+      codec_params JSON), the same chunk bytes (C order, zero-padded edges,
+      Blosc zstd with byte shuffle and blocksize 0 through numcodecs), the
+      same chunk numbering, levelSources (omezarr, smartspim, reduce,
+      reduceSmartspim), whole-row super-blocks, work-weighted progress,
+      streaming (declare, streamMembers per super-block, retain and
+      releaseMembers, replaceOnCommit with the label's "(uploading)" dropped),
+      level 1 folded into level 0 (planFoldCells, 8 GB cap), twins, resume
+      (adopt, missingMembers) and BuildProfile rows. Differences, each forced
+      by the language: MATLAB's parpool and parfeval become thread pools
+      (compression on numWorkers threads, slab reads on readWorkers threads;
+      Blosc and the TIFF decoders release the GIL), so numWorkers=-1 means
+      one worker per core where MATLAB means "the pool already open, else
+      serial", and there is no bigger pool to open; slices are read through
+      tifffile's zarr view, decoding only the strips a window needs (MATLAB:
+      imread PixelRegion), with the same 30-minute retry; regions are 0-based
+      half-open internally; a job's pause (ndi.job _JobPaused) passes
+      through the progress callback where MATLAB rethrows 'NDI:job:paused';
+      debugLog writes RSS and region size only (no MATLAB workspace sizes or
+      pool futures); the ndi_document is given its chunk.bin series through
+      did.document.Document.add_file_series, as Python's ndi_document has no
+      series method. Covered by tests/test_fun_doc_lightsheet_build.py: every
+      level read back and compared with the volume block-reduced directly,
+      local (raw and blosc-zstd, serial and threaded) and streamed (folded,
+      twin, stopped and resumed without resending).
 
   - name: fromSPIM
     matlab_path: "+ndi/+fun/+doc/+lightsheet/fromSPIM.m"
     matlab_last_sync_hash: "1dcf98ec7"
-    status: porting_deferred
+    python_path: "ndi/fun/doc_lightsheet/fromSPIM.py"
     decision_log: >-
       Builds a lightsheetZarrPyramid straight from a SmartSPIM
       acquisition's stitched All_Channels slices (no spim2zarr step):
@@ -156,21 +193,46 @@ functions:
       NDR-matlab ea26242 (VH-Lab/NDR-matlab#149, ported to NDR-python #38)
       also accepts All_Channels slices named <z>_ch<k>.tiff. Still
       porting_deferred with the group.
+      2026-11-07: ported against NDI-matlab 1dcf98ec7: the same ladder
+      (planLadder: halve each spatial axis within 1.5x of the finest voxel
+      until the largest is at most minLevelSize, up to maxLevels), the same
+      levelSources (level 1 reduced straight from the slices to a cloud
+      target, from the level before otherwise), channel picking and the
+      uneven-slice warning, translation 0 on every level, makeSourceFile
+      unless sourceFileID, and a cloud target committed into info['cloud'].
+      It reads All_Channels through ndr-python's readAllChannelsInfo (which
+      accepts <z>_ch<k>.tiff names, NDR-python #38). progressFcn 'default' as
+      in fromOMEZarr. Tested with NDR-python's synthetic SmartSPIM fixture
+      (tests/_smartspim_fixture.py, copied).
 
   - name: reduceBlocks
     matlab_path: "+ndi/+fun/+doc/+lightsheet/reduceBlocks.m"
-    matlab_last_sync_hash: "04ce18f9"
-    status: porting_deferred
+    matlab_last_sync_hash: "04ce18f9d"
+    python_path: "ndi/fun/doc_lightsheet/reduceBlocks.py"
     decision_log: >-
       Vectorized per-axis block mean/max with
       ndr.format.omezarr.reduce's semantics (trailing partial block
       included), used by fromSPIM to build reduced levels. Ports with
       fromSPIM; in numpy it is a reshape + mean/max per axis.
+      2026-11-07: examined against NDI-matlab 04ce18f9d and ported to
+      ndi/fun/doc_lightsheet/reduceBlocks.py as
+      reduceBlocks(arr, factor, reduction, outClass=None). Same block
+      semantics (trailing partial block reduced over what it has), same
+      accumulation precision (float32 for 8/16-bit and single inputs, float64
+      otherwise), and MATLAB's rounding (half away from zero, not NumPy's half
+      to even) and saturation when the result goes into an integer class.
+      Language-forced differences: output element i is 0-based (covers inputs
+      i*f .. (i+1)*f-1); outClass takes a MATLAB class name, a Zarr dtype
+      string or a numpy dtype, default the input's dtype; factor entries
+      beyond arr.ndim (MATLAB's implicit trailing singleton axes) are accepted
+      and change nothing, and the result keeps arr.ndim axes (NumPy does not
+      drop trailing singletons). Errors are ValueError (MATLAB
+      NDI:lightsheet:reduceBlocks:badFactor).
 
   - name: chooseTileShape
     matlab_path: "+ndi/+fun/+doc/+lightsheet/chooseTileShape.m"
-    matlab_last_sync_hash: "5c9e8a83"
-    status: porting_deferred
+    matlab_last_sync_hash: "5c9e8a83a"
+    python_path: "ndi/fun/doc_lightsheet/chooseTileShape.py"
     decision_log: >-
       Pure function that picks an OME-Zarr chunk shape landing near a
       byte budget with tiles ISOTROPIC IN WORLD SPACE: each spatial
@@ -195,11 +257,21 @@ functions:
       follow: this function has no Python counterpart yet, and the
       Python viewer only reads the levels MATLAB wrote. The Python port
       must use the 32 MB default when it lands.
+      2026-11-07: examined against NDI-matlab 5c9e8a83a and ported to
+      ndi/fun/doc_lightsheet/chooseTileShape.py as
+      chooseTileShape(shape, axesOrder, voxelSize, dtype, budgetBytes=32*2**20)
+      -- MATLAB's positional order, budgetBytes optional positional (or
+      keyword) as in MATLAB, 32 MB default. Element-wise spatial-axis test
+      ([ax not in "tc" for ax in axesOrder.lower()]), the voxel-space fallback,
+      bytes-per-voxel table and one redistribution pass are as MATLAB, with
+      MATLAB's round (half away from zero). Returns a list of ints (MATLAB a
+      double row). axes/shape length mismatch raises ValueError (MATLAB
+      NDI:lightsheet:chooseTileShape:axesShapeMismatch).
 
   - name: makeSourceFile
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makeSourceFile.m"
-    matlab_last_sync_hash: "1af66bb"
-    status: porting_deferred
+    matlab_last_sync_hash: "30dfd8ab5"
+    python_path: "ndi/fun/doc_lightsheet/makeSourceFile.py"
     decision_log: >-
       MATLAB creates the fileReference document the lightsheet documents'
       source_file_id dependency points at, so a pyramid can name the
@@ -209,21 +281,39 @@ functions:
       accepted only for a plain file (creating a generic_file), never a
       directory. Mirrors +gene/makeSourceFile after issue #981. Ports
       with the other five entries.
+      2026-11-07: ported to ndi/fun/doc_lightsheet/makeSourceFile.py as
+      makeSourceFile(session, filename, *, checksum=True, attachFile=False,
+      formatOntology='', documentID=''), examined against 30dfd8ab5 (the
+      MATLAB file is unchanged since 1af66bb). Same two classes: fileReference
+      when describing (MD5 of .zattrs for a directory, of the file otherwise;
+      fileSize 0 for a directory), generic_file with generic_file.ext when
+      attaching a plain file. Dates are MATLAB datenums in local time from
+      ndi.fun.file.dateCreated/dateUpdated; an unknown date is 0 (MATLAB's
+      NaT would give NaN). Errors: FileNotFoundError (noSuchPath), ValueError
+      (cannotAttachDirectory). The document is returned, not added.
 
   - name: chooseLevel
     matlab_path: "+ndi/+fun/+doc/+lightsheet/chooseLevel.m"
-    matlab_last_sync_hash: "5ab84f3"
-    status: porting_deferred
+    matlab_last_sync_hash: "5ab84f35e"
+    python_path: "ndi/fun/doc_lightsheet/chooseLevel.py"
     decision_log: >-
       Given a level table and a target per-axis voxel size, returns the
       coarsest level whose voxel size still meets the target. Pure
       function over the pyramid metadata; when Python readers grow a
       viewport-style call this ports as its selection helper.
+      2026-11-07: examined against NDI-matlab 5ab84f35e and ported to
+      ndi/fun/doc_lightsheet/chooseLevel.py as
+      chooseLevel(levels, targetVoxelSize) -> (levelIndex, levelRow). levels is
+      the row list levelTable returns (or any sequence of mappings/objects
+      with voxel_size and level) in place of MATLAB's struct array or table;
+      levelRow is the chosen element itself. levelIndex is the row's 0-based
+      level value, as in MATLAB. Empty levels raises ValueError (MATLAB
+      NDI:lightsheet:chooseLevel:emptyLevels).
 
   - name: levelTable
     matlab_path: "+ndi/+fun/+doc/+lightsheet/levelTable.m"
-    matlab_last_sync_hash: "1af66bb"
-    status: porting_deferred
+    matlab_last_sync_hash: "30dfd8ab5"
+    python_path: "ndi/fun/doc_lightsheet/levelTable.py"
     decision_log: >-
       Joins a lightsheetZarrPyramid and its lightsheetZarrLevel children
       into one finest-first table, carrying the parent frame in
@@ -234,11 +324,25 @@ functions:
       list of dicts and takes the same reduction filter); the
       doc-package mirror lands with the other five entries so the
       surface a script sees matches on both sides.
+      2026-11-07: ported to ndi/fun/doc_lightsheet/levelTable.py as
+      levelTable(session, pyramidDoc, *, reduction='') -> (levels, frame),
+      examined against 30dfd8ab5 (the MATLAB file is unchanged since the
+      1af66bb recorded before). DIVERGENCE in return shape, the one
+      doc_gene.levelTable already makes: MATLAB returns one table with the
+      parent frame in Properties.UserData; Python returns the rows (a list of
+      dicts keyed by the MATLAB column names level, reduction_function, shape,
+      chunks, chunk_grid, n_chunks_stored, voxel_size, translation, dtype, id
+      -- a superset of ndi.gui.app.lightsheetZarr.multiscale.levelTable's
+      keys) and the frame dict (axes_order, voxel_size_level0,
+      translation_level0, dtype, pyramid_name, id, reductions) as a pair, so
+      reading a document does not need pandas. pyramidDoc may be a document
+      or an id; an unknown id raises LookupError (MATLAB
+      NDI:lightsheet:levelTable:noParent).
 
   - name: viewCommand
     matlab_path: "+ndi/+fun/+doc/+lightsheet/viewCommand.m"
     matlab_last_sync_hash: "b2af80d09"
-    status: porting_deferred
+    python_path: "ndi/fun/doc_lightsheet/viewCommand.py"
     decision_log: >-
       Pure command builder that ndi.gui.app.LightsheetManager calls
       to construct the /usr/local/bin/napariViewLightsheet invocation.
@@ -263,11 +367,21 @@ functions:
       2026-11-07: examined against NDI-matlab b2af80d09: a See also line
       renamed (ndi.gui.app.LightsheetZarrManager is now LightsheetManager);
       no behaviour change, nothing to port.
+      2026-11-07: examined against NDI-matlab b2af80d09 and ported to
+      ndi/fun/doc_lightsheet/viewCommand.py as
+      viewCommand(launcher, sessionPath, pyramidID, *, channel=-1,
+      reduction='', controls=True, name='', level=-1), pure, producing the
+      same string as MATLAB (POSIX single quotes, cmd.exe double quotes on
+      Windows) in the same flag order. Flags checked against
+      ndi.gui.app.lightsheetZarr.cli: --pyramid, --reduction, --channel
+      (1-based in both), --level (0-based in both), --no-controls, --name.
+      Empty launcher / session path / pyramid id raise ValueError; a bad
+      reduction a pydantic ValidationError (MATLAB mustBeMember).
 
   - name: view
     matlab_path: "+ndi/+fun/+doc/+lightsheet/view.m"
     matlab_last_sync_hash: "b2af80d09"
-    status: porting_deferred
+    python_path: "ndi/fun/doc_lightsheet/view.py"
     decision_log: >-
       MATLAB caller that pairs viewCommand + SYSTEM: builds the
       napariViewLightsheet command line from viewCommand and dispatches
@@ -301,6 +415,22 @@ functions:
       2026-11-07: examined against NDI-matlab b2af80d09: a See also line
       renamed (ndi.gui.app.LightsheetZarrManager is now LightsheetManager);
       no behaviour change, nothing to port.
+      2026-11-07: examined against NDI-matlab b2af80d09 and ported to
+      ndi/fun/doc_lightsheet/view.py as
+      view(session, pyramidID='', *, launcher='', sessionPath='',
+      reduction='', channel=-1, level=-1, controls=True, name='', wait=False,
+      verbose=True, debug=True, logFile=''). Same options; it runs the
+      napariViewLightsheet command line (flags from viewCommand) as a child
+      process with subprocess.Popen, so napari's event loop does not take over
+      the caller. Language-forced differences: the default launcher is the
+      napariViewLightsheet console script on PATH, else
+      `python -m ndi.gui.app.lightsheetZarr.cli` (MATLAB:
+      ndi.python.findCommand); there is no launchViewer/shell line
+      (matlab_only) -- debug sets NDI_LIGHTSHEET_DEBUG=1 in the child's
+      environment, and logFile '' leaves the output on the caller's own
+      stdout/stderr rather than a timestamped temp log (a Python caller has a
+      terminal); --list mode always waits so the ids are printed before it
+      returns. Returns the exit status when waited for, else the Popen.
 
   - name: launchViewer
     matlab_path: "+ndi/+fun/+doc/+lightsheet/launchViewer.m"
@@ -346,7 +476,7 @@ functions:
   - name: dtypeName
     matlab_path: "+ndi/+fun/+doc/+lightsheet/dtypeName.m"
     matlab_last_sync_hash: "67e985640"
-    status: porting_deferred
+    python_path: "ndi/fun/doc_lightsheet/dtypeName.py"
     decision_log: >-
       A voxel type as a Zarr (NumPy) dtype string ('<u2') or a MATLAB class
       ('uint16'), from either form or a Zarr v3 name: makePyramid writes the
@@ -357,6 +487,12 @@ functions:
       MATLAB class names to NumPy codes when reading a level's dtype, so
       pyramids written before the dtype was normalized ('uint16') and after
       ('<u2') both read.
+      2026-11-07: examined against NDI-matlab 67e985640 and ported to
+      ndi/fun/doc_lightsheet/dtypeName.py as
+      dtypeName(dtype, form) with form 'zarr' | 'matlab', same table and the
+      same outputs ('<u2', '|u1', 'single', ...). dtype may be anything whose
+      str() is a spelling, so a numpy.dtype works. An unknown type raises
+      ValueError (MATLAB NDI:lightsheet:dtypeName:unknown).
 
 classes:
 
@@ -364,7 +500,8 @@ classes:
     type: class
     matlab_path: "+ndi/+fun/+doc/+lightsheet/BuildProfile.m"
     matlab_last_sync_hash: "df55d3f4f"
-    status: porting_deferred
+    python_path: "ndi/fun/doc_lightsheet/BuildProfile.py"
+    python_class: "ndi_fun_doc_lightsheet_BuildProfile"
     decision_log: >-
       makePyramid's per-batch timings (read-wait, assemble, compress and how
       busy the workers were, upload split into URLs / staging+CRC / waiting
@@ -372,3 +509,17 @@ classes:
       the end of each level, and appended as CSV rows to profileLog (a
       job's profile.csv). It only measures makePyramid, so it ports with
       makePyramid and the rest of the group.
+      2026-11-07: examined against NDI-matlab df55d3f4f and ported to
+      ndi/fun/doc_lightsheet/BuildProfile.py as class
+      ndi_fun_doc_lightsheet_BuildProfile (alias BuildProfile), constructor
+      (logFile='', everySeconds=600). Same methods (add, endLevel, finish,
+      static summarize and emptyRows), same summary sentences, and the same
+      CSV columns in the same order (when, level, superblock, nSuperBlocks,
+      chunks, workers, mbRead, mbChunks, mbOut, readWait, assemble, compress,
+      workerBusy, upload, urls, stage, send, verify, progress, total; strings
+      double-quoted, numbers %.4g), so a profile.csv from either language has
+      the same header and a resumed build appends without a second one. Rows
+      are dicts (MATLAB structs); logFile and rows are read-only properties
+      (MATLAB SetAccess = private); emptyRows() is [] and the field order is
+      the FIELDS constant. add() refuses a row whose fields differ, as
+      MATLAB's orderfields does.
