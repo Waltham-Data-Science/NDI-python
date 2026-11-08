@@ -2074,3 +2074,237 @@ def findCellTypeLabels(session, cells_doc):
         ndi_query("").isa("cellTypeLabels")
         & ndi_query("").depends_on("cells_document_id", cells_doc.id)
     )
+
+
+__all__ += ["makeSourceFile", "readNotes"]
+
+
+def _datetime_to_matlab_datenum(dt) -> float:
+    """MATLAB serial date number for a Python ``datetime``.
+
+    MATLAB's datenum counts days from the proleptic Gregorian 0000-01-00,
+    so January 1 Year 1 reads 367 there and 1 as a Python ``toordinal``.
+    The offset is a constant 366 plus the fraction of the day. Matching
+    the units matters: the schema calls the field ``datenum``, and a
+    reader averaging dates across the two language ports would otherwise
+    get numbers 366 days apart from each other.
+    """
+    days = dt.toordinal() + 366
+    seconds = dt.hour * 3600 + dt.minute * 60 + dt.second + dt.microsecond / 1e6
+    return days + seconds / 86400.0
+
+
+def makeSourceFile(
+    session,
+    filename: str,
+    checksum: bool = True,
+    attachFile: bool = False,
+    formatOntology: str = "",
+    documentID: str = "",
+):
+    """Describe, or attach, the raw file a document came from.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.makeSourceFile``
+
+    Creates the document that the spatial gene expression documents
+    point at through their ``source_file_id`` dependency, so a pyramid
+    can name the .gef it was built from and a cell table the .h5ad it
+    was segmented from.
+
+    DESCRIBING IS NOT ATTACHING, and the default is to describe. A SAW
+    .gef is ~9.4 GB; ingesting a copy of it into the database alongside
+    the pyramid derived from it would roughly double the storage to
+    hold bytes the pyramid already summarises. The document records
+    the name, the size, the checksum and the dates -- enough to
+    identify the file, verify it if it is still around, and say what a
+    pyramid came from.
+
+    THE TWO CASES ARE TWO CLASSES, and getting that wrong is what
+    MATLAB's :func:`makeSourceFile` did until it was fixed (see
+    NDI-matlab b589db9bb):
+
+      - ``attachFile=False`` -> ``fileReference``, which holds no file
+      - ``attachFile=True`` -> ``generic_file``, which holds
+        ``generic_file.ext``
+
+    ``generic_file``'s schema declares ``generic_file.ext`` with
+    ``mustbenotempty 1``, so a generic_file without its file is not a
+    lighter version of one, it is an invalid one.
+
+    THE CHECKSUM IS THE PART WORTH HAVING. A filename tells you what
+    somebody called a file; a checksum tells you whether the file you
+    have now is the file the pyramid was built from.
+
+    Args:
+        session: an ndi.session or ndi.dataset.
+        filename: path to the source file.
+        checksum: compute the MD5. Costs a full read of the file; pass
+            False to skip, and the field is left empty rather than
+            filled with a placeholder that would look like a real hash.
+        attachFile: ingest a copy of the file itself, and return a
+            ``generic_file`` document rather than a ``fileReference``.
+            Worth it when the source is small or when the archive is the
+            point.
+        formatOntology: an ontology term for the format, if you have
+            one. Left EMPTY rather than guessed: a wrong term is worse
+            than none, because it is machine-readable and will be
+            believed.
+        documentID: a document this file is about, for the
+            ``generic_file`` class's own ``document_id`` dependency.
+
+    Returns:
+        The ``ndi.document`` -- ``fileReference``, or ``generic_file``
+        when *attachFile* is True -- NOT yet added to the database.
+        The caller adds it, because it is normally created as part of a
+        set whose dependencies have to be wired before any of them is
+        stored. This matches the MATLAB contract.
+    """
+    if not os.path.isfile(filename):
+        raise FileNotFoundError(f"makeSourceFile: {filename!r} is not a regular file")
+
+    base = os.path.basename(filename)
+
+    # The algorithm names what the checksum IS. With no checksum there is
+    # nothing for it to name, and leaving 'MD5' there would advertise a
+    # hash that was never computed.
+    from .file import MD5 as _MD5
+    from .file import dateCreated as _dateCreated
+    from .file import dateUpdated as _dateUpdated
+
+    cksum = ""
+    algorithm = ""
+    if checksum:
+        cksum = _MD5(filename)
+        algorithm = "MD5"
+
+    # The dates are the file's own, not now(): a document created today
+    # from a file written last year should say last year. A filesystem
+    # that does not report one of them is not a reason to refuse the
+    # document; the checksum is the identifying field.
+    created = 0
+    updated = 0
+    try:
+        c = _dateCreated(filename)
+        if c is not None:
+            created = _datetime_to_matlab_datenum(c)
+    except Exception:
+        pass
+    try:
+        u = _dateUpdated(filename)
+        if u is not None:
+            updated = _datetime_to_matlab_datenum(u)
+    except Exception:
+        pass
+
+    if attachFile:
+        # generic_file: the database holds the bytes, and its schema
+        # requires them. Its property list has no size or algorithm
+        # fields, so it gets what it declares and nothing invented.
+        doc = (
+            _blank(
+                "generic_file",
+                generic_file={
+                    "filename": base,
+                    "formatOntology": formatOntology,
+                    "dateCreated": created,
+                    "dateUpdated": updated,
+                    "checksum": cksum,
+                },
+            )
+            + session.newdocument()
+        )
+        # The file itself must be attached. delete_original would be the
+        # MATLAB default (0): leave the source where the caller gave it.
+        doc = doc.add_file("generic_file.ext", filename)
+    else:
+        try:
+            fileSize = float(os.path.getsize(filename))
+        except OSError:
+            fileSize = 0
+        doc = (
+            _blank(
+                "fileReference",
+                fileReference={
+                    "filename": base,
+                    "originalPath": filename,
+                    "formatOntology": formatOntology,
+                    "dateCreated": created,
+                    "dateUpdated": updated,
+                    "fileSize": fileSize,
+                    "checksum": cksum,
+                    "checksumAlgorithm": algorithm,
+                },
+            )
+            + session.newdocument()
+        )
+
+    if documentID:
+        doc = doc.set_dependency_value("document_id", documentID, error_if_not_found=False)
+    return doc
+
+
+def readNotes(meta: dict[str, Any], gene_id) -> list[str]:
+    """Post-flight notes a .gef read produced that a probe could not.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.readNotes``
+
+    THESE ARE REPORTED, NOT RAISED. None of them makes the pyramid
+    wrong and all of them change what it means: counts that hit the
+    ceiling read low, an extent that came from attributes rather than
+    from the records is a claim rather than a measurement, and a gene
+    table trimmed by ``maxGenes`` leaves a pyramid missing genes with
+    nothing in it saying so.
+
+    They cannot be part of a pre-flight confirmation, which is the
+    reason this exists separately from the checks that can: every one
+    of them needs every record to have been read.
+
+    Args:
+        meta: the reader's ``meta`` dict, as returned by
+            ``ndr.format.stereoseq.readGEF``. Accepts a Python dict or
+            any object with ``.get(name, default)``.
+        gene_id: the gene accessions that came back, used to detect a
+            trimmed read against ``meta["nGenesInFile"]``.
+
+    Returns:
+        List of human-readable notes, empty when there is nothing to
+        say. Order matches MATLAB's cellstr.
+    """
+
+    def _get(obj, name, default):
+        if obj is None:
+            return default
+        if isinstance(obj, dict):
+            return obj.get(name, default)
+        return getattr(obj, name, default)
+
+    notes: list[str] = []
+
+    n_clamped = int(_get(meta, "nCountsClamped", 0) or 0)
+    if n_clamped > 0:
+        # Match MATLAB's thousands grouping: "1,234,567".
+        notes.append(f"{n_clamped:,} count(s) were clamped at the ceiling. Those pixels read low.")
+
+    src = _get(meta, "boxSource", "") or ""
+    if src:
+        notes.append(f"Extent taken from {src}.")
+
+    # SAW's own per-gene MID totals, when the reader surfaced them.
+    stat_totals = _get(meta, "statTotals", None)
+    if stat_totals is not None and len(stat_totals) > 0:
+        note = _get(meta, "statTotalsNote", "") or ""
+        if note:
+            notes.append(f"SAW /stat/gene: {note}")
+
+    n_got = len(gene_id) if gene_id is not None else 0
+    n_in_file = int(_get(meta, "nGenesInFile", n_got) or n_got)
+    if n_in_file > n_got:
+        notes.append(
+            f"Only {n_got} of the file's {n_in_file} genes were read. The pyramid is "
+            f"missing the rest and nothing in it says so."
+        )
+
+    if n_got == 0:
+        notes.append("The read returned no genes.")
+
+    return notes

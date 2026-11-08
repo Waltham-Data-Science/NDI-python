@@ -3163,36 +3163,64 @@ functions:
   - name: makeSourceFile
     matlab_path: "+ndi/+fun/+doc/+gene/makeSourceFile.m"
     matlab_last_sync_hash: "b589db9bb"
-    status: porting_deferred
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: session
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "ndi.session | ndi.dataset"
+      - name: filename
+        type_matlab: "char"
+        type_python: "str"
+      - name: checksum
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: attachFile
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: formatOntology
+        type_matlab: "char"
+        type_python: "str"
+      - name: documentID
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments:
+      - name: doc
+        type_matlab: "ndi.document"
+        type_python: "ndi_document"
     decision_log: >
-      MATLAB creates the document that the spatial gene expression
-      documents' source_file_id dependency points at, so a pyramid can
-      name the .gef it was built from.
+      Ported. Creates a fileReference by default (describes), a
+      generic_file when attachFile=True (attaches the bytes). Follows
+      NDI-matlab b589db9bb, which split the two cases after DID-matlab
+      #182 closed the fail-open that let a generic_file without its
+      file validate: generic_file.ext is mustbenotempty.
 
-      WHICH document changed, in NDI-matlab b589db9bb. Describing a file the
-      database does not hold is now a fileReference -- a new class with no
-      files section at all -- and only attachFile=true produces a
-      generic_file with the bytes attached. The old shape was a
-      generic_file with nothing attached, which is invalid, since
-      generic_file requires generic_file.ext; nothing enforced it until
-      DID-matlab #182 closed a fail-open, at which point adding such a
-      session to a dataset failed at the add rather than at the write
-      that made it.
-
-      Ports with the other three entries under this heading. A Python
-      port must create a fileReference, not a generic_file.
+      MATLAB computes dateCreated/dateUpdated as MATLAB datenum; Python
+      does the conversion inline (helper _datetime_to_matlab_datenum)
+      so the stored value is the same unit on both sides. Documents are
+      returned unadded, as in MATLAB -- the caller normally wires
+      dependencies before storing.
 
   - name: readNotes
     matlab_path: "+ndi/+fun/+doc/+gene/readNotes.m"
-    matlab_last_sync_hash: "6ae5087"
-    status: porting_deferred
+    matlab_last_sync_hash: "6ae508708"
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: meta
+        type_matlab: "struct"
+        type_python: "dict | object"
+      - name: geneID
+        type_matlab: "cell"
+        type_python: "list[str]"
+    output_arguments:
+      - name: notes
+        type_matlab: "cellstr"
+        type_python: "list[str]"
     decision_log: >
-      MATLAB post-flight helper: turns the reader meta from
-      ndr.format.stereoseq into a cellstr of things a caller should be
-      told after the fact (counts hitting ceilings, extents from
-      attributes rather than records, tables trimmed by maxGenes).
-      Ports with the other three entries under this heading; nothing in
-      Python asks for these notes yet.
+      Ported. Post-flight notes from a .gef read that a pre-flight
+      probe could not produce: clamped counts, extent provenance,
+      SAW's own per-gene totals, trimmed gene table. Order and
+      wording mirror the MATLAB cellstr so the two ports agree on
+      text when diffed.
 
 # =========================================================================
 # Functions — doc_gene_export.py
