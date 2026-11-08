@@ -3310,6 +3310,76 @@ functions:
       wording mirror the MATLAB cellstr so the two ports agree on
       text when diffed.
 
+  # =======================================================================
+  # ROI import: a .gef split by polygon into N per-subject pyramids
+  #
+  # These four live on the NDI-matlab branch claude/modest-tesla-ls5952
+  # (PR #1150). Each entry carries matlab_branch to say so; the entries
+  # here are ported, and the markers go once the branch merges into
+  # NDI-matlab main. Section 8 of
+  # docs/developer_notes/ndi_matlab_python_bridge.yaml.
+  # =======================================================================
+
+  - name: makeROI
+    matlab_path: "+ndi/+fun/+doc/+gene/makeROI.m"
+    matlab_last_sync_hash: "3edae164d"
+    matlab_branch: "claude/modest-tesla-ls5952"
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: session
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "ndi.session | ndi.dataset"
+      - name: pyrDoc
+        type_matlab: "ndi.document | []"
+        type_python: "ndi_document | str | None"
+      - name: polygon
+        type_matlab: "Mx2 double"
+        type_python: "ArrayLike"
+      - name: sourceFileID
+        type_matlab: "char"
+        type_python: "str"
+      - name: label
+        type_matlab: "char"
+        type_python: "str"
+      - name: coordSpace
+        type_matlab: "char"
+        type_python: "str"
+      - name: coordUnits
+        type_matlab: "char"
+        type_python: "str"
+      - name: nRecordsIn
+        type_matlab: "integer"
+        type_python: "int"
+    output_arguments:
+      - name: doc
+        type_matlab: "ndi.document"
+        type_python: "ndi_document"
+    decision_log: >
+      Ported. Creates the spatialGeneExpressionROI provenance sidecar
+      document. The pyramid dependency is left unset when pyrDoc is
+      empty / None (the empty-polygon case is explicitly allowed by
+      the schema). The ROI document is added to the database before
+      return, matching the MATLAB session.database_add(doc) call --
+      the ROI depends on documents that already exist by the time
+      this is called, so there is no benefit to deferring the add.
+
+      KNOWN UPSTREAM ISSUE in the vendored schema: parameters for
+      vertices_x and vertices_y are [3, null] rather than [3, NaN].
+      Standard JSON null does not round-trip to NaN through Python's
+      did.validate._is_nan_param (which recognises float('nan') and
+      the string "nan"), so the strict matrix-shape check rejects
+      every valid polygon. The MATLAB validator probably has a parallel
+      quirk (jsondecode('null') -> [], isnan([]) -> []) which is why
+      the bug has not surfaced upstream. Fixing it belongs on the
+      MATLAB side (change null to NaN) or in did-python (accept None
+      as nan-param); it is not papered over here. Until then, any
+      database_add of a spatialGeneExpressionROI raises
+      did.validate.ValidationError on the matrix-shape check, and
+      downstream functions (fromGEFbyROI, fromGEFinteractive) are
+      affected because they call makeROI per polygon. Tests around
+      these functions use a small shim fixture that skips the matrix
+      validation.
+
 # =========================================================================
 # Functions — doc_gene_export.py
 #

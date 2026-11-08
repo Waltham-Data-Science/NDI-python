@@ -2520,3 +2520,104 @@ def fromGEF(
         "notes": readNotes(meta, gene_id),
     }
     return pyr_doc, tile_docs, gene_list_doc, info
+
+
+__all__ += ["makeROI"]
+
+
+def _doc_id(doc) -> str:
+    """Id of a document, for callers that may pass None, '', or an id."""
+    if doc is None:
+        return ""
+    if isinstance(doc, str):
+        return doc
+    try:
+        return doc.id
+    except AttributeError:
+        return ""
+
+
+def makeROI(
+    session,
+    pyrDoc,
+    polygon,
+    sourceFileID: str = "",
+    label: str = "",
+    coordSpace: str = "gef_base_pixel",
+    coordUnits: str = "pixel",
+    nRecordsIn: int = 0,
+):
+    """Record the polygon that carved a per-subject pyramid.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.makeROI``
+
+    Creates a ``spatialGeneExpressionROI`` document: a provenance
+    sidecar that stores the drawn polygon alongside the pyramid built
+    from the records inside it. The pyramid remains a freestanding
+    one-subject document; this doc exists next to it.
+
+    Written by :func:`fromGEFbyROI` (and the interactive wrapper) so a
+    V2 importer can lift the geometry rather than ask the scientist to
+    redraw. No current tool reads it.
+
+    Args:
+        session: an ndi.session or ndi.dataset.
+        pyrDoc: the ``spatialGeneExpressionPyramid`` document this ROI
+            produced, or '' / None to leave the dependency unset. An
+            empty value is accepted for the empty-polygon case: when no
+            records fell inside, there is no pyramid to depend on but
+            the geometry is still worth recording.
+        polygon: ``(M, 2)`` numpy-array-like of polygon vertices in GEF
+            pixel coordinates (col 0 is x, col 1 is y, M>=3).
+        sourceFileID: id of the shared source-file document (the .gef
+            the pyramid was built from). Empty leaves the dependency
+            unset.
+        label: a human-readable label.
+        coordSpace: default ``gef_base_pixel``.
+        coordUnits: default ``pixel``.
+        nRecordsIn: number of records that landed inside the polygon.
+            Reported for provenance.
+
+    Returns:
+        The stored ``spatialGeneExpressionROI`` document.
+
+    Raises:
+        ValueError: if the polygon has fewer than 3 vertices or is not
+            an (M, 2) array.
+    """
+    poly = np.asarray(polygon, dtype=float)
+    if poly.ndim != 2 or poly.shape[1] != 2:
+        raise ValueError(
+            f"polygon must be (M, 2) [x y]; got shape {poly.shape}. "
+            f"Column 0 is x, column 1 is y."
+        )
+    if poly.shape[0] < 3:
+        raise ValueError(f"polygon must have at least 3 vertices; got {poly.shape[0]}.")
+
+    doc = (
+        _blank(
+            "spatialGeneExpressionROI",
+            spatialGeneExpressionROI={
+                "label": label,
+                "n_vertices": int(poly.shape[0]),
+                "vertices_x": poly[:, 0].tolist(),
+                "vertices_y": poly[:, 1].tolist(),
+                "coord_space": coordSpace,
+                "coord_units": coordUnits,
+                "n_records_in": int(nRecordsIn),
+                "roi_format_version": 1,
+            },
+        )
+        + session.newdocument()
+    )
+
+    pyr_id = _doc_id(pyrDoc)
+    if pyr_id:
+        doc = doc.set_dependency_value(
+            "spatialGeneExpressionPyramid_id", pyr_id, error_if_not_found=False
+        )
+    if sourceFileID:
+        doc = doc.set_dependency_value("source_file_id", sourceFileID, error_if_not_found=False)
+
+    session.database_add(doc)
+    return doc
