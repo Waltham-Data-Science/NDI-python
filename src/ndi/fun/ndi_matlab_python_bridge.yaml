@@ -3357,28 +3357,19 @@ functions:
     decision_log: >
       Ported. Creates the spatialGeneExpressionROI provenance sidecar
       document. The pyramid dependency is left unset when pyrDoc is
-      empty / None (the empty-polygon case is explicitly allowed by
-      the schema). The ROI document is added to the database before
-      return, matching the MATLAB session.database_add(doc) call --
-      the ROI depends on documents that already exist by the time
-      this is called, so there is no benefit to deferring the add.
+      empty / None (the empty-polygon case the MATLAB code
+      explicitly allows, and the schema declares the dep
+      mustbenotempty: 0 to match). The ROI document is added to the
+      database before return, matching the MATLAB session.database_add
+      call -- the ROI depends on documents that already exist by the
+      time this is called, so there is no benefit to deferring the add.
 
-      KNOWN UPSTREAM ISSUE in the vendored schema: parameters for
-      vertices_x and vertices_y are [3, null] rather than [3, NaN].
-      Standard JSON null does not round-trip to NaN through Python's
-      did.validate._is_nan_param (which recognises float('nan') and
-      the string "nan"), so the strict matrix-shape check rejects
-      every valid polygon. The MATLAB validator probably has a parallel
-      quirk (jsondecode('null') -> [], isnan([]) -> []) which is why
-      the bug has not surfaced upstream. Fixing it belongs on the
-      MATLAB side (change null to NaN) or in did-python (accept None
-      as nan-param); it is not papered over here. Until then, any
-      database_add of a spatialGeneExpressionROI raises
-      did.validate.ValidationError on the matrix-shape check, and
-      downstream functions (fromGEFbyROI, fromGEFinteractive) are
-      affected because they call makeROI per polygon. Tests around
-      these functions use a small shim fixture that skips the matrix
-      validation.
+      makeROI runtime-checks the minimum-of-three constraint on the
+      polygon before any document is built, mirroring MATLAB. The
+      schema's n_vertices parameter ([3, 1000000, 0, 0]) encodes the
+      same constraint; the vertex-vector matrix parameters are
+      [NaN, 1] (column vector of any length), relying on makeROI's
+      guard for the minimum rather than stating it twice.
 
   - name: buildROIpyramids
     matlab_path: "+ndi/+fun/+doc/+gene/private/buildROIpyramids.m"
@@ -3565,7 +3556,7 @@ functions:
 
   - name: fromGEFinteractive
     matlab_path: "+ndi/+fun/+doc/+gene/fromGEFinteractive.m"
-    matlab_last_sync_hash: "3edae164d"
+    matlab_last_sync_hash: "877faa1d6"
     matlab_branch: "claude/modest-tesla-ls5952"
     python_path: "ndi/fun/doc_gene.py"
     input_arguments:
@@ -3624,6 +3615,18 @@ functions:
       Optional nSubjects and subjects mirror MATLAB. When neither is
       given, the function asks via input(). When subjects is passed,
       the per-polygon subject prompt is skipped.
+
+      Subject picker (NDI-matlab 877faa1d6): each polygon's prompt
+      shows every subject already in the session plus a
+      "+ Create new subject..." entry at the top. Picking Create asks
+      for a local_identifier and creates the subject in the session on
+      the fly; an empty input returns to the picker for the same
+      polygon so a wrong click on Create does not abandon the whole
+      ingest. A typed name that matches an existing subject reuses
+      that subject rather than duplicating. A session with no subjects
+      is no longer an error -- Create is the first option in the list.
+      Groups are not auto-created; a GEFManager-level group prompt is
+      a follow-up when it is wanted.
 
       Accepts the same options the shared core passes through to
       makePyramid, matching fromGEFbyROI.

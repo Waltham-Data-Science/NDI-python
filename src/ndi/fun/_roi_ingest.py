@@ -262,9 +262,8 @@ def build_roi_pyramids(
                 stacklevel=2,
             )
             # Record the geometry anyway. The pyramid dependency stays
-            # unset (the ROI schema allows that, per the MATLAB code
-            # comment; see the known-upstream-issue note in the bridge
-            # decision_log for makeROI).
+            # unset; the ROI schema declares it mustbenotempty: 0 for
+            # this case.
             roi_docs[k] = makeROI(
                 session,
                 None,

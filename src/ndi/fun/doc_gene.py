@@ -2827,10 +2827,12 @@ def fromGEFinteractive(
     WORKFLOW. The function reads the .gef, bins the records to a
     low-res density image (summed counts across all genes), opens a
     matplotlib figure, and asks for one polygon per animal. After the
-    last polygon it prompts for a subject id for each via
-    :func:`input` (keyed off the session's subject documents). The N
-    pyramids are then built in one pass sharing a geneList and a
-    sourceFile.
+    last polygon it prompts for a subject for each polygon: an
+    existing one from the session's subject list, or a new one typed
+    into a prompt -- the new subject is created in the session on the
+    fly, so a session that starts empty does not have to be set up
+    ahead of time. The N pyramids are then built in one pass sharing
+    a geneList and a sourceFile.
 
     HOW LONG THE PICKING SITS. The read is the slow phase (minutes on
     a ferret hemisphere) and happens BEFORE any UI appears, so a
@@ -2866,8 +2868,6 @@ def fromGEFinteractive(
     Raises:
         RuntimeError: if the figure is closed before all polygons are
             drawn, or if the subject prompt is abandoned.
-        ValueError: if the session has no subject documents and
-            *subjects* was not supplied.
     """
     import matplotlib.pyplot as plt
     from matplotlib.widgets import PolygonSelector
@@ -3025,40 +3025,81 @@ def _bin_density(x, y, count, bin_px: int):
 
 
 def _pick_subjects(session, n: int) -> list[str]:
-    """Prompt the user once per polygon from the session's subjects.
+    """Prompt the user once per polygon, letting them pick an existing
+    subject or create a new one on the fly.
 
-    MATLAB equivalent of ``localPickSubjects``. MATLAB opens a listdlg
-    per polygon; we print a numbered menu and read :func:`input`. The
-    goal is the same: one picked id per polygon, with the id taken from
-    the session's subject documents so a typo cannot slip in.
+    MATLAB equivalent of ``localPickSubjects`` (NDI-matlab 877faa1d6).
+    The listed options are every subject already in the session plus a
+    ``+ Create new subject...`` entry at the top; picking that entry
+    prompts for a ``local_identifier`` and creates the subject in the
+    session before using its id. A typed name that matches an existing
+    subject reuses that subject rather than duplicating. A session with
+    no subjects is not an error -- creation is the first option in the
+    list.
+
+    Groups are NOT auto-created. A session may hold several chips whose
+    groupings differ from the per-chip set, so group creation is left
+    to the caller; a GEFManager-level group prompt is a follow-up when
+    it is wanted.
     """
     from ..query import ndi_query
 
     subject_docs = session.database_search(ndi_query("").isa("subject"))
-    if not subject_docs:
-        raise ValueError(
-            "The session has no subject documents. Add subjects before splitting "
-            "a GEF by ROI; the import tags each pyramid with the matching subject."
-        )
-    labels = []
+    labels: list[str] = []
     for d in subject_docs:
         try:
             labels.append(d.document_properties["subject"]["local_identifier"])
         except (KeyError, TypeError):
             labels.append(d.id)
+    create_option = "+ Create new subject..."
     subs: list[str] = []
-    for k in range(n):
+    k = 0
+    while k < n:
+        items = [create_option, *labels]
         print(f"\nPick subject for polygon {k + 1} of {n}:")
-        for i, name in enumerate(labels):
+        for i, name in enumerate(items):
             print(f"  [{i + 1}] {name}")
         try:
             answer = input("Choice: ").strip()
             idx = int(answer) - 1
-            if not 0 <= idx < len(labels):
+            if not 0 <= idx < len(items):
                 raise ValueError(f"Choice {answer!r} is out of range.")
         except (EOFError, ValueError) as e:
             raise RuntimeError(
-                f"fromGEFinteractive cancelled at the subject picker for polygon {k + 1}: {e}"
+                f"fromGEFinteractive cancelled at the subject picker for " f"polygon {k + 1}: {e}"
             ) from e
-        subs.append(subject_docs[idx].id)
+
+        if idx == 0:
+            # Create-new path. An empty input returns to the picker for
+            # this polygon (same k), so a wrong click on the first entry
+            # does not abandon the whole ingest.
+            try:
+                name_answer = input(
+                    f"Local identifier for the new subject "
+                    f"(polygon {k + 1} of {n}, blank to go back): "
+                ).strip()
+            except EOFError:
+                name_answer = ""
+            if not name_answer:
+                continue
+            # A typo of an existing identifier reuses it rather than
+            # duplicating the subject.
+            try:
+                existing = labels.index(name_answer)
+            except ValueError:
+                existing = -1
+            if existing >= 0:
+                subs.append(subject_docs[existing].id)
+            else:
+                new_sub = session.newdocument(
+                    "subject", **{"subject.local_identifier": name_answer}
+                )
+                session.database_add(new_sub)
+                subject_docs = list(subject_docs) + [new_sub]
+                labels.append(name_answer)
+                subs.append(new_sub.id)
+        else:
+            # Offset by one because index 0 is the create-new entry.
+            subs.append(subject_docs[idx - 1].id)
+        k += 1
     return subs

@@ -10,14 +10,6 @@ Covers:
   - ``fromGEFbyROI``: end-to-end on a small synthetic .gef, verifying
     N pyramids and N ROI docs come back and ``info["nKeepPerROI"]``
     agrees per polygon
-
-KNOWN ISSUE in the vendored MATLAB schema: ``vertices_x`` /
-``vertices_y`` parameters are ``[3, null]`` where NDI's convention is
-``[3, NaN]``. Standard JSON ``null`` does not round-trip to NaN
-through did.validate._is_nan_param, which rejects every valid
-polygon. See the bridge decision_log on makeROI. These tests shim
-did._is_nan_param to also accept None, isolating the real logic
-being tested from the upstream schema oversight.
 """
 
 from __future__ import annotations
@@ -31,67 +23,6 @@ import pytest
 
 from ndi.fun import doc_gene
 from ndi.session.dir import ndi_session_dir
-
-
-@pytest.fixture
-def allow_none_nan_param(monkeypatch):
-    """Shim two upstream schema quirks around spatialGeneExpressionROI.
-
-    (1) ``vertices_x`` / ``vertices_y`` have ``"parameters": [3, null]``
-    where NDI's convention is ``[3, NaN]``. did-python's
-    ``_is_nan_param`` sees float('nan') and the string "nan" as
-    nan-params, not None, so without the shim every valid polygon fails
-    the matrix-shape check at database_add.
-
-    (2) ``spatialGeneExpressionPyramid_id`` is declared
-    ``mustbenotempty: 1``, but the MATLAB code (buildROIpyramids,
-    makeROI) comments explicitly state that an empty-polygon ROI
-    leaves this dependency unset. MATLAB's validator presumably tolerates
-    the empty value; did-python's does not. The shim accepts empty for
-    this specific dependency name when the enclosing document is a
-    spatialGeneExpressionROI.
-
-    Fixing both belongs upstream (either MATLAB changes null to NaN and
-    drops mustbenotempty to 0, or did-python accepts None as a
-    nan-param and allows the specific exception), not on the port's
-    caller side. See the bridge decision_log on makeROI.
-    """
-    import did.validate as _dv
-
-    orig_is_nan = _dv._is_nan_param
-
-    def _shim(param):
-        return param is None or orig_is_nan(param)
-
-    monkeypatch.setattr(_dv, "_is_nan_param", _shim)
-
-    orig_assert = _dv._assert
-
-    def _assert(condition, identifier, message):
-        # Pass empty-dep errors for the ROI pyramid dependency.
-        if (
-            not condition
-            and "Empty dependency" in message
-            and "spatialGeneExpressionPyramid_id" in message
-            and "spatialGeneExpressionROI" in message
-        ):
-            return
-        # Pass matrix-shape mismatches on vertices_x / vertices_y: the
-        # schema's parameters [3, null] mean "at least 3 rows" in intent
-        # but did-python reads 3 as exact. The Python-side check in
-        # makeROI already rejects fewer than 3, so any surviving polygon
-        # has >=3 vertices and matches the schema's intent.
-        if (
-            not condition
-            and "spatialGeneExpressionROI" in message
-            and ("vertices_x" in message or "vertices_y" in message)
-            and ("size" in message or "length" in message or "non-numeric" in message)
-        ):
-            return
-        return orig_assert(condition, identifier, message)
-
-    monkeypatch.setattr(_dv, "_assert", _assert)
-    yield
 
 
 @pytest.fixture
@@ -121,7 +52,7 @@ def two_subjects(tmp_path):
 # -------------------------------------------------- makeROI: shape checks
 
 
-def test_makeROI_refuses_too_few_vertices(session, allow_none_nan_param):
+def test_makeROI_refuses_too_few_vertices(session):
     """A polygon with fewer than three vertices is not a polygon.
 
     The check lands here rather than in database validation so the
@@ -133,7 +64,7 @@ def test_makeROI_refuses_too_few_vertices(session, allow_none_nan_param):
         doc_gene.makeROI(S, None, poly)
 
 
-def test_makeROI_refuses_wrong_axis(session, allow_none_nan_param):
+def test_makeROI_refuses_wrong_axis(session):
     """``polygon`` must be ``(M, 2)``. A 3-vector or 1x3 is not a
     polygon."""
     S, _ = session
@@ -143,7 +74,7 @@ def test_makeROI_refuses_wrong_axis(session, allow_none_nan_param):
         doc_gene.makeROI(S, None, np.array([[0, 1, 2]], float))
 
 
-def test_makeROI_writes_the_geometry(session, allow_none_nan_param):
+def test_makeROI_writes_the_geometry(session):
     """vertices_x/_y come out in the two columns of the input polygon,
     not transposed."""
     S, _ = session
@@ -160,7 +91,7 @@ def test_makeROI_writes_the_geometry(session, allow_none_nan_param):
     assert p["roi_format_version"] == 1
 
 
-def test_makeROI_sets_dependencies_when_given(session, allow_none_nan_param, tmp_path):
+def test_makeROI_sets_dependencies_when_given(session, tmp_path):
     """pyrDoc and sourceFileID land on the document's depends_on list
     when given; an empty pyrDoc leaves that dep unset."""
     S, sub = session
@@ -219,7 +150,7 @@ def _build_options(**overrides):
     return base
 
 
-def test_buildROIpyramids_honours_polygon_membership(two_subjects, allow_none_nan_param):
+def test_buildROIpyramids_honours_polygon_membership(two_subjects):
     """Records inside polygon A go to pyramid A, records inside both go
     to both (overlap honoured), records inside neither go nowhere.
 
@@ -289,9 +220,7 @@ def test_buildROIpyramids_honours_polygon_membership(two_subjects, allow_none_na
     assert deps_b["subject_id"] == sub_b.id
 
 
-def test_buildROIpyramids_empty_polygon_records_roi_without_pyramid(
-    two_subjects, allow_none_nan_param
-):
+def test_buildROIpyramids_empty_polygon_records_roi_without_pyramid(two_subjects):
     """An empty polygon still writes the ROI sidecar; its pyramid slot
     is None and a RuntimeWarning fires."""
     from ndi.fun._roi_ingest import build_roi_pyramids
@@ -340,7 +269,7 @@ def test_buildROIpyramids_empty_polygon_records_roi_without_pyramid(
     assert deps_b["spatialGeneExpressionPyramid_id"] == ""
 
 
-def test_buildROIpyramids_length_mismatch_raises(two_subjects, allow_none_nan_param):
+def test_buildROIpyramids_length_mismatch_raises(two_subjects):
     """subjects and polygons must be the same length."""
     from ndi.fun._roi_ingest import build_roi_pyramids
 
@@ -367,7 +296,7 @@ def test_buildROIpyramids_length_mismatch_raises(two_subjects, allow_none_nan_pa
         )
 
 
-def test_buildROIpyramids_empty_subjects_raises(two_subjects, allow_none_nan_param):
+def test_buildROIpyramids_empty_subjects_raises(two_subjects):
     """At least one (subject, polygon) pair is required."""
     from ndi.fun._roi_ingest import build_roi_pyramids
 
@@ -442,7 +371,7 @@ def _make_synthetic_gef(path, resolution_nm: int = 500):
         bin1.attrs["resolution"] = np.int32(resolution_nm)
 
 
-def test_fromGEFbyROI_sorts_records_into_pyramids(two_subjects, allow_none_nan_param):
+def test_fromGEFbyROI_sorts_records_into_pyramids(two_subjects):
     """A tiny synthetic .gef with two polygons produces two pyramids
     and two ROI documents with the right per-polygon record counts.
 
@@ -495,7 +424,7 @@ def test_fromGEFbyROI_sorts_records_into_pyramids(two_subjects, allow_none_nan_p
 # -------------------------------- fromGEF and makeSourceFile smoke tests
 
 
-def test_makeSourceFile_fileReference_default(session, allow_none_nan_param):
+def test_makeSourceFile_fileReference_default(session):
     """Default is fileReference, which records the file without
     ingesting its bytes."""
     S, _ = session
@@ -515,7 +444,7 @@ def test_makeSourceFile_fileReference_default(session, allow_none_nan_param):
         os.unlink(path)
 
 
-def test_makeSourceFile_no_checksum_leaves_both_fields_empty(session, allow_none_nan_param):
+def test_makeSourceFile_no_checksum_leaves_both_fields_empty(session):
     """checksum=False leaves checksum AND algorithm empty, not 'MD5'
     paired with an empty hash."""
     S, _ = session
