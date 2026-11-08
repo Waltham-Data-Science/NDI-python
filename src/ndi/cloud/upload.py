@@ -541,6 +541,7 @@ def uploadFilesForDatasetDocuments(
         "failed_document_ids": [],
     }
 
+    sent: dict[str, str] = {}  # uid -> the document that owns it
     for doc in documents:
         doc_id = document_id(doc)
         for file_uid, file_path in file_uploads_for_document(doc, dataset=dataset):
@@ -552,11 +553,31 @@ def uploadFilesForDatasetDocuments(
                 url = files_api.getFileUploadURL(org_id, dataset_id, file_uid, client=client)
                 files_api.putFiles(url, file_path)
                 report["uploaded"] += 1
+                sent[str(file_uid)] = doc_id
             except Exception as exc:
                 report["failed"] += 1
                 report["errors"].append(str(exc))
                 if doc_id and doc_id not in report["failed_document_ids"]:
                     report["failed_document_ids"].append(doc_id)
+
+    # Wait once, for all of them, for NDI Cloud to record the uploads (a PUT
+    # returning 200 only means S3 has the object), as NDI-matlab's serial
+    # path does (VH-Lab/NDI-matlab#1027). A file not recorded in time counts
+    # as failed, so its document is not recorded as synced.
+    if sent:
+        waited = files_api.waitForFileUpload(dataset_id, list(sent), client=client)
+        if waited.get("state") != "complete":
+            pending = [str(u) for u in waited.get("pending", [])]
+            report["errors"].append(
+                f"{len(pending)} of {len(sent)} uploaded files were not recorded by NDI Cloud "
+                f"within {waited.get('elapsed', 0):.0f} s (first: {pending[0] if pending else ''})."
+            )
+            for uid in pending:
+                report["uploaded"] -= 1
+                report["failed"] += 1
+                d = sent.get(uid, "")
+                if d and d not in report["failed_document_ids"]:
+                    report["failed_document_ids"].append(d)
 
     return report
 
@@ -725,6 +746,7 @@ def uploadSingleFile(
     *,
     use_bulk_upload: bool = False,
     checksum: bool = True,
+    wait_for_upload: bool = True,
     client: CloudClient | None = None,
 ) -> tuple[bool, str]:
     """Upload a single file to the NDI cloud service.
@@ -742,6 +764,12 @@ def uploadSingleFile(
             upload, so S3 rejects a corrupted upload and NDI Cloud records
             the file's ``crc32``. Ignored for bulk uploads, whose zip entries
             carry their own CRC-32.
+        wait_for_upload: If True (default), return only once NDI Cloud has
+            recorded the upload (:func:`ndi.cloud.api.files.waitForFileUpload`;
+            for a bulk upload, the zip extraction job). A PUT returning 200
+            only means S3 has the object; the server records it shortly
+            after. Pass False when uploading many files and wait for them all
+            at once.
         client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
@@ -770,7 +798,16 @@ def uploadSingleFile(
                 )
                 # getFileCollectionUploadURL returns {"url", "jobId"}, not a
                 # bare URL; passing the dict to putFiles failed validation.
-                files_api.putFiles(info["url"], str(zip_path), job_id=info.get("jobId", ""))
+                ok = files_api.putFiles(
+                    info["url"],
+                    str(zip_path),
+                    job_id=info.get("jobId", ""),
+                    wait_for_completion=wait_for_upload,
+                )
+                if not ok:
+                    raise RuntimeError(
+                        "Could not upload zip file: the bulk upload job did not complete."
+                    )
             finally:
                 if zip_path.exists():
                     zip_path.unlink()
@@ -788,6 +825,13 @@ def uploadSingleFile(
                 client=client,
             )
             files_api.putFiles(url, file_path, checksum_crc32=checksum_crc32)
+            if wait_for_upload:
+                waited = files_api.waitForFileUpload(dataset_id, [file_uid], client=client)
+                if waited.get("state") != "complete":
+                    return False, (
+                        "File was sent but NDI Cloud did not record the upload within "
+                        f"{waited.get('elapsed', 0):.0f} s (state: {waited.get('state')})."
+                    )
 
         return True, ""
     except Exception as exc:
@@ -803,3 +847,11 @@ def uploadSingleFile(
 # whose whole subject was regression coverage for those two shims.
 # The bridge YAML entries under the same names in
 # src/ndi/cloud/ndi_matlab_python_bridge.yaml record the retirement.
+
+
+# MATLAB's +ndi/+cloud/+upload package also holds the streaming cloud writer
+# (SessionWriter, CurlSender, signedUploadURLs). They live in their own
+# modules and are re-exported here, so ndi.cloud.upload.SessionWriter reads as
+# MATLAB's ndi.cloud.upload.SessionWriter does.
+from .session_writer import SessionWriter, SessionWriterError, ThreadSender  # noqa: E402,F401
+from .signed_upload_urls import signedUploadURLs  # noqa: E402,F401

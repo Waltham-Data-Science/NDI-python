@@ -282,6 +282,12 @@ class TestTheStrategySwitch:
             files_api, "getFileUploadURL", lambda org, ds, uid, client=None: f"https://s3/{uid}"
         )
         monkeypatch.setattr(files_api, "putFiles", lambda url, path, **k: sent.append(url))
+        waited = []
+        monkeypatch.setattr(
+            files_api,
+            "waitForFileUpload",
+            lambda ds, uids, **k: waited.append(list(uids)) or {"state": "complete"},
+        )
         monkeypatch.setattr(
             files_api,
             "getFileCollectionUploadURL",
@@ -292,6 +298,25 @@ class TestTheStrategySwitch:
         )
         assert sent == ["https://s3/uid-a", "https://s3/uid-b"]
         assert report["uploaded"] == 2
+        assert waited == [["uid-a", "uid-b"]], "waited once, for all of them"
+
+    def test_serial_counts_a_file_cloud_never_recorded_as_failed(self, monkeypatch, tmp_path):
+        """NDI-matlab#1027: a PUT returning 200 is not the cloud recording it."""
+        monkeypatch.setattr(
+            files_api, "getFileUploadURL", lambda org, ds, uid, client=None: f"https://s3/{uid}"
+        )
+        monkeypatch.setattr(files_api, "putFiles", lambda url, path, **k: True)
+        monkeypatch.setattr(
+            files_api,
+            "waitForFileUpload",
+            lambda ds, uids, **k: {"state": "timeout", "pending": ["uid-b"], "elapsed": 120},
+        )
+        report = upload.uploadFilesForDatasetDocuments(
+            "org-1", CLOUD_ID, self._docs(tmp_path), file_upload_strategy="serial", client=_Client()
+        )
+        assert report["uploaded"] == 1 and report["failed"] == 1
+        assert "not recorded by NDI Cloud" in report["errors"][0]
+        assert len(report["failed_document_ids"]) == 1
 
     def test_an_unknown_strategy_is_refused(self, tmp_path):
         with pytest.raises(ValueError):

@@ -1238,7 +1238,32 @@ functions:
   - name: waitForFileUpload
     matlab_path: "+ndi/+cloud/+api/+files/waitForFileUpload.m"
     matlab_last_sync_hash: "eb583289"
-    status: porting_deferred
+    python_path: "ndi/cloud/api/files.py"
+    input_arguments:
+      - name: dataset_id
+        type_matlab: "string"
+        type_python: "CloudId"
+      - name: file_uids
+        type_matlab: "string"
+        type_python: "list[str] | str"
+      - name: timeout
+        type_python: "float"
+        default: "120.0"
+      - name: initial_interval
+        type_python: "float"
+        default: "1.0"
+      - name: max_interval
+        type_python: "float"
+        default: "10.0"
+      - name: backoff_factor
+        type_python: "float"
+        default: "2.0"
+      - name: client
+        type_python: "_Client"
+        default: "None"
+    output_arguments:
+      - name: result
+        type_python: "dict[str, Any]"
     decision_log: >
       Added to NDI-matlab by VH-Lab/NDI-matlab#1027: polls NDI Cloud until
       single-file uploads are recorded (uploaded=true) or a timeout passes,
@@ -1248,6 +1273,15 @@ functions:
       ported: NDI-python's single-file upload path does not wait, and its
       live tests poll listFiles themselves. Port alongside the next change
       to ndi.cloud.upload's single-file path.
+      2026-11-07: ported, with that change (uploadSingleFile and the serial
+      uploadFilesForDatasetDocuments now wait through it, as MATLAB's do) and
+      for the SessionWriter's default API. Same loop: unique uids, lookupFiles
+      for those still pending, exponential backoff (1 s growing x2 to 10 s),
+      120 s default timeout. Returns the answer dict alone, as this module's
+      other waits do (waitForBulkUpload, waitForAllBulkUploads): state
+      'complete' or 'timeout', files, pending, elapsed; MATLAB's b is
+      state == 'complete'. A poll that raises is retried until the deadline.
+      Tested in tests/test_cloud_wait_for_file_upload.py.
 
   - name: waitForAllBulkUploads
     matlab_path: "+ndi/+cloud/+api/+files/waitForAllBulkUploads.m"

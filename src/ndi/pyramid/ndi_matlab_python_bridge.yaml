@@ -74,6 +74,13 @@ functions:
       Python-only in this namespace. Napari applies scale/translate
       to the FINEST level of a multiscale layer; coarser levels come
       out of the level documents' own voxel_size/translation.
+      2026-11-07: the documents record voxel 0's CORNER (NDI-matlab
+      1b7876574 wrote the convention into lightsheetZarrLevel.md and
+      lightsheetZarrPyramid.md, and fromOMEZarr now converts a store's NGFF
+      centres to it), while napari's translate is a pixel CENTRE, so the
+      spatial axes' translate is now translation_level0 plus half a voxel.
+      It used to pass the corner straight through, drawing every pyramid
+      half a voxel short of where it is.
 
   - name: levelArrays
     matlab_path: null

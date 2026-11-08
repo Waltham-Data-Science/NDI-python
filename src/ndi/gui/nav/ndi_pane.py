@@ -3,7 +3,10 @@
 MATLAB counterpart: ``src/ndi/+ndi/+gui/+nav/ndiPane.m``
 
 A single-row pane with an "NDI" title and, on the right, a broom button that
-clears NDI's in-memory caches, an "Update" button that checks for newer
+clears NDI's in-memory caches, a coffee-cup button that keeps the computer
+awake (:class:`ndi.util.keep_awake.ndi_util_KeepAwake`: an empty cup when it
+may sleep, a steaming one while it is kept awake, by this button or by a
+running job), an "Update" button that checks for newer
 versions of NDI-python and its dependencies and offers to install them (in
 :mod:`ndi.gui.nav.update_dialog`'s package table), and a "Prefs" button that
 opens the preferences editor. Always the first pane in the navigator, and it
@@ -13,6 +16,7 @@ cannot be collapsed.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any
 
 from .pane import NavPane
@@ -21,10 +25,13 @@ __all__ = [
     "NdiPane",
     "BROOM",
     "BROOM_WIDTH",
+    "CUP_WIDTH",
     "UPDATE_WIDTH",
     "PREFS_WIDTH",
     "BUTTON_SPACING",
     "updated_message",
+    "cup_icon_file",
+    "cup_appearance",
 ]
 
 #: U+1F9F9 BROOM. MATLAB has to write this as a UTF-16 surrogate pair
@@ -34,6 +41,7 @@ __all__ = [
 BROOM = "\U0001f9f9"
 
 BROOM_WIDTH = 28
+CUP_WIDTH = 28
 UPDATE_WIDTH = 60
 PREFS_WIDTH = 60
 BUTTON_SPACING = 4
@@ -46,6 +54,29 @@ CACHE_TOOLTIP = (
 
 UPDATE_TOOLTIP = "Check for a newer version of NDI-python and its dependencies"
 UPDATE_TITLE = "NDI Update"
+
+
+def cup_icon_file(on: bool) -> Path:
+    """The coffee-cup icon: steaming (ON, kept awake) or empty (may sleep).
+
+    Byte-for-byte copies of MATLAB's ``+ndi/+gui/coffee_hot_icon.svg`` and
+    ``coffee_cold_icon.svg``, beside the other mirrored icons.
+    """
+    name = "coffee_hot_icon.svg" if on else "coffee_cold_icon.svg"
+    return Path(__file__).resolve().parent.parent / name
+
+
+def cup_appearance(keep_awake: Any = None) -> tuple[Path, str]:
+    """The cup's icon file and tooltip for KEEP_AWAKE as it stands now.
+
+    KEEP_AWAKE defaults to the process's
+    :meth:`ndi.util.keep_awake.ndi_util_KeepAwake.instance`.
+    """
+    if keep_awake is None:
+        from ...util.keep_awake import ndi_util_KeepAwake
+
+        keep_awake = ndi_util_KeepAwake.instance()
+    return cup_icon_file(keep_awake.isOn()), keep_awake.describe()
 
 
 def updated_message(result: dict[str, Any], packages: list[str]) -> str:
@@ -67,17 +98,28 @@ def updated_message(result: dict[str, Any], packages: list[str]) -> str:
 
 
 class NdiPane(NavPane):
-    """The top "NDI" pane: a broom, an Update and a Prefs button."""
+    """The top "NDI" pane: a broom, a coffee cup, an Update and a Prefs button."""
 
     def __init__(self, navigator: Any = None):
         super().__init__(navigator, title="NDI", collapsible=False)
         self.broom_button: Any = None
+        self.cup_button: Any = None
         self.update_button: Any = None
+        self._awake_relay: Any = None
+        self._remove_awake_listener: Any = None
         self.prefs_button: Any = None
 
     def right_width(self) -> float:
-        """broom (28) + spacing (4) + Update (60) + spacing (4) + Prefs (60)."""
-        return BROOM_WIDTH + BUTTON_SPACING + UPDATE_WIDTH + BUTTON_SPACING + PREFS_WIDTH
+        """broom (28) + cup (28) + Update (60) + Prefs (60) + 3 spacings (4): 188."""
+        return (
+            BROOM_WIDTH
+            + BUTTON_SPACING
+            + CUP_WIDTH
+            + BUTTON_SPACING
+            + UPDATE_WIDTH
+            + BUTTON_SPACING
+            + PREFS_WIDTH
+        )
 
     def build_header_right(self, layout: Any) -> None:
         from PySide6 import QtWidgets
@@ -88,6 +130,14 @@ class NdiPane(NavPane):
         self.broom_button.clicked.connect(self.clear_caches)
         self.accent_button(self.broom_button)
         layout.addWidget(self.broom_button)
+
+        self.cup_button = QtWidgets.QPushButton("")
+        self.cup_button.setFixedWidth(CUP_WIDTH)
+        self.cup_button.clicked.connect(self.toggle_awake)
+        self.accent_button(self.cup_button)
+        layout.addWidget(self.cup_button)
+        self._listen_to_keep_awake()
+        self.show_awake()
 
         self.update_button = QtWidgets.QPushButton("Update")
         self.update_button.setFixedWidth(UPDATE_WIDTH)
@@ -102,6 +152,57 @@ class NdiPane(NavPane):
         self.prefs_button.clicked.connect(self._open_preferences)
         self.accent_button(self.prefs_button)
         layout.addWidget(self.prefs_button)
+
+    # -- the coffee cup ------------------------------------------------------
+
+    def toggle_awake(self) -> None:
+        """Coffee-cup button callback: the manual keep-awake hold."""
+        from ...util.keep_awake import ndi_util_KeepAwake
+
+        ndi_util_KeepAwake.instance().toggleManual()
+
+    def show_awake(self) -> tuple[Path, str] | None:
+        """Draw the cup as ndi_util_KeepAwake stands now.
+
+        Returns the (icon file, tooltip) drawn, or None if there is no button
+        (not built, or already destroyed).
+        """
+        b = self.cup_button
+        if b is None or not _qt_alive(b):
+            return None
+        icon_file, tooltip = cup_appearance()
+        from PySide6 import QtGui
+
+        b.setIcon(QtGui.QIcon(str(icon_file)))
+        b.setToolTip(tooltip)
+        return icon_file, tooltip
+
+    def _listen_to_keep_awake(self) -> None:
+        """Redraw the cup on every KeepAwake change (MATLAB's Changed listener).
+
+        A change can come from a job running off the GUI thread, so the
+        callback only emits a Qt signal; Qt queues it to the GUI thread. The
+        listener goes when the button does.
+        """
+        from PySide6 import QtCore
+
+        from ...util.keep_awake import ndi_util_KeepAwake
+
+        class _Relay(QtCore.QObject):
+            changed = QtCore.Signal()
+
+        self._awake_relay = _Relay()
+        self._awake_relay.changed.connect(self.show_awake)
+        relay = self._awake_relay
+        self._remove_awake_listener = ndi_util_KeepAwake.instance().addListener(
+            lambda: relay.changed.emit() if _qt_alive(relay) else None
+        )
+        self.cup_button.destroyed.connect(self._stop_listening)
+
+    def _stop_listening(self, *_: object) -> None:
+        if self._remove_awake_listener is not None:
+            self._remove_awake_listener()
+            self._remove_awake_listener = None
 
     def _open_preferences(self) -> None:
         if self.navigator is not None:
@@ -173,6 +274,16 @@ class NdiPane(NavPane):
         alert = getattr(self.navigator, "alert", None)
         if callable(alert):
             alert(message, title, success=success)
+
+
+def _qt_alive(obj: Any) -> bool:
+    """Is the C++ side of a Qt object still there?"""
+    try:
+        import shiboken6
+
+        return bool(shiboken6.isValid(obj))
+    except ImportError:
+        return True
 
 
 class _busy_cursor:

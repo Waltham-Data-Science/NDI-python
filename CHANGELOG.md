@@ -8,6 +8,59 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Stream files to an NDI Cloud session** (`ndi.cloud.session_writer.SessionWriter`,
+  MATLAB `ndi.cloud.upload.SessionWriter`). To the lightsheet builders it looks
+  like a session. Chunks are sent in the background as they are made,
+  CRC-32-signed, `Cloud.Upload.Parallel_Uploads` at a time (on a thread pool
+  where MATLAB uses a background curl). Each batch is checked with the cloud a
+  batch later, late-recorded files are rechecked, failed sends are resent at
+  once, and a resumed build adopts what the cloud has.
+  `ndi.cloud.signed_upload_urls.signedUploadURLs` gets a batch's upload URLs
+  concurrently. The preferences `Cloud.Upload.Parallel_Uploads` and
+  `Cloud.Upload.Send_Batches_As_Zip` are shared with NDI-matlab.
+
+- **Build lightsheet pyramids in Python** (`ndi.fun.doc_lightsheet`, MATLAB
+  `ndi.fun.doc.lightsheet`). `fromSPIM` builds from a SmartSPIM acquisition's
+  `All_Channels` slices, `fromOMEZarr` from an OME-Zarr store, and both use
+  `makePyramid`. They write the same `lightsheetZarrPyramid` /
+  `lightsheetZarrLevel` documents and chunk bytes as NDI-matlab: `<u2` dtype,
+  corner translations, C-order chunks with Blosc-Zstd. That covers
+  levelSources, whole-row super-blocks, level 1 folded into level 0, twin
+  levels, streaming to a cloud target and resume. Compression and slice
+  reads run on thread pools (`numWorkers`, `readWorkers`). The helpers are
+  ported too: `dtypeName`, `reduceBlocks`, `chooseTileShape`, `chooseLevel`,
+  `levelTable`, `makeSourceFile`, `viewCommand`, `view` and `BuildProfile`
+  (`profile.csv` with MATLAB's columns).
+
+- **Keep the computer awake while a job runs** (`ndi.util.keep_awake.ndi_util_KeepAwake`,
+  MATLAB `ndi.util.KeepAwake`). It uses caffeinate on macOS, systemd-inhibit on
+  Linux and SetThreadExecutionState on Windows. A job holds it while it runs
+  unless the preference `Jobs.KeepComputerAwake` is false. The navigator's NDI
+  pane has MATLAB's coffee-cup button to keep the computer awake by hand, and the
+  cup shows when something is holding it.
+
+- **Jobs pane in the navigator** (`ndi.gui.nav.JobsPane`, MATLAB
+  `ndi.gui.nav.jobsPane`): every job on this computer, with its state,
+  percent done, time left and last update, and Pause / Resume / Restart /
+  Remove. It opens itself when a job exists. A running job refreshes it and
+  lets the window redraw at every heartbeat. Jobs MATLAB runs are listed and
+  can be paused from here.
+
+- **`ndi.job`: the job record shared with NDI-matlab** (mirroring
+  VH-Lab/NDI-matlab#1178). `ndi_job_Job` reads and writes `job.json`
+  (`ndi_common/job_schema/job.schema.json`) the way `ndi.job.Job` does, so
+  `ndi_job_Job.list()` shows every job on this computer, including MATLAB's
+  lightsheet uploads, with `effectiveState`, `percentText` and
+  `remainingSeconds`, and `requestPause()` pauses one from Python. A job kind
+  Python does not run (a kind only MATLAB defines) loads as
+  `ndi_job_ForeignJob`: listed and pausable, never run. `lightsheetToCloud`
+  (`ndi_job_LightsheetToCloud`) is ported: a SmartSPIM or OME-Zarr image built
+  straight into a session of an NDI Cloud dataset through
+  `ndi.cloud.session_writer.SessionWriter`, resumable from where it stopped,
+  and started, paused or resumed from either language. Subclasses define
+  `Kind` and `work()` and get run / pause / resume / restart / interrupted
+  detection.
+
 - **Choosing and moving the tools folder** (mirroring VH-Lab/NDI-matlab
   5f5960c3b). `ndi.update.toolsFolder()` says where `ndi_install.py` cloned the
   dependencies (read from the `ndi-deps.pth` it writes), and
@@ -215,6 +268,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `fileInfo`. `listFiles` and `getFileDetails` already pass `crc32` through.
 
 ### Fixed
+
+- **Uploads wait for NDI Cloud to record them** (mirroring VH-Lab/NDI-matlab#1027).
+  `ndi.cloud.api.files.waitForFileUpload` polls until uploaded files are
+  recorded. `uploadSingleFile` waits through it by default
+  (`wait_for_upload`). The serial upload path waits once for all its files and
+  counts any that are never recorded as failed, so their documents are not
+  marked synced. A PUT returning 200 only means S3 has the bytes.
+
+- **Lightsheet viewer: pyramids drawn half a voxel short.** A lightsheet
+  pyramid records where voxel 0's corner sits (now written down in
+  `lightsheetZarrLevel.md`, mirroring NDI-matlab 1b7876574); napari places
+  pixel centres, so `ndi.pyramid.multiscale.worldTransform` now adds half a
+  voxel along z, y and x.
 
 - **`waitForAllBulkUploads` no longer sits out its deadline on abandoned
   uploads** (mirroring VH-Lab/NDI-matlab#1189; server side

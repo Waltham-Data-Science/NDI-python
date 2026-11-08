@@ -1159,7 +1159,7 @@ classes:
   - name: preferences
     type: class
     matlab_path: "+ndi/preferences.m"
-    matlab_last_sync_hash: "386fad07e"
+    matlab_last_sync_hash: "f9878d584"
     python_path: "ndi/preferences.py"
     python_class: "ndi_preferences"
     inherits: ""
@@ -1217,6 +1217,26 @@ classes:
       NumberOfWorkers is registered as "int" (a worker count). The
       descriptions say how each language reads them: Python has no pool that
       outlives a call, so with OpenPoolIfNone false NDI-python is serial.
+      2026-11-07: examined against NDI-matlab f9878d584 (VH-Lab/NDI-matlab#1045
+      and #1178, merged). MATLAB registers Cloud.Upload.Send_Batches_As_Zip and
+      Cloud.Upload.Parallel_Uploads (read only by ndi.cloud.upload.SessionWriter)
+      and Jobs.KeepComputerAwake (read only by ndi.job.Job.run, through
+      ndi.util.KeepAwake), and renames GUI.LightsheetZarrManager.ViewerLauncher
+      to GUI.LightsheetManager.ViewerLauncher. None is ported, by the rule
+      above: SessionWriter and KeepAwake are porting_deferred, and the Python
+      ndi_job_Job.run does not keep the computer awake, so no Python code
+      would read them. A Python save keeps them in the shared file.
+      2026-11-07: Jobs.KeepComputerAwake is now ported, reversing the above
+      for that one item, because Python code now reads it: ndi_job_Job.run
+      holds ndi.util.keep_awake.ndi_util_KeepAwake (ported) while a job runs
+      unless it is false. Same key, default (true) and description as
+      MATLAB, registered as "bool", so one setting governs both languages.
+      2026-11-07: Cloud.Upload.Send_Batches_As_Zip (bool, false) and
+      Cloud.Upload.Parallel_Uploads (int, 4) are now ported too, because the
+      Python SessionWriter (ndi.cloud.session_writer, ported) reads them: same
+      keys, defaults and descriptions as MATLAB. Only
+      GUI.LightsheetManager.ViewerLauncher stays unregistered (read only by
+      the MATLAB-only LightsheetManager).
 
     properties:
       - name: Items

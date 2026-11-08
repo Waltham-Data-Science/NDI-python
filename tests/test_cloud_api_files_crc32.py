@@ -258,6 +258,7 @@ class TestUploadSingleFileChecksum:
         with (
             patch.object(files_api, "getFileUploadURL", return_value="https://s3/x") as get_url,
             patch.object(files_api, "putFiles", return_value=True) as put,
+            patch.object(files_api, "waitForFileUpload", return_value={"state": "complete"}),
         ):
             ok, err = uploadSingleFile(DATASET, "uid1", str(p), client=client, **kwargs)
         assert ok, err

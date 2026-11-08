@@ -1113,6 +1113,11 @@ functions:
       then waits once, through waitForFileUpload, for NDI Cloud to record
       them all. Not ported: Python has no waitForFileUpload yet (recorded
       as porting_deferred in ndi/cloud/api); Python's uploads do not wait.
+      2026-11-07: now ported. The serial path sends every file, then waits
+      once through ndi.cloud.api.files.waitForFileUpload; a file NDI Cloud
+      has not recorded in time counts as failed (its document joins
+      failed_document_ids, so the sync index does not record it), with
+      MATLAB's message.
       2026-09-25: NDI-matlab 4e45d96e added verbose stage prints and a listFiles-not-yet-uploaded diagnostic. Python code is silent in the same way it was; no behavioural change.
 
       2026-09-15: added a ``dataset`` kwarg. On MATLAB, +sync/+internal/
@@ -1152,6 +1157,10 @@ functions:
         type_matlab: "logical"
         type_python: "bool"
         default: "True"
+      - name: wait_for_upload
+        type_matlab: "logical"
+        type_python: "bool"
+        default: "True"
       - name: client
         type_python: "CloudClient | None"
         default: "None"
@@ -1166,6 +1175,11 @@ functions:
       waitForFileUpload until NDI Cloud records the upload. Not ported yet:
       Python returns once the PUT succeeds; see waitForFileUpload
       (porting_deferred) in ndi/cloud/api.
+      2026-11-07: ported as wait_for_upload (default True): a single-file
+      upload waits through waitForFileUpload and fails with MATLAB's message
+      if NDI Cloud does not record it in time; a bulk upload waits for its
+      zip extraction job (putFiles wait_for_completion), as MATLAB's
+      waitForCompletion does.
       Exact match.
       2026-10-12: synced to NDI-matlab 8fa6ea5e (claude/file-crc32-lookup,
       NDI-matlab#1025): 'checksum' (default true) computes the file's CRC-32
@@ -2178,3 +2192,145 @@ porting_deferred:
       but nothing wires them to ndi.cloud.upload, which reports progress
       only as verbose print output. Recorded as a gap rather than as
       not_applicable: the need is real, only the wiring is missing.
+
+  # =======================================================================
+  # +ndi/+cloud/+upload -- streaming a large build into a cloud session
+  #
+  # Added by VH-Lab/NDI-matlab#1045 and #1178 for the Lightsheet Manager's
+  # cloud Add: a lightsheet pyramid is built and its chunk files are sent
+  # straight to a session of an NDI Cloud dataset as they are made, never
+  # kept whole on disk. Ported as a group on 2026-11-07, for the Python
+  # makePyramid streaming to the cloud: ndi/cloud/session_writer.py
+  # (SessionWriter, and ThreadSender in place of CurlSender) and
+  # ndi/cloud/signed_upload_urls.py. MATLAB's flat package +ndi/+cloud/+upload
+  # is the module ndi/cloud/upload.py; the new code lives in its own modules,
+  # re-exported from ndi.cloud.upload, so upload.py is not made a package.
+  # =======================================================================
+
+  - name: SessionWriter
+    type: class
+    matlab_path: "+ndi/+cloud/+upload/SessionWriter.m"
+    matlab_last_sync_hash: "dab56894c"
+    python_path: "ndi/cloud/session_writer.py"
+    python_class: "SessionWriter"
+    properties:
+      - name: cloudDatasetId
+        type_python: "str"
+      - name: sessionId
+        type_python: "str"
+      - name: sessionReference
+        type_python: "str"
+      - name: cacheDir
+        type_python: "str"
+      - name: report
+        type_matlab: "struct (documents, files, bytes, resent, documentIds)"
+        type_python: "dict[str, Any]"
+      - name: committed
+        type_python: "bool"
+      - name: timing
+        type_matlab: "struct (urls, stage, send, verify)"
+        type_python: "dict[str, float]"
+    decision_log: >-
+      Looks like an ndi.session to the lightsheet builders (newdocument,
+      database_add, database_openbinarydoc) but writes to a session of an NDI
+      Cloud dataset: documents are uploaded at commit, after their files;
+      streamed series (declare, then streamMembers per batch) are sent in the
+      background, CRC-32-signed, ParallelUploads at a time (preference
+      Cloud.Upload.Parallel_Uploads), each batch checked against the cloud at
+      its own document's next call, a file NDI Cloud records late rechecked
+      later (RecordWait), a file the send could not deliver resent at once;
+      resume by adopt + missingMembers; cached files an earlier run left are
+      size-checked against the cloud before they are trusted.
+
+      2026-11-07: ported to ndi.cloud.session_writer.SessionWriter with every
+      public method under MATLAB's name and argument order (id, newdocument,
+      database_add, database_openbinarydoc, database_closebinarydoc, commit,
+      declare, adopt, missingMembers, streamMembers, releaseMembers,
+      replaceOnCommit, requireSubject, requireDocument, delete; static
+      writeStoredZip, listSessions, listSubjects, defaultApi) and the same
+      checks, error identifiers (SessionWriterError.identifier), retries and
+      verification order. MATLAB's name-value options are keyword-only
+      camelCase arguments (verbose, zipBatches, parallelUploads,
+      bulkThreshold, recordWait, uploadTimeout, cacheDir, keepLocalCopies,
+      retrySeconds, onUpload, api). Language-forced differences: the
+      background send is a thread pool (ThreadSender) instead of a curl
+      process, so it is always available and the "curl older than 7.68"
+      fallback has no counterpart; newdocument takes Python's
+      **properties with dotted keys, as ndi_session.newdocument does;
+      database_openbinarydoc returns a CachedBinaryFile whose fullpathfilename
+      (and .name, as a Python file object has) is the cached path; report and
+      timing are dicts; the Api is a dict of callables answering as MATLAB's
+      struct of handles does, documents are passed as property dicts rather
+      than JSON text; the default API's waitForFileUpload is
+      ndi.cloud.api.files.waitForFileUpload (ported 2026-11-07; at first it
+      polled lookupFiles itself); MATLAB's destructor is
+      delete(), also run by weakref.finalize and on leaving a with block.
+      The preferences Cloud.Upload.Parallel_Uploads and
+      Send_Batches_As_Zip are read through ndi.preferences when present (a
+      shared file MATLAB wrote has them) and fall back to MATLAB's defaults,
+      4 and false, because Python does not register them yet: registering
+      them changes the preferences editor's rows, which
+      tests/test_gui_preferences_editor.py pins.
+
+  - name: CurlSender
+    type: class
+    matlab_path: "+ndi/+cloud/+upload/CurlSender.m"
+    matlab_last_sync_hash: "0f68a1dcb"
+    status: ported_differently
+    python_path: "ndi/cloud/session_writer.py"
+    decision_log: >-
+      One background curl (--parallel --parallel-immediate, from a config
+      file, started with ndi.util.startProcess) that PUTs a batch of files
+      to pre-signed upload URLs N at a time, each signed for its CRC-32, and
+      logs "<uid> <HTTP status>" per transfer for WAIT to read. It exists
+      because MATLAB has no way to send files concurrently without blocking.
+
+      2026-11-07: ported differently, as
+      ndi.cloud.session_writer.ThreadSender: the same constructor (urls,
+      paths, crcs, uids, folder, parallel=, deleteAfter=) and the same
+      interface SessionWriter relies on (isDone, wait(timeoutSeconds) ->
+      (ok, msg, failed), stop, delete), but the PUTs run on a
+      concurrent.futures thread pool with requests (one Session per thread),
+      sending Content-Type and x-amz-checksum-crc32 as putFiles does, retried
+      three times on a lost connection, 429 or 5xx (curl's --retry 3) with
+      30 s connect and 120 s read timeouts (curl's stall limits). There is no
+      config file, log or curl version to check, so configBlock,
+      parseVersion, supported, and the cfgFile/logFile/errFile properties
+      have no counterpart; the URL is checked with
+      assert_safe_transfer_url. Not given a python_class: the class is named
+      for what it does, and its public interface is the methods above.
+
+  - name: signedUploadURLs
+    matlab_path: "+ndi/+cloud/+upload/signedUploadURLs.m"
+    matlab_last_sync_hash: "0f68a1dcb"
+    python_path: "ndi/cloud/signed_upload_urls.py"
+    decision_log: >-
+      A batch's pre-signed upload URLs from one parallel curl (the dataset's
+      organization looked up once; the token handed to curl on standard
+      input, never on disk), instead of getFileUploadURL one file at a time.
+
+      2026-11-07: ported as ndi.cloud.signed_upload_urls.signedUploadURLs
+      (cloudDatasetId, uids, crcs, folder, *, parallel=8, timeout=120,
+      client=None) -> (ok, urls, msg), same contract: ok false and urls
+      empty if any URL could not be had. The requests are made concurrently
+      from a thread pool through ndi.cloud.api.files.getFileUploadURL with
+      checksum_crc32, sharing one client; the organization is looked up once
+      per dataset per process, as MATLAB's persistent map does. folder is
+      kept for the argument order but unused: the answers are held in
+      memory rather than written to files.
+
+  - name: signedUploadURLs_config
+    matlab_path: "+ndi/+cloud/+upload/signedUploadURLs_config.m"
+    matlab_last_sync_hash: "0f68a1dcb"
+    status: ported_differently
+    python_path: "ndi/cloud/signed_upload_urls.py"
+    decision_log: >-
+      The curl config signedUploadURLs sends (one block per request, bearer
+      token, output file), split out so it can be tested without a server.
+
+      2026-11-07: ported differently. Python sends no curl config: each
+      request is built by ndi.cloud.api.files.getFileUploadURL through the
+      shared CloudClient (which carries the bearer token), called
+      concurrently from signed_upload_urls.signedUploadURLs. The tests
+      exercise that with getFileUploadURL monkeypatched, which is what this
+      split-out existed for in MATLAB.

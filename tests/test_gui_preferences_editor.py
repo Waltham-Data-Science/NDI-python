@@ -243,6 +243,8 @@ class TestState:
             "Cloud.Download.Max_Document_Batch_Count",
             "Cloud.Upload.Max_Document_Batch_Count",
             "Cloud.Upload.Max_File_Batch_Size",
+            "Cloud.Upload.Send_Batches_As_Zip",
+            "Cloud.Upload.Parallel_Uploads",
         ]
 
     def test_selecting_a_subcategory_narrows_the_rows(self, tmp_path):
@@ -251,6 +253,8 @@ class TestState:
         assert [r.label for r in state.rows()] == [
             "Max_Document_Batch_Count",
             "Max_File_Batch_Size",
+            "Send_Batches_As_Zip",
+            "Parallel_Uploads",
         ]
 
     def test_rows_carry_the_kind_and_the_tooltip(self, tmp_path):
@@ -424,7 +428,7 @@ class TestWindow:
         _qt_or_skip()
         editor = PreferencesEditor(prefs=make_prefs(tmp_path))
         rows = editor.state.rows()
-        assert len(editor.row_widgets) == len(rows) == 3
+        assert len(editor.row_widgets) == len(rows) == 5
         assert set(editor.row_widgets) == {r.index for r in rows}
 
     def test_selecting_a_subcategory_redraws_the_rows(self, tmp_path):
@@ -436,6 +440,8 @@ class TestWindow:
         assert [lbl.text() for lbl in editor.row_labels.values()] == [
             "Max_Document_Batch_Count",
             "Max_File_Batch_Size",
+            "Send_Batches_As_Zip",
+            "Parallel_Uploads",
         ]
 
     def test_the_widget_kind_follows_the_type(self, tmp_path):

@@ -26,6 +26,7 @@ from .cloud_pane import CloudPane
 from .cloud_status_dialog import CloudStatusDialog
 from .daq_system_browser import DaqSystemBrowser
 from .datasets_pane import DatasetsPane
+from .jobs_pane import JobsPane
 from .ndi_pane import NdiPane
 from .pane import NavPane
 from .progress_pane import ProgressPane
@@ -41,6 +42,7 @@ __all__ = [
     "CloudStatusDialog",
     "DaqSystemBrowser",
     "DatasetsPane",
+    "JobsPane",
     "NavPane",
     "NdiPane",
     "ProgressPane",

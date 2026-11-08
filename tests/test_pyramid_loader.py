@@ -268,3 +268,32 @@ class TestClose(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestWorldTransform(unittest.TestCase):
+    """The documents place voxel 0 by its corner; napari by its centre."""
+
+    def doc(self, **fields):
+        d = _FakeDoc()
+        d.document_properties = {"lightsheetZarrPyramid": fields}
+        return d
+
+    def test_the_spatial_axes_move_half_a_voxel(self):
+        from ndi.pyramid.multiscale import worldTransform
+
+        scale, translate = worldTransform(
+            None,
+            self.doc(
+                axes_order="tczyx",
+                voxel_size_level0=[1, 1, 4, 2, 2],
+                translation_level0=[0, 0, 0, 10, -3],
+            ),
+        )
+        self.assertEqual(scale, [1, 1, 4, 2, 2])
+        self.assertEqual(translate, [0, 0, 2, 11, -2])
+
+    def test_no_translation_recorded_is_the_origin_corner(self):
+        from ndi.pyramid.multiscale import worldTransform
+
+        _, translate = worldTransform(None, self.doc(axes_order="zyx", voxel_size_level0=[4, 1, 1]))
+        self.assertEqual(translate, [2, 0.5, 0.5])

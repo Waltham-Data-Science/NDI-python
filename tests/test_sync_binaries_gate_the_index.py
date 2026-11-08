@@ -111,6 +111,9 @@ def _binaries(monkeypatch, failing):
 
     monkeypatch.setattr(files_api, "getFileUploadURL", _url)
     monkeypatch.setattr(files_api, "putFiles", lambda *a, **k: True)
+    monkeypatch.setattr(
+        files_api, "waitForFileUpload", lambda ds, uids, **k: {"state": "complete", "pending": []}
+    )
 
 
 class TestTheFileReportNamesTheDocuments:

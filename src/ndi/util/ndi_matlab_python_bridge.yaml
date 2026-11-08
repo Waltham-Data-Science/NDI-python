@@ -729,6 +729,19 @@ not_applicable:
 # =============================================================================
 # Deferred MATLAB functions
 # =============================================================================
+  - name: startProcess
+    matlab_path: "+ndi/+util/startProcess.m"
+    matlab_last_sync_hash: "97910a0f7"
+    status: matlab_only
+    decision_log: >-
+      Starts a program with java.lang.ProcessBuilder (no shell, so nothing
+      to quote; output to files; MATLAB's own library paths taken out of the
+      child's environment on Linux and macOS) and returns the Process, which
+      can be asked whether it is alive. It works around MATLAB's system(),
+      which runs through a shell, blocks, and hands children MATLAB's
+      LD_LIBRARY_PATH. Python needs nothing: subprocess.Popen with an argv
+      list does all of it.
+
 porting_deferred:
 
   - name: hdf5Contents
@@ -751,3 +764,59 @@ porting_deferred:
       h5py makes the port straightforward whenever a Python-side ingest
       GUI wants the same answer; it is the printing and the verdict
       wording that would need mirroring, not the walk.
+
+  - name: KeepAwake
+    type: class
+    matlab_path: "+ndi/+util/KeepAwake.m"
+    matlab_last_sync_hash: "97910a0f7"
+    python_path: "ndi/util/keep_awake.py"
+    python_class: "ndi_util_KeepAwake"
+    inherits: "handle"
+    decision_log: >-
+      Ported 2026-11-07 against NDI-matlab 97910a0f7 (the file's last
+      commit). Keeps the computer from sleeping while anything holds it (a
+      running job, the navigator's coffee-cup button). Same API and
+      behaviour: instance() is a per-process singleton; hold(key, label)
+      adds KEY once (holds are by key, not counted, as MATLAB's keys cell);
+      release(key) removes it and ignores an unknown key; toggleManual,
+      manualOn, isHeldBy, isOn, describe (the same tooltip sentences) and
+      delete (stop the helper; also registered with atexit); public keys,
+      labels, lastError, the Launcher test hook and the constant ManualKey.
+      commandFor(platform, pid) returns MATLAB's exact argument lists.
+      macOS and Linux start the same helpers (caffeinate -ims -w <pid>;
+      systemd-inhibit --what=idle:sleep ... tail --pid=<pid>) with
+      subprocess.Popen tied to os.getpid(), output to
+      <tempdir>/ndi-keep-awake.log, in their own session so a terminal Ctrl+C
+      meant for a job does not kill them. Windows differs: instead of
+      MATLAB's hidden PowerShell, Python calls SetThreadExecutionState
+      (ES_CONTINUOUS | ES_SYSTEM_REQUIRED) itself through ctypes. Its state
+      belongs to the calling thread and lasts while that thread lives, so it
+      is called from a dedicated daemon thread (_WindowsThreadHelper), never
+      from whatever thread runs hold(): a job's worker thread could end, or
+      release() could come from the GUI thread and be unable to clear it.
+      The thread sets the state, waits on an Event, then clears it with
+      ES_CONTINUOUS and exits; it ends with the process, so nothing outlives
+      Python, with no helper process to start. MATLAB cannot call Win32 on
+      its own thread that way, which is why it uses PowerShell; commandFor
+      still returns that PowerShell command for parity. MATLAB's Changed
+      event is addListener(callback) -> remover / removeListener; callbacks
+      run on the thread that made the change (the NDI pane forwards them to
+      the GUI thread through a Qt signal). An RLock guards the holders, since
+      a job may run off the GUI thread. Nothing here stops NDI's work: a
+      helper that cannot start leaves isOn false and lastError set.
+      Covered by tests/test_util_keep_awake.py.
+    methods:
+      - name: instance
+        kind: static
+      - name: commandFor
+        kind: static
+      - name: platform
+        kind: static
+      - name: hold
+      - name: release
+      - name: toggleManual
+      - name: manualOn
+      - name: isHeldBy
+      - name: isOn
+      - name: describe
+      - name: delete

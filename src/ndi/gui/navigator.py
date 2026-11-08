@@ -20,7 +20,7 @@ window that leaves a gap at the bottom, or a pane that will not drag down to
 its minimum, is a wrong number rather than a raised error.
 
 THE PANE STACK
-NDI, NDI Cloud, Datasets, Progress -- MATLAB's stack, complete. Datasets is
+NDI, NDI Cloud, Datasets, Jobs, Progress -- MATLAB's stack, complete. Datasets is
 the elastic pane, so content changes are absorbed by resizing it rather than
 by resizing the window; the panes below it keep hugging the bottom edge.
 """
@@ -33,6 +33,7 @@ from .cloud_colors import cloud_colors, rgb_to_hex
 from .nav import layout as nav_layout
 from .nav.cloud_pane import CloudPane
 from .nav.datasets_pane import DatasetsPane
+from .nav.jobs_pane import JobsPane
 from .nav.ndi_pane import NdiPane
 from .nav.progress_pane import ProgressPane
 
@@ -148,6 +149,13 @@ class Navigator:
     def progress_pane_handle(self) -> Any | None:
         """The progress pane in this stack, or None."""
         return self._pane_of_type(ProgressPane)
+
+    def jobs_pane_handle(self) -> Any | None:
+        """The Jobs pane in this stack, or None. Running jobs refresh it.
+
+        MATLAB: ``jobsPaneHandle``.
+        """
+        return self._pane_of_type(JobsPane)
 
     def datasets_pane_handle(self) -> Any | None:
         """The datasets pane in this stack, or None.
@@ -279,7 +287,7 @@ class Navigator:
     def build_panes(self) -> None:
         """Instantiate the pane stack, top to bottom.
 
-        NDI, NDI Cloud, Datasets, Progress -- MATLAB's order, now complete.
+        NDI, NDI Cloud, Datasets, Jobs, Progress -- MATLAB's order.
         Progress stays last so it goes on hugging the bottom edge, and
         Datasets is the elastic pane that absorbs the leftover height.
         """
@@ -287,6 +295,7 @@ class Navigator:
             NdiPane(self),
             CloudPane(self),
             DatasetsPane(self),
+            JobsPane(self),
             ProgressPane(self),
         ]
         for row, pane in enumerate(self.panes):
