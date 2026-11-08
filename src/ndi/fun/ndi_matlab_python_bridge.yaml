@@ -3380,6 +3380,189 @@ functions:
       these functions use a small shim fixture that skips the matrix
       validation.
 
+  - name: buildROIpyramids
+    matlab_path: "+ndi/+fun/+doc/+gene/private/buildROIpyramids.m"
+    matlab_last_sync_hash: "3edae164d"
+    matlab_branch: "claude/modest-tesla-ls5952"
+    python_path: "ndi/fun/_roi_ingest.py"
+    input_arguments:
+      - name: session
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "ndi.session | ndi.dataset"
+      - name: x
+        type_matlab: "numeric vector"
+        type_python: "ArrayLike"
+      - name: y
+        type_matlab: "numeric vector"
+        type_python: "ArrayLike"
+      - name: geneIndex
+        type_matlab: "numeric vector"
+        type_python: "ArrayLike"
+      - name: count
+        type_matlab: "numeric vector"
+        type_python: "ArrayLike"
+      - name: geneID
+        type_matlab: "cell of char"
+        type_python: "list[str]"
+      - name: geneName
+        type_matlab: "cell of char"
+        type_python: "list[str]"
+      - name: meta
+        type_matlab: "struct"
+        type_python: "dict"
+      - name: gefPath
+        type_matlab: "char"
+        type_python: "str"
+      - name: subjects
+        type_matlab: "cell of char"
+        type_python: "list[str]"
+      - name: polygons
+        type_matlab: "cell of Mx2 double"
+        type_python: "list[ArrayLike]"
+      - name: options
+        type_matlab: "struct"
+        type_python: "dict"
+    output_arguments:
+      - name: pyrDocs
+        type_matlab: "cell of ndi.document"
+        type_python: "list[ndi_document | None]"
+      - name: tileDocsCell
+        type_matlab: "cell of cell of ndi.document"
+        type_python: "list[list[ndi_document] | None]"
+      - name: geneListDoc
+        type_matlab: "ndi.document"
+        type_python: "ndi_document"
+      - name: sourceDoc
+        type_matlab: "ndi.document | []"
+        type_python: "ndi_document | None"
+      - name: info
+        type_matlab: "struct"
+        type_python: "dict"
+    decision_log: >
+      Ported. The shared core of fromGEFbyROI and fromGEFinteractive:
+      takes already-read GEF records plus a list of (subject, polygon)
+      pairs, builds the shared geneList and sourceFile documents once,
+      then loops one pyramid + one ROI sidecar per polygon.
+
+      MATLAB lives under +private/, which is MATLAB's package-private
+      convention. Python has no such convention; the module is named
+      _roi_ingest.py with a leading underscore and lives next to
+      doc_gene.py. The public entry-points (fromGEFbyROI,
+      fromGEFinteractive) call it; the MATLAB builds on +private/,
+      the Python one on module-private.
+
+      inpolygon is matplotlib.path.Path.contains_points, which runs the
+      same ray-cast under a C loop. shapely would also work but is a
+      heavier dependency; matplotlib is already in NDI's dep set and
+      the ROI panels in gui.app.genepyramid already use it.
+
+      An empty polygon still records an ROI sidecar (MATLAB does the
+      same). nKeepPerROI reports per-polygon counts in info so a
+      caller can see what landed where.
+
+  - name: fromGEFbyROI
+    matlab_path: "+ndi/+fun/+doc/+gene/fromGEFbyROI.m"
+    matlab_last_sync_hash: "3edae164d"
+    matlab_branch: "claude/modest-tesla-ls5952"
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: session
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "ndi.session | ndi.dataset"
+      - name: gefPath
+        type_matlab: "char"
+        type_python: "str"
+      - name: subjects
+        type_matlab: "cell of char"
+        type_python: "list[str]"
+      - name: polygons
+        type_matlab: "cell of Mx2 double"
+        type_python: "list[ArrayLike]"
+      - name: maxGenes
+        type_matlab: "integer"
+        type_python: "int"
+      - name: binSizes
+        type_matlab: "integer vector"
+        type_python: "tuple[int, ...]"
+      - name: grid
+        type_matlab: "double | []"
+        type_python: "int | None"
+      - name: tileBudgetBytes
+        type_matlab: "double"
+        type_python: "int"
+      - name: gridRange
+        type_matlab: "integer[2]"
+        type_python: "tuple[int, int]"
+      - name: basePixelSize
+        type_matlab: "double[2]"
+        type_python: "tuple[float, float] | None"
+      - name: pixelSizeUnits
+        type_matlab: "char"
+        type_python: "str"
+      - name: label
+        type_matlab: "char"
+        type_python: "str"
+      - name: assay
+        type_matlab: "char"
+        type_python: "str"
+      - name: chipSerial
+        type_matlab: "char"
+        type_python: "str"
+      - name: pipelineVersion
+        type_matlab: "char"
+        type_python: "str"
+      - name: origin
+        type_matlab: "double[2] | []"
+        type_python: "tuple[int, int] | None"
+      - name: genomeAssembly
+        type_matlab: "char"
+        type_python: "str"
+      - name: annotationSource
+        type_matlab: "char"
+        type_python: "str"
+      - name: geneIdNamespace
+        type_matlab: "char"
+        type_python: "str"
+      - name: geneSymbolNamespace
+        type_matlab: "char"
+        type_python: "str"
+      - name: recordSource
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: checksum
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: verbose
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: progressFcn
+        type_matlab: "function_handle | []"
+        type_python: "Callable | None"
+    output_arguments:
+      - name: pyrDocs
+        type_matlab: "cell of ndi.document"
+        type_python: "list[ndi_document | None]"
+      - name: tileDocsCell
+        type_matlab: "cell of cell of ndi.document"
+        type_python: "list[list[ndi_document] | None]"
+      - name: geneListDoc
+        type_matlab: "ndi.document"
+        type_python: "ndi_document"
+      - name: sourceDoc
+        type_matlab: "ndi.document | []"
+        type_python: "ndi_document | None"
+      - name: info
+        type_matlab: "struct"
+        type_python: "dict"
+    decision_log: >
+      Ported. The scripted path: reads the .gef once and hands the
+      arrays plus the (subjects, polygons) pairs to the shared core
+      in _roi_ingest.build_roi_pyramids. Shares annotation, binSizes,
+      grid, basePixelSize and the rest across the N pyramids. Mirrors
+      the MATLAB arguments 1:1, including the deliberate OMISSION of
+      subjectID -- SUBJECTS replaces it, and quietly ignoring one when
+      the other is given would hide the intent.
+
 # =========================================================================
 # Functions — doc_gene_export.py
 #

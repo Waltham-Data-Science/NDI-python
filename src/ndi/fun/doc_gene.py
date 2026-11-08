@@ -2621,3 +2621,143 @@ def makeROI(
 
     session.database_add(doc)
     return doc
+
+
+__all__ += ["fromGEFbyROI"]
+
+
+def fromGEFbyROI(
+    session,
+    gefPath: str,
+    subjects: list[str],
+    polygons: list,
+    maxGenes: int = 0,
+    binSizes=(1, 2, 4, 8, 16, 32),
+    grid: int | None = None,
+    tileBudgetBytes: int = 50 * 2**20,
+    gridRange=(3, 64),
+    basePixelSize=None,
+    pixelSizeUnits: str = "micrometer",
+    label: str = "",
+    assay: str = "Stereo-seq",
+    chipSerial: str = "",
+    pipelineVersion: str = "",
+    origin=None,
+    genomeAssembly: str = "",
+    annotationSource: str = "",
+    geneIdNamespace: str = "",
+    geneSymbolNamespace: str = "",
+    recordSource: bool = True,
+    checksum: bool = True,
+    verbose: bool = False,
+    progressFcn=None,
+):
+    """Import a .gef into N per-subject pyramids by polygon ROIs.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.fromGEFbyROI``.
+
+    Reads a Stereo-seq .gef ONCE and builds one spatial gene expression
+    pyramid per polygon, each attributed to the matching subject. Use
+    this when a single chip's section captured tissue from multiple
+    animals: a polygon per animal cuts the records in physical pixel
+    coordinates and writes a separate pyramid for each.
+
+    For picking polygons interactively on a quick preview of the file,
+    use :func:`fromGEFinteractive` instead; both call the same internal
+    path, so a script's three polygons and a scientist's three drawn
+    polygons produce the same result.
+
+    WHAT IS SHARED, WHAT IS NOT. One readGEF, one geneList, one
+    sourceFile. One pyramid and its tiles PER POLYGON, each with its
+    own subject on it. Overlap between polygons is honoured as drawn:
+    a record inside two polygons appears in both pyramids. Record
+    classification uses a full point-in-polygon test (matplotlib's
+    C-accelerated ``Path.contains_points``, the Python equivalent of
+    MATLAB's ``inpolygon``), not just a bounding box.
+
+    Args:
+        session: an ndi.session or ndi.dataset.
+        gefPath: path to the .gef.
+        subjects: list of subject ids, one per polygon. Each must be a
+            nonempty string -- the pyramid document declares
+            ``subject_id`` mustbenotempty.
+        polygons: list of ``(M, 2)`` arrays, one per subject, in GEF
+            pixel coordinates (column 0 is x, column 1 is y, M>=3).
+            These are the same units ``ndr.format.stereoseq.readGEF``
+            returns in ``X``, ``Y``.
+        maxGenes, binSizes, grid, tileBudgetBytes, gridRange,
+            basePixelSize, pixelSizeUnits, label, assay, chipSerial,
+            pipelineVersion, origin, genomeAssembly, annotationSource,
+            geneIdNamespace, geneSymbolNamespace, recordSource,
+            checksum, verbose, progressFcn: as :func:`fromGEF`. All are
+            shared across the N pyramids. ``subjectID`` is NOT accepted:
+            ``subjects`` replaces it, and quietly ignoring one when the
+            other is given would hide the intent.
+
+    Returns:
+        ``(pyr_docs, tile_docs_list, gene_list_doc, source_doc, info)``.
+
+        - ``pyr_docs``: list of pyramid documents; ``None`` for an
+          empty-polygon ROI.
+        - ``tile_docs_list``: list of tile-document lists; ``None`` for
+          an empty-polygon ROI.
+        - ``gene_list_doc``: the single shared geneList document.
+        - ``source_doc``: the single shared sourceFile document, or
+          ``None`` when *recordSource* is False.
+        - ``info``: dict with ``meta`` (the reader's), ``sourceDoc``,
+          ``notes`` (from :func:`readNotes`), ``nKeepPerROI`` (list of
+          counts per polygon) and ``roiDocs`` (list of
+          ``spatialGeneExpressionROI`` provenance documents).
+
+    See Also:
+        :func:`fromGEF`, :func:`fromGEFinteractive`, :func:`makePyramid`.
+    """
+    from ndr.format.stereoseq import readGEF as _readGEF
+
+    from ._roi_ingest import _tick, build_roi_pyramids
+
+    if not os.path.isfile(gefPath):
+        raise FileNotFoundError(f"fromGEFbyROI: {gefPath!r} is not a regular file")
+
+    _tick(progressFcn, 0.0, "Reading the GEF...")
+    x, y, gene_index, count, gene_id, gene_name, meta = _readGEF(
+        gefPath, maxGenes=maxGenes, verbose=verbose
+    )
+
+    options = {
+        "maxGenes": maxGenes,
+        "binSizes": binSizes,
+        "grid": grid,
+        "tileBudgetBytes": tileBudgetBytes,
+        "gridRange": gridRange,
+        "basePixelSize": basePixelSize,
+        "pixelSizeUnits": pixelSizeUnits,
+        "label": label,
+        "assay": assay,
+        "chipSerial": chipSerial,
+        "pipelineVersion": pipelineVersion,
+        "origin": origin,
+        "genomeAssembly": genomeAssembly,
+        "annotationSource": annotationSource,
+        "geneIdNamespace": geneIdNamespace,
+        "geneSymbolNamespace": geneSymbolNamespace,
+        "recordSource": recordSource,
+        "checksum": checksum,
+        "verbose": verbose,
+        "progressFcn": progressFcn,
+    }
+
+    return build_roi_pyramids(
+        session,
+        x,
+        y,
+        gene_index,
+        count,
+        gene_id,
+        gene_name,
+        meta,
+        gefPath,
+        list(subjects),
+        list(polygons),
+        options,
+    )
