@@ -3563,6 +3563,71 @@ functions:
       subjectID -- SUBJECTS replaces it, and quietly ignoring one when
       the other is given would hide the intent.
 
+  - name: fromGEFinteractive
+    matlab_path: "+ndi/+fun/+doc/+gene/fromGEFinteractive.m"
+    matlab_last_sync_hash: "3edae164d"
+    matlab_branch: "claude/modest-tesla-ls5952"
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: session
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "ndi.session | ndi.dataset"
+      - name: gefPath
+        type_matlab: "char"
+        type_python: "str"
+      - name: nSubjects
+        type_matlab: "integer"
+        type_python: "int"
+      - name: subjects
+        type_matlab: "cell of char"
+        type_python: "list[str] | None"
+      - name: previewBin
+        type_matlab: "integer"
+        type_python: "int"
+      - name: logStretch
+        type_matlab: "logical"
+        type_python: "bool"
+    output_arguments:
+      - name: pyrDocs
+        type_matlab: "cell of ndi.document"
+        type_python: "list[ndi_document | None]"
+      - name: tileDocsCell
+        type_matlab: "cell of cell of ndi.document"
+        type_python: "list[list[ndi_document] | None]"
+      - name: geneListDoc
+        type_matlab: "ndi.document"
+        type_python: "ndi_document"
+      - name: sourceDoc
+        type_matlab: "ndi.document | []"
+        type_python: "ndi_document | None"
+      - name: info
+        type_matlab: "struct"
+        type_python: "dict"
+    decision_log: >
+      Ported. The interactive path: reads the .gef, renders a coarse
+      preview (summed counts across all genes, binned to previewBin),
+      asks the user to draw N polygons, and hands the (subjects,
+      polygons) pairs to _roi_ingest.build_roi_pyramids.
+
+      PICKED UI: matplotlib.widgets.PolygonSelector. MATLAB uses
+      drawpolygon on a uifigure plus a per-polygon listdlg. Alternatives
+      considered: a custom Qt widget and the Napari shapes layer from
+      ndi.gui.app.genepyramid. matplotlib wins here on three counts:
+      it is already a hard NDI dep; the click-loop is a dozen lines;
+      and the figure can run scripted, headless-off, or in a notebook.
+      The subject picker is a plain input() prompt keyed off the
+      session's subject documents (equivalent to MATLAB's listdlg
+      against the same source). A future Napari-integrated version
+      will fit under the same public name when the ingest moves inside
+      a viewer panel.
+
+      Optional nSubjects and subjects mirror MATLAB. When neither is
+      given, the function asks via input(). When subjects is passed,
+      the per-polygon subject prompt is skipped.
+
+      Accepts the same options the shared core passes through to
+      makePyramid, matching fromGEFbyROI.
+
 # =========================================================================
 # Functions — doc_gene_export.py
 #

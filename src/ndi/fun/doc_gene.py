@@ -2761,3 +2761,304 @@ def fromGEFbyROI(
         list(polygons),
         options,
     )
+
+
+__all__ += ["fromGEFinteractive"]
+
+
+def fromGEFinteractive(
+    session,
+    gefPath: str,
+    nSubjects: int = 0,
+    subjects: list[str] | None = None,
+    previewBin: int = 50,
+    logStretch: bool = True,
+    maxGenes: int = 0,
+    binSizes=(1, 2, 4, 8, 16, 32),
+    grid: int | None = None,
+    tileBudgetBytes: int = 50 * 2**20,
+    gridRange=(3, 64),
+    basePixelSize=None,
+    pixelSizeUnits: str = "micrometer",
+    label: str = "",
+    assay: str = "Stereo-seq",
+    chipSerial: str = "",
+    pipelineVersion: str = "",
+    origin=None,
+    genomeAssembly: str = "",
+    annotationSource: str = "",
+    geneIdNamespace: str = "",
+    geneSymbolNamespace: str = "",
+    recordSource: bool = True,
+    checksum: bool = True,
+    verbose: bool = False,
+    progressFcn=None,
+):
+    """Draw ROIs on a GEF preview and import N pyramids.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.fromGEFinteractive``.
+
+    Imports a Stereo-seq .gef as a set of per-subject pyramids with the
+    polygons picked on a quick preview rendered from the file's own
+    records. One readGEF covers both the preview and the subsequent
+    pyramids: the records loaded for drawing on are the records sliced
+    by each polygon.
+
+    DESIGN DECISION FOR THE UI (not in the MATLAB source). MATLAB uses
+    ``drawpolygon`` on a ``uifigure`` and ``listdlg`` for the subject
+    picker. Python has three reasonable choices:
+
+      (a) matplotlib with :class:`matplotlib.widgets.PolygonSelector`,
+      (b) Qt / PyQt with a custom widget,
+      (c) a Napari-integrated widget (the viewer at
+          ``src/ndi/gui/app/genepyramid/`` already has shapes-layer
+          plumbing).
+
+    This port picks (a). matplotlib is already a hard dep of NDI; a
+    PolygonSelector click-loop is a dozen lines; the figure can run
+    headless-off, scripted or in a notebook; and the subject picker is
+    a plain text prompt rather than a Qt dialog. Napari would give a
+    better UX inside the genepyramid viewer but makes this call a
+    heavier build and ties the helper to that viewer's lifecycle. If
+    MATLAB's own usage pattern (ingest driven from GEFManager) lands on
+    the Python side later, a Napari-integrated version will fit under
+    the same public name.
+
+    WORKFLOW. The function reads the .gef, bins the records to a
+    low-res density image (summed counts across all genes), opens a
+    matplotlib figure, and asks for one polygon per animal. After the
+    last polygon it prompts for a subject id for each via
+    :func:`input` (keyed off the session's subject documents). The N
+    pyramids are then built in one pass sharing a geneList and a
+    sourceFile.
+
+    HOW LONG THE PICKING SITS. The read is the slow phase (minutes on
+    a ferret hemisphere) and happens BEFORE any UI appears, so a
+    scientist who clicks Import and leaves the room returns to a
+    figure already waiting for the first polygon. For a scripted run
+    with polygons known ahead of time, use :func:`fromGEFbyROI`; both
+    call the same internal path.
+
+    Args:
+        session: an ndi.session or ndi.dataset.
+        gefPath: path to the .gef.
+        nSubjects: number of polygons expected. 0 asks via :func:`input`
+            at the top of the picking step. Ignored when *subjects* is
+            supplied.
+        subjects: subject ids assigned ahead of time, one per polygon.
+            When supplied, N is ``len(subjects)`` and the per-polygon
+            subject prompt is skipped; useful when the caller knows the
+            subjects and only needs the user to draw.
+        previewBin: bin size in GEF base pixels for the preview density
+            image. 50 keeps a hemisphere preview under a few megapixels
+            and is coarse enough to render instantly while still showing
+            where tissue is.
+        logStretch: log-stretch the preview for visibility. Spot counts
+            span several decades; a linear stretch hides small sections
+            next to a dense one.
+        Other options: as :func:`fromGEF` / :func:`fromGEFbyROI`.
+
+    Returns:
+        As :func:`fromGEFbyROI`. ``info["roiDocs"]`` holds one
+        ``spatialGeneExpressionROI`` provenance document per drawn
+        polygon.
+
+    Raises:
+        RuntimeError: if the figure is closed before all polygons are
+            drawn, or if the subject prompt is abandoned.
+        ValueError: if the session has no subject documents and
+            *subjects* was not supplied.
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.widgets import PolygonSelector
+    from ndr.format.stereoseq import readGEF as _readGEF
+
+    from ._roi_ingest import _tick, build_roi_pyramids
+
+    if not os.path.isfile(gefPath):
+        raise FileNotFoundError(f"fromGEFinteractive: {gefPath!r} is not a regular file")
+
+    _tick(progressFcn, 0.0, "Reading the GEF...")
+    x, y, gene_index, count, gene_id, gene_name, meta = _readGEF(
+        gefPath, maxGenes=maxGenes, verbose=verbose
+    )
+
+    # -- build a quick preview density image -----------------------------
+    _tick(progressFcn, 0.50, "Rendering preview...")
+    img, x_range, y_range = _bin_density(x, y, count, previewBin)
+    img_disp = np.log1p(img.astype(np.float64)) if logStretch else img
+
+    # -- determine N and (optionally) pre-assign subjects ----------------
+    subjects_given = subjects is not None and len(subjects) > 0
+    if subjects_given:
+        n = len(subjects)
+        subs: list[str] = list(subjects)
+    else:
+        n = int(nSubjects)
+        if n == 0:
+            try:
+                answer = input("Number of subjects (one polygon each) [3]: ").strip() or "3"
+                n = int(answer)
+            except (EOFError, ValueError) as e:
+                raise RuntimeError(
+                    f"fromGEFinteractive cancelled at the subject-count prompt: {e}"
+                ) from e
+        if n < 1:
+            raise ValueError(f"Need a positive integer subject count; got {n}.")
+        subs = [""] * n
+
+    # -- draw N polygons -------------------------------------------------
+    polygons = [None] * n
+    fig, ax = plt.subplots()
+    fig.canvas.manager.set_window_title("Split GEF by ROI")
+    ax.imshow(
+        img_disp,
+        extent=(x_range[0], x_range[1], y_range[1], y_range[0]),
+        aspect="equal",
+        cmap="turbo",
+        origin="upper",
+    )
+    ax.set_xlabel("x (GEF pixels)")
+    ax.set_ylabel("y (GEF pixels)")
+
+    pending: dict[str, Any] = {"index": 0, "selector": None}
+
+    def _on_select(verts):
+        k = pending["index"]
+        if len(verts) < 3:
+            return
+        polygons[k] = np.asarray(verts, dtype=float)
+        pending["index"] += 1
+        if pending["selector"] is not None:
+            pending["selector"].disconnect_events()
+        if pending["index"] < n:
+            ax.set_title(
+                f"Polygon {pending['index'] + 1} of {n}: click to add vertices, "
+                f"close shape to finish"
+            )
+            pending["selector"] = PolygonSelector(ax, _on_select)
+            fig.canvas.draw_idle()
+        else:
+            ax.set_title(f"{n} polygon(s) drawn; close the figure to continue")
+            fig.canvas.draw_idle()
+
+    ax.set_title(f"Polygon 1 of {n}: click to add vertices, close shape to finish")
+    pending["selector"] = PolygonSelector(ax, _on_select)
+    plt.show()
+
+    if any(p is None for p in polygons):
+        raise RuntimeError(
+            f"fromGEFinteractive: only {sum(p is not None for p in polygons)} "
+            f"of {n} polygons were completed before the figure was closed."
+        )
+
+    # -- pick subjects per polygon ---------------------------------------
+    if not subjects_given:
+        subs = _pick_subjects(session, n)
+    if any(not s for s in subs):
+        raise RuntimeError("A subject was not picked for every polygon.")
+
+    # -- hand off to the shared core -------------------------------------
+    options = {
+        "maxGenes": maxGenes,
+        "binSizes": binSizes,
+        "grid": grid,
+        "tileBudgetBytes": tileBudgetBytes,
+        "gridRange": gridRange,
+        "basePixelSize": basePixelSize,
+        "pixelSizeUnits": pixelSizeUnits,
+        "label": label,
+        "assay": assay,
+        "chipSerial": chipSerial,
+        "pipelineVersion": pipelineVersion,
+        "origin": origin,
+        "genomeAssembly": genomeAssembly,
+        "annotationSource": annotationSource,
+        "geneIdNamespace": geneIdNamespace,
+        "geneSymbolNamespace": geneSymbolNamespace,
+        "recordSource": recordSource,
+        "checksum": checksum,
+        "verbose": verbose,
+        "progressFcn": progressFcn,
+    }
+    return build_roi_pyramids(
+        session,
+        x,
+        y,
+        gene_index,
+        count,
+        gene_id,
+        gene_name,
+        meta,
+        gefPath,
+        subs,
+        polygons,
+        options,
+    )
+
+
+def _bin_density(x, y, count, bin_px: int):
+    """Sum counts into a 2D grid for the preview.
+
+    MATLAB equivalent of ``localBinDensity``. Summing counts across all
+    genes puts every record in and avoids a per-gene decision at a step
+    the user does not need to see per-gene; the preview exists to show
+    where tissue is.
+
+    Returns:
+        ``(img, (x_min, x_max), (y_min, y_max))``. Rows of *img* are y
+        (so y=y_min is at the top of the image), matching MATLAB's
+        ``imagesc``.
+    """
+    x = np.asarray(x, dtype=np.float64)
+    y = np.asarray(y, dtype=np.float64)
+    count = np.asarray(count, dtype=np.float64)
+    x_min, x_max = float(x.min()), float(x.max())
+    y_min, y_max = float(y.min()), float(y.max())
+    x_bin = ((x - x_min) // bin_px).astype(np.int64)
+    y_bin = ((y - y_min) // bin_px).astype(np.int64)
+    nx_bin = int(x_bin.max()) + 1
+    ny_bin = int(y_bin.max()) + 1
+    img = np.zeros((ny_bin, nx_bin), dtype=np.float64)
+    np.add.at(img, (y_bin, x_bin), count)
+    return img, (x_min, x_max), (y_min, y_max)
+
+
+def _pick_subjects(session, n: int) -> list[str]:
+    """Prompt the user once per polygon from the session's subjects.
+
+    MATLAB equivalent of ``localPickSubjects``. MATLAB opens a listdlg
+    per polygon; we print a numbered menu and read :func:`input`. The
+    goal is the same: one picked id per polygon, with the id taken from
+    the session's subject documents so a typo cannot slip in.
+    """
+    from ..query import ndi_query
+
+    subject_docs = session.database_search(ndi_query("").isa("subject"))
+    if not subject_docs:
+        raise ValueError(
+            "The session has no subject documents. Add subjects before splitting "
+            "a GEF by ROI; the import tags each pyramid with the matching subject."
+        )
+    labels = []
+    for d in subject_docs:
+        try:
+            labels.append(d.document_properties["subject"]["local_identifier"])
+        except (KeyError, TypeError):
+            labels.append(d.id)
+    subs: list[str] = []
+    for k in range(n):
+        print(f"\nPick subject for polygon {k + 1} of {n}:")
+        for i, name in enumerate(labels):
+            print(f"  [{i + 1}] {name}")
+        try:
+            answer = input("Choice: ").strip()
+            idx = int(answer) - 1
+            if not 0 <= idx < len(labels):
+                raise ValueError(f"Choice {answer!r} is out of range.")
+        except (EOFError, ValueError) as e:
+            raise RuntimeError(
+                f"fromGEFinteractive cancelled at the subject picker for polygon {k + 1}: {e}"
+            ) from e
+        subs.append(subject_docs[idx].id)
+    return subs
