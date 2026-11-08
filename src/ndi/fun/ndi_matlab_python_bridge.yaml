@@ -3634,13 +3634,18 @@ functions:
 # =========================================================================
 # Functions — doc_gene_export.py
 #
-# PYTHON-ONLY, and recorded as such rather than left to be discovered. This
-# project's rule is that MATLAB leads; these three have no MATLAB
-# counterpart today. They exist because the export path was needed to
-# verify the pyramid against the reference builder: a GEF written from
-# documents rebuilds byte-identical tiles, which is what proves the
-# document round trip rather than only the codec. If MATLAB gains them, the
-# names and argument order here are what it should mirror.
+# PYTHON-FIRST, and recorded as such rather than left to be discovered. The
+# project's rule is that MATLAB leads; these entries invert that locally
+# because the export path was needed to verify the pyramid against the
+# reference builder (a GEF written from documents rebuilds byte-identical
+# tiles, which is what proves the document round trip rather than only the
+# codec). exportGef has grown a MATLAB wrapper (NDI-matlab e0bb96b17 on
+# claude/modest-tesla-ls5952, exportGEF.m) that shells out to Python
+# rather than re-implementing the SAW-compat HDF5 writer in MATLAB low-level
+# calls; the entry below carries its matlab_path and notes the thin-wrapper
+# relationship. readGeneList and exportHdf5 have no MATLAB counterpart yet;
+# if MATLAB gains them, the names and argument order here are what they
+# should mirror.
   - name: makeCellTypeLabels
     matlab_path: "+ndi/+fun/+doc/+gene/makeCellTypeLabels.m"
     matlab_last_sync_hash: "46a01c077"
@@ -3706,13 +3711,37 @@ functions:
       names. MATLAB reads the same file inline where it needs it; if that
       is ever factored out, this is the shape to match.
 
-  - name: exportGef
-    matlab_path: null
+  - name: exportGEF
+    matlab_path: "+ndi/+fun/+doc/+gene/exportGEF.m"
+    matlab_last_sync_hash: "e0bb96b17"
+    matlab_branch: "claude/modest-tesla-ls5952"
     python_path: "ndi/fun/doc_gene_export.py"
     decision_log: >
-      Python-only. Writes a pyramid level back out as a Stereo-seq GEF.
-      Used to prove the round trip: the exported GEF rebuilds tiles that
-      are byte-identical to the originals through the reference builder.
+      Ported differently. Writes a pyramid level back out as a
+      Stereo-seq GEF, byte-for-byte compatible with SAW's own output.
+      The Python implementation is the AUTHORITATIVE one: every
+      SAW-compat quirk (compound offsets, S64 string padding,
+      attributes on both the bin group and the file root) lives in
+      doc_gene_export.py's exportGef, which proves the pyramid round
+      trip (the exported GEF rebuilds byte-identical tiles through
+      the reference builder). The MATLAB counterpart added in
+      NDI-matlab e0bb96b17 is a THIN WRAPPER: exportGEF.m shells out
+      to python with the same session path and pyramid id, so the
+      bytes come out the same because they ARE the Python's output.
+
+      Naming divergence: MATLAB is `exportGEF.m` (uppercase GEF),
+      Python symbol is `exportGef` (lowercase gef). The Python came
+      first and renaming its public symbol would break callers; the
+      MATLAB wrapper chose the uppercase GEF style other MATLAB
+      functions in this subpackage use (fromGEF, fromGEFbyROI,
+      fromGEFinteractive). The bridge entry uses the MATLAB stem
+      (exportGEF) per the naming policy; Python callers import
+      exportGef as before.
+
+      Return value shape matches on both sides: a dict / struct with
+      filename, bin_size, n_records, n_genes, total_counts,
+      resolution_nm (MATLAB camelCases the names per its convention;
+      Python uses snake_case).
 
   - name: exportHdf5
     matlab_path: null
