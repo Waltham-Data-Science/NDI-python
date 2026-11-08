@@ -409,6 +409,7 @@ def makePyramid(
     chipSerial: str = "",
     pipelineVersion: str = "",
     origin=None,
+    sourceFileID: str = "",
     progressFcn=None,
 ):
     """Bin flat spatial records into a tiled pyramid and store its documents.
@@ -461,6 +462,13 @@ def makePyramid(
         origin: ``(min_x, min_y)`` of the tiled region, or None to take it
             from the data. Prefer the acquisition's own bounding box when
             known: a data-derived origin moves if the gene set changes.
+        sourceFileID: id of a ``fileReference`` (or ``generic_file``)
+            document describing the file this pyramid was built from. The
+            ``spatialGeneExpressionTiles`` class has carried a
+            ``source_file_id`` dependency since it was written and nothing
+            populated it; :func:`fromGEF` and :func:`makeSourceFile` now
+            do. Empty leaves it unset, which is what a pyramid built from
+            arrays in memory should say.
 
     Returns:
         ``(pyramid_doc, [tiles_doc, ...])``, levels finest first.
@@ -587,6 +595,7 @@ def makePyramid(
                 pixelSizeUnits,
                 subjectID,
                 _level_progress(progressFcn, lo, hi, k + 1, len(bins), b),
+                sourceFileID,
             )
         )
     _tick(progressFcn, 1.0, "Pyramid complete.")
@@ -611,6 +620,7 @@ def _make_level(
     pixel_size_units,
     subject_id,
     progress=None,
+    source_file_id: str = "",
 ):
     """Build and store one resolution level.
 
@@ -690,6 +700,10 @@ def _make_level(
         )
         doc = doc.set_dependency_value("spatialGeneExpressionPyramid_id", pyr_doc.id)
         doc = doc.set_dependency_value("subject_id", subject_id)
+        if source_file_id:
+            doc = doc.set_dependency_value(
+                "source_file_id", source_file_id, error_if_not_found=False
+            )
         _tick(progress, 0.92, f"storing {len(names)} tiles...")
         return _store_doc(session, doc, names, paths)
     finally:
@@ -2308,3 +2322,201 @@ def readNotes(meta: dict[str, Any], gene_id) -> list[str]:
         notes.append("The read returned no genes.")
 
     return notes
+
+
+__all__ += ["fromGEF"]
+
+
+def _sub_progress(fcn, lo: float, hi: float):
+    """Re-scale a [0, 1] progress handle onto the ``[lo, hi]`` slice.
+
+    MATLAB equivalent of ``localSubProgress`` in fromGEF.m. ``None`` stays
+    ``None`` so a caller without a handle produces no callbacks at all.
+    """
+    if fcn is None:
+        return None
+
+    def sub(frac, txt):
+        fcn(lo + (hi - lo) * frac, txt)
+
+    return sub
+
+
+def fromGEF(
+    session,
+    gefPath: str,
+    subjectID: str = "",
+    maxGenes: int = 0,
+    binSizes=(1, 2, 4, 8, 16, 32),
+    grid: int | None = None,
+    tileBudgetBytes: int = 50 * 2**20,
+    gridRange=(3, 64),
+    basePixelSize=None,
+    pixelSizeUnits: str = "micrometer",
+    label: str = "",
+    assay: str = "Stereo-seq",
+    chipSerial: str = "",
+    pipelineVersion: str = "",
+    origin=None,
+    genomeAssembly: str = "",
+    annotationSource: str = "",
+    geneIdNamespace: str = "",
+    geneSymbolNamespace: str = "",
+    recordSource: bool = True,
+    checksum: bool = True,
+    verbose: bool = False,
+    progressFcn=None,
+):
+    """Build spatial gene expression documents from a Stereo-seq .gef.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.fromGEF``
+
+    Reads a BGI/MGI Stereo-seq .gef with ``ndr.format.stereoseq.readGEF``
+    and turns it into the documents that describe it: a ``geneList``, a
+    ``spatialGeneExpressionPyramid``, and one
+    ``spatialGeneExpressionTiles`` per level. This is the whole
+    .gef-to-database path in one call.
+
+    THE DIVISION IT OBSERVES: NDR reads the vendor's file and returns
+    arrays; NDI turns arrays into documents. Nothing here parses HDF5,
+    and nothing in NDR knows what a document is.
+
+    IT READS THE FILE ONCE. A real section is ~10^8 records and minutes;
+    the gene list and the pyramid both need those records, so they are
+    read once here rather than once per maker.
+
+    Args:
+        session: an ndi.session or ndi.dataset.
+        gefPath: path to the .gef.
+        subjectID: REQUIRED in practice: the pyramid document declares
+            ``subject_id`` mustbenotempty. Left with a default empty
+            string so the error comes from :func:`makePyramid`, which
+            explains it.
+        maxGenes: read only the first N genes; 0 is every gene. A
+            trimmed pyramid is missing genes and nothing in it records
+            that, so ``info["notes"]`` says so.
+        binSizes, grid, tileBudgetBytes, gridRange, basePixelSize,
+            pixelSizeUnits, label, assay, chipSerial, pipelineVersion,
+            origin: passed through to :func:`makePyramid`. NOTE that
+            ``grid`` defaults to None, which SIZES THE TILE GRID FROM
+            THE DATA rather than fixing it at 9x9 for a mouse section
+            and a ferret hemisphere alike. ``basePixelSize`` defaults
+            to None which takes it from the .gef's resolutionNm.
+        genomeAssembly, annotationSource, geneIdNamespace,
+            geneSymbolNamespace: passed through to
+            :func:`makeGeneList`. Counts are not reproducible without
+            the annotation they were made against and it cannot be
+            recovered from the .gef, so it is worth passing.
+        recordSource: create a ``fileReference`` document describing
+            the .gef and point every tiles document at it through
+            ``source_file_id``. See :func:`makeSourceFile`: it
+            DESCRIBES the file rather than ingesting a 9.4 GB copy.
+        checksum: compute the source file's MD5. Costs one full read
+            of the .gef on top of the ingest's own.
+        verbose: progress from the reader.
+        progressFcn: callable ``progressFcn(fraction, text)`` with
+            ``fraction`` in [0, 1] across this call. The read
+            dominates the time, so the fractions are weighted towards
+            it rather than spread evenly over the phases.
+            :func:`makePyramid` gets a handle onto the last 30%.
+
+    Returns:
+        ``(pyr_doc, tile_docs, gene_list_doc, info)``. ``info`` is a
+        dict with ``meta`` (the reader's), ``sourceDoc`` (the
+        ``fileReference`` or ``None`` when *recordSource* is False),
+        and ``notes`` (from :func:`readNotes` -- what the full read
+        found that a probe could not).
+    """
+    from ndr.format.stereoseq import readGEF as _readGEF
+
+    if not os.path.isfile(gefPath):
+        raise FileNotFoundError(f"fromGEF: {gefPath!r} is not a regular file")
+
+    _tick(progressFcn, 0.0, "Reading the GEF...")
+    x, y, gene_index, count, gene_id, gene_name, meta = _readGEF(
+        gefPath, maxGenes=maxGenes, verbose=verbose
+    )
+
+    # -- what the file said about itself ---------------------------------
+    # The chip serial and the pixel size are in the .gef, so a caller
+    # should not have to repeat them. An explicit value still wins: a
+    # caller who knows the file's own attribute is wrong needs a way to
+    # say so.
+    chip_serial = chipSerial
+    if not chip_serial:
+        meta_cs = (
+            meta.get("chipSerial") if isinstance(meta, dict) else getattr(meta, "chipSerial", "")
+        )
+        chip_serial = meta_cs or ""
+    if basePixelSize is None:
+        meta_res = (
+            meta.get("resolutionNm")
+            if isinstance(meta, dict)
+            else getattr(meta, "resolutionNm", None)
+        )
+        if meta_res is not None:
+            # resolutionNm is NANOMETRES and basePixelSize is micrometres.
+            # SAW's usual 500 nm becomes 0.5, which is also makePyramid's
+            # default -- so getting this conversion wrong looks like the
+            # default.
+            base_pixel_size = (float(meta_res) / 1000.0, float(meta_res) / 1000.0)
+        else:
+            base_pixel_size = (0.5, 0.5)
+    else:
+        base_pixel_size = tuple(float(v) for v in basePixelSize)
+
+    # -- documents, in dependency order ----------------------------------
+    _tick(progressFcn, 0.60, "Building the gene list...")
+    gene_list_doc = makeGeneList(
+        session,
+        gene_id,
+        gene_name,
+        genomeAssembly=genomeAssembly,
+        annotationSource=annotationSource,
+        geneIdNamespace=geneIdNamespace,
+        geneSymbolNamespace=geneSymbolNamespace,
+        label=label,
+    )
+
+    source_doc = None
+    source_file_id = ""
+    if recordSource:
+        _tick(progressFcn, 0.65, "Describing the source file...")
+        source_doc = makeSourceFile(session, gefPath, checksum=checksum)
+        session.database_add(source_doc)
+        source_file_id = source_doc.id
+
+    _tick(progressFcn, 0.70, "Building the pyramid...")
+    # The records go in AS READ. Promoting them to float here would cost
+    # 32 bytes a record where 14 does, held for the whole build, and
+    # makePyramid converts per level into temporaries it can release.
+    pyr_doc, tile_docs = makePyramid(
+        session,
+        np.asarray(x).ravel(),
+        np.asarray(y).ravel(),
+        np.asarray(gene_index).ravel(),
+        np.asarray(count).ravel(),
+        gene_list_doc,
+        subjectID=subjectID,
+        binSizes=binSizes,
+        grid=grid,
+        tileBudgetBytes=tileBudgetBytes,
+        gridRange=gridRange,
+        basePixelSize=base_pixel_size,
+        pixelSizeUnits=pixelSizeUnits,
+        label=label,
+        assay=assay,
+        chipSerial=chip_serial,
+        pipelineVersion=pipelineVersion,
+        origin=origin,
+        sourceFileID=source_file_id,
+        progressFcn=_sub_progress(progressFcn, 0.70, 1.00),
+    )
+
+    _tick(progressFcn, 1.0, "Pyramid complete.")
+    info = {
+        "meta": meta,
+        "sourceDoc": source_doc,
+        "notes": readNotes(meta, gene_id),
+    }
+    return pyr_doc, tile_docs, gene_list_doc, info

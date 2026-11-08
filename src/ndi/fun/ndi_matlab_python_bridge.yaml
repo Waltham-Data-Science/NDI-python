@@ -2778,6 +2778,13 @@ functions:
       pyramid is the slow half of an ingest (951 s of a 971 s ferret
       build) and reported only at its ends.
 
+      sourceFileID ('' / "") is a new option mirroring the MATLAB addition
+      in b589db9bb. When set, each tiles document's source_file_id
+      dependency is wired to that id, so the fileReference built by
+      makeSourceFile is reachable from every level. The pyramid document
+      itself does not carry this dependency (MATLAB does not set it
+      there either).
+
   - name: readViewport
     matlab_path: "+ndi/+fun/+doc/+gene/readViewport.m"
     matlab_last_sync_hash: "10687267a"
@@ -3140,25 +3147,106 @@ functions:
   - name: fromGEF
     matlab_path: "+ndi/+fun/+doc/+gene/fromGEF.m"
     matlab_last_sync_hash: "38aa4e8fb"
-    status: porting_deferred
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: session
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "ndi.session | ndi.dataset"
+      - name: gefPath
+        type_matlab: "char"
+        type_python: "str"
+      - name: subjectID
+        type_matlab: "char"
+        type_python: "str"
+      - name: maxGenes
+        type_matlab: "integer"
+        type_python: "int"
+      - name: binSizes
+        type_matlab: "integer vector"
+        type_python: "tuple[int, ...]"
+      - name: grid
+        type_matlab: "double | []"
+        type_python: "int | None"
+      - name: tileBudgetBytes
+        type_matlab: "double"
+        type_python: "int"
+      - name: gridRange
+        type_matlab: "integer[2]"
+        type_python: "tuple[int, int]"
+      - name: basePixelSize
+        type_matlab: "double[2]"
+        type_python: "tuple[float, float] | None"
+      - name: pixelSizeUnits
+        type_matlab: "char"
+        type_python: "str"
+      - name: label
+        type_matlab: "char"
+        type_python: "str"
+      - name: assay
+        type_matlab: "char"
+        type_python: "str"
+      - name: chipSerial
+        type_matlab: "char"
+        type_python: "str"
+      - name: pipelineVersion
+        type_matlab: "char"
+        type_python: "str"
+      - name: origin
+        type_matlab: "double[2] | []"
+        type_python: "tuple[int, int] | None"
+      - name: genomeAssembly
+        type_matlab: "char"
+        type_python: "str"
+      - name: annotationSource
+        type_matlab: "char"
+        type_python: "str"
+      - name: geneIdNamespace
+        type_matlab: "char"
+        type_python: "str"
+      - name: geneSymbolNamespace
+        type_matlab: "char"
+        type_python: "str"
+      - name: recordSource
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: checksum
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: verbose
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: progressFcn
+        type_matlab: "function_handle | []"
+        type_python: "Callable | None"
+    output_arguments:
+      - name: pyrDoc
+        type_matlab: "ndi.document"
+        type_python: "ndi_document"
+      - name: tileDocs
+        type_matlab: "cell array of ndi.document"
+        type_python: "list[ndi_document]"
+      - name: geneListDoc
+        type_matlab: "ndi.document"
+        type_python: "ndi_document"
+      - name: info
+        type_matlab: "struct"
+        type_python: "dict"
     decision_log: >
-      MATLAB reads a Stereo-seq .gef with ndr.format.stereoseq.readGEF
-      and produces the geneList, spatialGeneExpressionPyramid and one
-      spatialGeneExpressionTiles per level -- the whole .gef-to-database
-      path in one call. Ports with the other three entries under this
-      heading.
+      Ported. The whole .gef-to-database path: reads the file once with
+      ndr.format.stereoseq.readGEF, builds a geneList, optionally a
+      fileReference sourceDoc, then a pyramid with tiles each depending
+      on the sourceDoc through source_file_id. Progress phases weight
+      the reader's 0-60% and makePyramid's last 30% to match MATLAB.
 
-      NDI-matlab b589db9bb changed three lines of the help text: two
-      naming ndi.gui.app.GeneIngest, which was renamed GEFManager, and
-      one saying recordSource creates a fileReference rather than a
-      generic_file, following makeSourceFile. Comments only; no
-      behavioural change, and nothing to port here.
+      Side effect: makePyramid grows a sourceFileID option, mirroring
+      the MATLAB addition in b589db9bb. The option propagates through
+      _make_level to set source_file_id on each tiles document (not on
+      the pyramid document itself, matching MATLAB).
 
-      NDI-matlab 38aa4e8fb stopped promoting the reader's int32/uint16 records
-      to double before calling makePyramid -- 32 bytes a record held for
-      the whole build where 14 does, 14 GB on a 7.7e8-record section --
-      and hands makePyramid a progressFcn scaled onto the last 30% of its
-      own. Both belong to the deferred port, not to doc_gene.py.
+      maxGenes, verbose, basePixelSize=None (take from meta),
+      recordSource and checksum are all passed through to the matching
+      MATLAB defaults. meta's chipSerial and resolutionNm are used
+      when the explicit option is empty / None.
 
   - name: makeSourceFile
     matlab_path: "+ndi/+fun/+doc/+gene/makeSourceFile.m"
