@@ -526,7 +526,7 @@ not_applicable:
 
   - name: openMINDSobj2ndi_document
     matlab_path: "+ndi/+database/+fun/openMINDSobj2ndi_document.m"
-    matlab_last_sync_hash: "fe64a9f53"
+    matlab_last_sync_hash: "7ec164811"
     status: ported_differently
     decision_log: >
       MATLAB function for converting openMINDS objects to NDI documents.
@@ -544,8 +544,8 @@ not_applicable:
 
       NDI-matlab#1204: MATLAB's docstring Example 2 now builds the ferret
       Species with the canonical 'NCBITaxon:9669' instead of 'NCBI:txid9669'
-      (docstring only, no behaviour change). The Python docstring carries the
-      same example with the same identifier.
+      (docstring only, no behaviour change; NDI-matlab 7ec164811). The Python
+      docstring carries the same example with the same identifier.
 
   - name: openMINDSobj2struct
     matlab_path: "+ndi/+database/+fun/openMINDSobj2struct.m"
