@@ -142,6 +142,24 @@ def openminds_obj_to_ndi_document(
 
     Raises:
         ValueError: If dependency_type is set but dependency_value is empty.
+
+    Example:
+        Attach a species to a subject. Use the OBO-style ``NCBITaxon:``
+        prefix (``'NCBITaxon:9669'``), not the NCBI-style
+        ``'NCBI:txid9669'``: every other species document in NDI carries
+        the ``NCBITaxon:`` form, and mixing the two splits one species into
+        two for any query or tool keyed on the identifier::
+
+            from openminds.latest.controlled_terms import Species
+
+            s = Species(
+                name="Mustela putorius furo",
+                preferred_ontology_identifier="NCBITaxon:9669",
+            )
+            subject_docs = S.database_search(ndi.query("", "isa", "subject"))
+            d = openminds_obj_to_ndi_document(
+                s, S.id(), "subject", subject_docs[0].id()
+            )
     """
     from .document import ndi_document
 

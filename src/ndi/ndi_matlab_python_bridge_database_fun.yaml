@@ -542,6 +542,11 @@ not_applicable:
       already calls with exactly that (objects, session_id, dependency_type,
       dependency_value) shape. The ported_differently record holds.
 
+      NDI-matlab#1204: MATLAB's docstring Example 2 now builds the ferret
+      Species with the canonical 'NCBITaxon:9669' instead of 'NCBI:txid9669'
+      (docstring only, no behaviour change). The Python docstring carries the
+      same example with the same identifier.
+
   - name: openMINDSobj2struct
     matlab_path: "+ndi/+database/+fun/openMINDSobj2struct.m"
     matlab_last_sync_hash: "bf1b6e623"
