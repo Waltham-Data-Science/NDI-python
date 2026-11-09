@@ -223,6 +223,13 @@ KNOWN_UNVALIDATABLE_DEFINITIONS = {
     # differed between the ports would be worse than one that fails its own
     # schema in both.
     "data/pyraview": "DID:Database:ValidationFieldMatrix",
+    # Its blank template reads n_vertices=0 against a schema that
+    # requires 3 or more (and vertices_x / vertices_y are empty vectors
+    # against a schema shape of [NaN, 1]). The real document is written
+    # by ndi.fun.doc_gene.makeROI which populates n_vertices before any
+    # add, so this is the usual blank-template pattern -- same reason
+    # data/binaryseries_parameters and demoNDI are listed above.
+    "data/spatialGeneExpressionROI": "DID:Database:ValidationFieldInteger",
     "demoNDI": "DID:Database:ValidationFieldInteger",
     "demoNDISeries": "DID:Database:ValidationFieldInteger",
     "demoNDISeriesMixed": "DID:Database:ValidationFieldInteger",

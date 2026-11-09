@@ -2781,6 +2781,13 @@ functions:
       pyramid is the slow half of an ingest (951 s of a 971 s ferret
       build) and reported only at its ends.
 
+      sourceFileID ('' / "") is a new option mirroring the MATLAB addition
+      in b589db9bb. When set, each tiles document's source_file_id
+      dependency is wired to that id, so the fileReference built by
+      makeSourceFile is reachable from every level. The pyramid document
+      itself does not carry this dependency (MATLAB does not set it
+      there either).
+
   - name: readViewport
     matlab_path: "+ndi/+fun/+doc/+gene/readViewport.m"
     matlab_last_sync_hash: "10687267a"
@@ -3143,70 +3150,505 @@ functions:
   - name: fromGEF
     matlab_path: "+ndi/+fun/+doc/+gene/fromGEF.m"
     matlab_last_sync_hash: "38aa4e8fb"
-    status: porting_deferred
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: session
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "ndi.session | ndi.dataset"
+      - name: gefPath
+        type_matlab: "char"
+        type_python: "str"
+      - name: subjectID
+        type_matlab: "char"
+        type_python: "str"
+      - name: maxGenes
+        type_matlab: "integer"
+        type_python: "int"
+      - name: binSizes
+        type_matlab: "integer vector"
+        type_python: "tuple[int, ...]"
+      - name: grid
+        type_matlab: "double | []"
+        type_python: "int | None"
+      - name: tileBudgetBytes
+        type_matlab: "double"
+        type_python: "int"
+      - name: gridRange
+        type_matlab: "integer[2]"
+        type_python: "tuple[int, int]"
+      - name: basePixelSize
+        type_matlab: "double[2]"
+        type_python: "tuple[float, float] | None"
+      - name: pixelSizeUnits
+        type_matlab: "char"
+        type_python: "str"
+      - name: label
+        type_matlab: "char"
+        type_python: "str"
+      - name: assay
+        type_matlab: "char"
+        type_python: "str"
+      - name: chipSerial
+        type_matlab: "char"
+        type_python: "str"
+      - name: pipelineVersion
+        type_matlab: "char"
+        type_python: "str"
+      - name: origin
+        type_matlab: "double[2] | []"
+        type_python: "tuple[int, int] | None"
+      - name: genomeAssembly
+        type_matlab: "char"
+        type_python: "str"
+      - name: annotationSource
+        type_matlab: "char"
+        type_python: "str"
+      - name: geneIdNamespace
+        type_matlab: "char"
+        type_python: "str"
+      - name: geneSymbolNamespace
+        type_matlab: "char"
+        type_python: "str"
+      - name: recordSource
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: checksum
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: verbose
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: progressFcn
+        type_matlab: "function_handle | []"
+        type_python: "Callable | None"
+    output_arguments:
+      - name: pyrDoc
+        type_matlab: "ndi.document"
+        type_python: "ndi_document"
+      - name: tileDocs
+        type_matlab: "cell array of ndi.document"
+        type_python: "list[ndi_document]"
+      - name: geneListDoc
+        type_matlab: "ndi.document"
+        type_python: "ndi_document"
+      - name: info
+        type_matlab: "struct"
+        type_python: "dict"
     decision_log: >
-      MATLAB reads a Stereo-seq .gef with ndr.format.stereoseq.readGEF
-      and produces the geneList, spatialGeneExpressionPyramid and one
-      spatialGeneExpressionTiles per level -- the whole .gef-to-database
-      path in one call. Ports with the other three entries under this
-      heading.
+      Ported. The whole .gef-to-database path: reads the file once with
+      ndr.format.stereoseq.readGEF, builds a geneList, optionally a
+      fileReference sourceDoc, then a pyramid with tiles each depending
+      on the sourceDoc through source_file_id. Progress phases weight
+      the reader's 0-60% and makePyramid's last 30% to match MATLAB.
 
-      NDI-matlab b589db9bb changed three lines of the help text: two
-      naming ndi.gui.app.GeneIngest, which was renamed GEFManager, and
-      one saying recordSource creates a fileReference rather than a
-      generic_file, following makeSourceFile. Comments only; no
-      behavioural change, and nothing to port here.
+      Side effect: makePyramid grows a sourceFileID option, mirroring
+      the MATLAB addition in b589db9bb. The option propagates through
+      _make_level to set source_file_id on each tiles document (not on
+      the pyramid document itself, matching MATLAB).
 
-      NDI-matlab 38aa4e8fb stopped promoting the reader's int32/uint16 records
-      to double before calling makePyramid -- 32 bytes a record held for
-      the whole build where 14 does, 14 GB on a 7.7e8-record section --
-      and hands makePyramid a progressFcn scaled onto the last 30% of its
-      own. Both belong to the deferred port, not to doc_gene.py.
+      maxGenes, verbose, basePixelSize=None (take from meta),
+      recordSource and checksum are all passed through to the matching
+      MATLAB defaults. meta's chipSerial and resolutionNm are used
+      when the explicit option is empty / None.
 
   - name: makeSourceFile
     matlab_path: "+ndi/+fun/+doc/+gene/makeSourceFile.m"
     matlab_last_sync_hash: "b589db9bb"
-    status: porting_deferred
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: session
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "ndi.session | ndi.dataset"
+      - name: filename
+        type_matlab: "char"
+        type_python: "str"
+      - name: checksum
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: attachFile
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: formatOntology
+        type_matlab: "char"
+        type_python: "str"
+      - name: documentID
+        type_matlab: "char"
+        type_python: "str"
+    output_arguments:
+      - name: doc
+        type_matlab: "ndi.document"
+        type_python: "ndi_document"
     decision_log: >
-      MATLAB creates the document that the spatial gene expression
-      documents' source_file_id dependency points at, so a pyramid can
-      name the .gef it was built from.
+      Ported. Creates a fileReference by default (describes), a
+      generic_file when attachFile=True (attaches the bytes). Follows
+      NDI-matlab b589db9bb, which split the two cases after DID-matlab
+      #182 closed the fail-open that let a generic_file without its
+      file validate: generic_file.ext is mustbenotempty.
 
-      WHICH document changed, in NDI-matlab b589db9bb. Describing a file the
-      database does not hold is now a fileReference -- a new class with no
-      files section at all -- and only attachFile=true produces a
-      generic_file with the bytes attached. The old shape was a
-      generic_file with nothing attached, which is invalid, since
-      generic_file requires generic_file.ext; nothing enforced it until
-      DID-matlab #182 closed a fail-open, at which point adding such a
-      session to a dataset failed at the add rather than at the write
-      that made it.
-
-      Ports with the other three entries under this heading. A Python
-      port must create a fileReference, not a generic_file.
+      MATLAB computes dateCreated/dateUpdated as MATLAB datenum; Python
+      does the conversion inline (helper _datetime_to_matlab_datenum)
+      so the stored value is the same unit on both sides. Documents are
+      returned unadded, as in MATLAB -- the caller normally wires
+      dependencies before storing.
 
   - name: readNotes
     matlab_path: "+ndi/+fun/+doc/+gene/readNotes.m"
-    matlab_last_sync_hash: "6ae5087"
-    status: porting_deferred
+    matlab_last_sync_hash: "6ae508708"
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: meta
+        type_matlab: "struct"
+        type_python: "dict | object"
+      - name: geneID
+        type_matlab: "cell"
+        type_python: "list[str]"
+    output_arguments:
+      - name: notes
+        type_matlab: "cellstr"
+        type_python: "list[str]"
     decision_log: >
-      MATLAB post-flight helper: turns the reader meta from
-      ndr.format.stereoseq into a cellstr of things a caller should be
-      told after the fact (counts hitting ceilings, extents from
-      attributes rather than records, tables trimmed by maxGenes).
-      Ports with the other three entries under this heading; nothing in
-      Python asks for these notes yet.
+      Ported. Post-flight notes from a .gef read that a pre-flight
+      probe could not produce: clamped counts, extent provenance,
+      SAW's own per-gene totals, trimmed gene table. Order and
+      wording mirror the MATLAB cellstr so the two ports agree on
+      text when diffed.
+
+  # =======================================================================
+  # ROI import: a .gef split by polygon into N per-subject pyramids
+  #
+  # These four live on the NDI-matlab branch claude/modest-tesla-ls5952
+  # (PR #1150). Each entry carries matlab_branch to say so; the entries
+  # here are ported, and the markers go once the branch merges into
+  # NDI-matlab main. Section 8 of
+  # docs/developer_notes/ndi_matlab_python_bridge.yaml.
+  # =======================================================================
+
+  - name: makeROI
+    matlab_path: "+ndi/+fun/+doc/+gene/makeROI.m"
+    matlab_last_sync_hash: "3edae164d"
+    matlab_branch: "claude/modest-tesla-ls5952"
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: session
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "ndi.session | ndi.dataset"
+      - name: pyrDoc
+        type_matlab: "ndi.document | []"
+        type_python: "ndi_document | str | None"
+      - name: polygon
+        type_matlab: "Mx2 double"
+        type_python: "ArrayLike"
+      - name: sourceFileID
+        type_matlab: "char"
+        type_python: "str"
+      - name: label
+        type_matlab: "char"
+        type_python: "str"
+      - name: coordSpace
+        type_matlab: "char"
+        type_python: "str"
+      - name: coordUnits
+        type_matlab: "char"
+        type_python: "str"
+      - name: nRecordsIn
+        type_matlab: "integer"
+        type_python: "int"
+    output_arguments:
+      - name: doc
+        type_matlab: "ndi.document"
+        type_python: "ndi_document"
+    decision_log: >
+      Ported. Creates the spatialGeneExpressionROI provenance sidecar
+      document. The pyramid dependency is left unset when pyrDoc is
+      empty / None (the empty-polygon case the MATLAB code
+      explicitly allows, and the schema declares the dep
+      mustbenotempty: 0 to match). The ROI document is added to the
+      database before return, matching the MATLAB session.database_add
+      call -- the ROI depends on documents that already exist by the
+      time this is called, so there is no benefit to deferring the add.
+
+      makeROI runtime-checks the minimum-of-three constraint on the
+      polygon before any document is built, mirroring MATLAB. The
+      schema's n_vertices parameter ([3, 1000000, 0, 0]) encodes the
+      same constraint; the vertex-vector matrix parameters are
+      [NaN, 1] (column vector of any length), relying on makeROI's
+      guard for the minimum rather than stating it twice.
+
+  - name: buildROIpyramids
+    matlab_path: "+ndi/+fun/+doc/+gene/private/buildROIpyramids.m"
+    matlab_last_sync_hash: "3edae164d"
+    matlab_branch: "claude/modest-tesla-ls5952"
+    python_path: "ndi/fun/_roi_ingest.py"
+    input_arguments:
+      - name: session
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "ndi.session | ndi.dataset"
+      - name: x
+        type_matlab: "numeric vector"
+        type_python: "ArrayLike"
+      - name: y
+        type_matlab: "numeric vector"
+        type_python: "ArrayLike"
+      - name: geneIndex
+        type_matlab: "numeric vector"
+        type_python: "ArrayLike"
+      - name: count
+        type_matlab: "numeric vector"
+        type_python: "ArrayLike"
+      - name: geneID
+        type_matlab: "cell of char"
+        type_python: "list[str]"
+      - name: geneName
+        type_matlab: "cell of char"
+        type_python: "list[str]"
+      - name: meta
+        type_matlab: "struct"
+        type_python: "dict"
+      - name: gefPath
+        type_matlab: "char"
+        type_python: "str"
+      - name: subjects
+        type_matlab: "cell of char"
+        type_python: "list[str]"
+      - name: polygons
+        type_matlab: "cell of Mx2 double"
+        type_python: "list[ArrayLike]"
+      - name: options
+        type_matlab: "struct"
+        type_python: "dict"
+    output_arguments:
+      - name: pyrDocs
+        type_matlab: "cell of ndi.document"
+        type_python: "list[ndi_document | None]"
+      - name: tileDocsCell
+        type_matlab: "cell of cell of ndi.document"
+        type_python: "list[list[ndi_document] | None]"
+      - name: geneListDoc
+        type_matlab: "ndi.document"
+        type_python: "ndi_document"
+      - name: sourceDoc
+        type_matlab: "ndi.document | []"
+        type_python: "ndi_document | None"
+      - name: info
+        type_matlab: "struct"
+        type_python: "dict"
+    decision_log: >
+      Ported. The shared core of fromGEFbyROI and fromGEFinteractive:
+      takes already-read GEF records plus a list of (subject, polygon)
+      pairs, builds the shared geneList and sourceFile documents once,
+      then loops one pyramid + one ROI sidecar per polygon.
+
+      MATLAB lives under +private/, which is MATLAB's package-private
+      convention. Python has no such convention; the module is named
+      _roi_ingest.py with a leading underscore and lives next to
+      doc_gene.py. The public entry-points (fromGEFbyROI,
+      fromGEFinteractive) call it; the MATLAB builds on +private/,
+      the Python one on module-private.
+
+      inpolygon is matplotlib.path.Path.contains_points, which runs the
+      same ray-cast under a C loop. shapely would also work but is a
+      heavier dependency; matplotlib is already in NDI's dep set and
+      the ROI panels in gui.app.genepyramid already use it.
+
+      An empty polygon still records an ROI sidecar (MATLAB does the
+      same). nKeepPerROI reports per-polygon counts in info so a
+      caller can see what landed where.
+
+  - name: fromGEFbyROI
+    matlab_path: "+ndi/+fun/+doc/+gene/fromGEFbyROI.m"
+    matlab_last_sync_hash: "3edae164d"
+    matlab_branch: "claude/modest-tesla-ls5952"
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: session
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "ndi.session | ndi.dataset"
+      - name: gefPath
+        type_matlab: "char"
+        type_python: "str"
+      - name: subjects
+        type_matlab: "cell of char"
+        type_python: "list[str]"
+      - name: polygons
+        type_matlab: "cell of Mx2 double"
+        type_python: "list[ArrayLike]"
+      - name: maxGenes
+        type_matlab: "integer"
+        type_python: "int"
+      - name: binSizes
+        type_matlab: "integer vector"
+        type_python: "tuple[int, ...]"
+      - name: grid
+        type_matlab: "double | []"
+        type_python: "int | None"
+      - name: tileBudgetBytes
+        type_matlab: "double"
+        type_python: "int"
+      - name: gridRange
+        type_matlab: "integer[2]"
+        type_python: "tuple[int, int]"
+      - name: basePixelSize
+        type_matlab: "double[2]"
+        type_python: "tuple[float, float] | None"
+      - name: pixelSizeUnits
+        type_matlab: "char"
+        type_python: "str"
+      - name: label
+        type_matlab: "char"
+        type_python: "str"
+      - name: assay
+        type_matlab: "char"
+        type_python: "str"
+      - name: chipSerial
+        type_matlab: "char"
+        type_python: "str"
+      - name: pipelineVersion
+        type_matlab: "char"
+        type_python: "str"
+      - name: origin
+        type_matlab: "double[2] | []"
+        type_python: "tuple[int, int] | None"
+      - name: genomeAssembly
+        type_matlab: "char"
+        type_python: "str"
+      - name: annotationSource
+        type_matlab: "char"
+        type_python: "str"
+      - name: geneIdNamespace
+        type_matlab: "char"
+        type_python: "str"
+      - name: geneSymbolNamespace
+        type_matlab: "char"
+        type_python: "str"
+      - name: recordSource
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: checksum
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: verbose
+        type_matlab: "logical"
+        type_python: "bool"
+      - name: progressFcn
+        type_matlab: "function_handle | []"
+        type_python: "Callable | None"
+    output_arguments:
+      - name: pyrDocs
+        type_matlab: "cell of ndi.document"
+        type_python: "list[ndi_document | None]"
+      - name: tileDocsCell
+        type_matlab: "cell of cell of ndi.document"
+        type_python: "list[list[ndi_document] | None]"
+      - name: geneListDoc
+        type_matlab: "ndi.document"
+        type_python: "ndi_document"
+      - name: sourceDoc
+        type_matlab: "ndi.document | []"
+        type_python: "ndi_document | None"
+      - name: info
+        type_matlab: "struct"
+        type_python: "dict"
+    decision_log: >
+      Ported. The scripted path: reads the .gef once and hands the
+      arrays plus the (subjects, polygons) pairs to the shared core
+      in _roi_ingest.build_roi_pyramids. Shares annotation, binSizes,
+      grid, basePixelSize and the rest across the N pyramids. Mirrors
+      the MATLAB arguments 1:1, including the deliberate OMISSION of
+      subjectID -- SUBJECTS replaces it, and quietly ignoring one when
+      the other is given would hide the intent.
+
+  - name: fromGEFinteractive
+    matlab_path: "+ndi/+fun/+doc/+gene/fromGEFinteractive.m"
+    matlab_last_sync_hash: "877faa1d6"
+    matlab_branch: "claude/modest-tesla-ls5952"
+    python_path: "ndi/fun/doc_gene.py"
+    input_arguments:
+      - name: session
+        type_matlab: "ndi.session | ndi.dataset"
+        type_python: "ndi.session | ndi.dataset"
+      - name: gefPath
+        type_matlab: "char"
+        type_python: "str"
+      - name: nSubjects
+        type_matlab: "integer"
+        type_python: "int"
+      - name: subjects
+        type_matlab: "cell of char"
+        type_python: "list[str] | None"
+      - name: previewBin
+        type_matlab: "integer"
+        type_python: "int"
+      - name: logStretch
+        type_matlab: "logical"
+        type_python: "bool"
+    output_arguments:
+      - name: pyrDocs
+        type_matlab: "cell of ndi.document"
+        type_python: "list[ndi_document | None]"
+      - name: tileDocsCell
+        type_matlab: "cell of cell of ndi.document"
+        type_python: "list[list[ndi_document] | None]"
+      - name: geneListDoc
+        type_matlab: "ndi.document"
+        type_python: "ndi_document"
+      - name: sourceDoc
+        type_matlab: "ndi.document | []"
+        type_python: "ndi_document | None"
+      - name: info
+        type_matlab: "struct"
+        type_python: "dict"
+    decision_log: >
+      Ported. The interactive path: reads the .gef, renders a coarse
+      preview (summed counts across all genes, binned to previewBin),
+      asks the user to draw N polygons, and hands the (subjects,
+      polygons) pairs to _roi_ingest.build_roi_pyramids.
+
+      PICKED UI: matplotlib.widgets.PolygonSelector. MATLAB uses
+      drawpolygon on a uifigure plus a per-polygon listdlg. Alternatives
+      considered: a custom Qt widget and the Napari shapes layer from
+      ndi.gui.app.genepyramid. matplotlib wins here on three counts:
+      it is already a hard NDI dep; the click-loop is a dozen lines;
+      and the figure can run scripted, headless-off, or in a notebook.
+      The subject picker is a plain input() prompt keyed off the
+      session's subject documents (equivalent to MATLAB's listdlg
+      against the same source). A future Napari-integrated version
+      will fit under the same public name when the ingest moves inside
+      a viewer panel.
+
+      Optional nSubjects and subjects mirror MATLAB. When neither is
+      given, the function asks via input(). When subjects is passed,
+      the per-polygon subject prompt is skipped.
+
+      Subject picker (NDI-matlab 877faa1d6): each polygon's prompt
+      shows every subject already in the session plus a
+      "+ Create new subject..." entry at the top. Picking Create asks
+      for a local_identifier and creates the subject in the session on
+      the fly; an empty input returns to the picker for the same
+      polygon so a wrong click on Create does not abandon the whole
+      ingest. A typed name that matches an existing subject reuses
+      that subject rather than duplicating. A session with no subjects
+      is no longer an error -- Create is the first option in the list.
+      Groups are not auto-created; a GEFManager-level group prompt is
+      a follow-up when it is wanted.
+
+      Accepts the same options the shared core passes through to
+      makePyramid, matching fromGEFbyROI.
 
 # =========================================================================
 # Functions — doc_gene_export.py
 #
-# PYTHON-ONLY, and recorded as such rather than left to be discovered. This
-# project's rule is that MATLAB leads; these three have no MATLAB
-# counterpart today. They exist because the export path was needed to
-# verify the pyramid against the reference builder: a GEF written from
-# documents rebuilds byte-identical tiles, which is what proves the
-# document round trip rather than only the codec. If MATLAB gains them, the
-# names and argument order here are what it should mirror.
+# PYTHON-FIRST, and recorded as such rather than left to be discovered. The
+# project's rule is that MATLAB leads; these entries invert that locally
+# because the export path was needed to verify the pyramid against the
+# reference builder (a GEF written from documents rebuilds byte-identical
+# tiles, which is what proves the document round trip rather than only the
+# codec). exportGef has grown a MATLAB wrapper (NDI-matlab e0bb96b17 on
+# claude/modest-tesla-ls5952, exportGEF.m) that shells out to Python
+# rather than re-implementing the SAW-compat HDF5 writer in MATLAB low-level
+# calls; the entry below carries its matlab_path and notes the thin-wrapper
+# relationship. readGeneList and exportHdf5 have no MATLAB counterpart yet;
+# if MATLAB gains them, the names and argument order here are what they
+# should mirror.
   - name: makeCellTypeLabels
     matlab_path: "+ndi/+fun/+doc/+gene/makeCellTypeLabels.m"
     matlab_last_sync_hash: "46a01c077"
@@ -3272,13 +3714,37 @@ functions:
       names. MATLAB reads the same file inline where it needs it; if that
       is ever factored out, this is the shape to match.
 
-  - name: exportGef
-    matlab_path: null
+  - name: exportGEF
+    matlab_path: "+ndi/+fun/+doc/+gene/exportGEF.m"
+    matlab_last_sync_hash: "e0bb96b17"
+    matlab_branch: "claude/modest-tesla-ls5952"
     python_path: "ndi/fun/doc_gene_export.py"
     decision_log: >
-      Python-only. Writes a pyramid level back out as a Stereo-seq GEF.
-      Used to prove the round trip: the exported GEF rebuilds tiles that
-      are byte-identical to the originals through the reference builder.
+      Ported differently. Writes a pyramid level back out as a
+      Stereo-seq GEF, byte-for-byte compatible with SAW's own output.
+      The Python implementation is the AUTHORITATIVE one: every
+      SAW-compat quirk (compound offsets, S64 string padding,
+      attributes on both the bin group and the file root) lives in
+      doc_gene_export.py's exportGef, which proves the pyramid round
+      trip (the exported GEF rebuilds byte-identical tiles through
+      the reference builder). The MATLAB counterpart added in
+      NDI-matlab e0bb96b17 is a THIN WRAPPER: exportGEF.m shells out
+      to python with the same session path and pyramid id, so the
+      bytes come out the same because they ARE the Python's output.
+
+      Naming divergence: MATLAB is `exportGEF.m` (uppercase GEF),
+      Python symbol is `exportGef` (lowercase gef). The Python came
+      first and renaming its public symbol would break callers; the
+      MATLAB wrapper chose the uppercase GEF style other MATLAB
+      functions in this subpackage use (fromGEF, fromGEFbyROI,
+      fromGEFinteractive). The bridge entry uses the MATLAB stem
+      (exportGEF) per the naming policy; Python callers import
+      exportGef as before.
+
+      Return value shape matches on both sides: a dict / struct with
+      filename, bin_size, n_records, n_genes, total_counts,
+      resolution_nm (MATLAB camelCases the names per its convention;
+      Python uses snake_case).
 
   - name: exportHdf5
     matlab_path: null

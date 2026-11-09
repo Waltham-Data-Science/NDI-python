@@ -409,6 +409,7 @@ def makePyramid(
     chipSerial: str = "",
     pipelineVersion: str = "",
     origin=None,
+    sourceFileID: str = "",
     progressFcn=None,
 ):
     """Bin flat spatial records into a tiled pyramid and store its documents.
@@ -461,6 +462,13 @@ def makePyramid(
         origin: ``(min_x, min_y)`` of the tiled region, or None to take it
             from the data. Prefer the acquisition's own bounding box when
             known: a data-derived origin moves if the gene set changes.
+        sourceFileID: id of a ``fileReference`` (or ``generic_file``)
+            document describing the file this pyramid was built from. The
+            ``spatialGeneExpressionTiles`` class has carried a
+            ``source_file_id`` dependency since it was written and nothing
+            populated it; :func:`fromGEF` and :func:`makeSourceFile` now
+            do. Empty leaves it unset, which is what a pyramid built from
+            arrays in memory should say.
 
     Returns:
         ``(pyramid_doc, [tiles_doc, ...])``, levels finest first.
@@ -587,6 +595,7 @@ def makePyramid(
                 pixelSizeUnits,
                 subjectID,
                 _level_progress(progressFcn, lo, hi, k + 1, len(bins), b),
+                sourceFileID,
             )
         )
     _tick(progressFcn, 1.0, "Pyramid complete.")
@@ -611,6 +620,7 @@ def _make_level(
     pixel_size_units,
     subject_id,
     progress=None,
+    source_file_id: str = "",
 ):
     """Build and store one resolution level.
 
@@ -690,6 +700,10 @@ def _make_level(
         )
         doc = doc.set_dependency_value("spatialGeneExpressionPyramid_id", pyr_doc.id)
         doc = doc.set_dependency_value("subject_id", subject_id)
+        if source_file_id:
+            doc = doc.set_dependency_value(
+                "source_file_id", source_file_id, error_if_not_found=False
+            )
         _tick(progress, 0.92, f"storing {len(names)} tiles...")
         return _store_doc(session, doc, names, paths)
     finally:
@@ -2074,3 +2088,1018 @@ def findCellTypeLabels(session, cells_doc):
         ndi_query("").isa("cellTypeLabels")
         & ndi_query("").depends_on("cells_document_id", cells_doc.id)
     )
+
+
+__all__ += ["makeSourceFile", "readNotes"]
+
+
+def _datetime_to_matlab_datenum(dt) -> float:
+    """MATLAB serial date number for a Python ``datetime``.
+
+    MATLAB's datenum counts days from the proleptic Gregorian 0000-01-00,
+    so January 1 Year 1 reads 367 there and 1 as a Python ``toordinal``.
+    The offset is a constant 366 plus the fraction of the day. Matching
+    the units matters: the schema calls the field ``datenum``, and a
+    reader averaging dates across the two language ports would otherwise
+    get numbers 366 days apart from each other.
+    """
+    days = dt.toordinal() + 366
+    seconds = dt.hour * 3600 + dt.minute * 60 + dt.second + dt.microsecond / 1e6
+    return days + seconds / 86400.0
+
+
+def makeSourceFile(
+    session,
+    filename: str,
+    checksum: bool = True,
+    attachFile: bool = False,
+    formatOntology: str = "",
+    documentID: str = "",
+):
+    """Describe, or attach, the raw file a document came from.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.makeSourceFile``
+
+    Creates the document that the spatial gene expression documents
+    point at through their ``source_file_id`` dependency, so a pyramid
+    can name the .gef it was built from and a cell table the .h5ad it
+    was segmented from.
+
+    DESCRIBING IS NOT ATTACHING, and the default is to describe. A SAW
+    .gef is ~9.4 GB; ingesting a copy of it into the database alongside
+    the pyramid derived from it would roughly double the storage to
+    hold bytes the pyramid already summarises. The document records
+    the name, the size, the checksum and the dates -- enough to
+    identify the file, verify it if it is still around, and say what a
+    pyramid came from.
+
+    THE TWO CASES ARE TWO CLASSES, and getting that wrong is what
+    MATLAB's :func:`makeSourceFile` did until it was fixed (see
+    NDI-matlab b589db9bb):
+
+      - ``attachFile=False`` -> ``fileReference``, which holds no file
+      - ``attachFile=True`` -> ``generic_file``, which holds
+        ``generic_file.ext``
+
+    ``generic_file``'s schema declares ``generic_file.ext`` with
+    ``mustbenotempty 1``, so a generic_file without its file is not a
+    lighter version of one, it is an invalid one.
+
+    THE CHECKSUM IS THE PART WORTH HAVING. A filename tells you what
+    somebody called a file; a checksum tells you whether the file you
+    have now is the file the pyramid was built from.
+
+    Args:
+        session: an ndi.session or ndi.dataset.
+        filename: path to the source file.
+        checksum: compute the MD5. Costs a full read of the file; pass
+            False to skip, and the field is left empty rather than
+            filled with a placeholder that would look like a real hash.
+        attachFile: ingest a copy of the file itself, and return a
+            ``generic_file`` document rather than a ``fileReference``.
+            Worth it when the source is small or when the archive is the
+            point.
+        formatOntology: an ontology term for the format, if you have
+            one. Left EMPTY rather than guessed: a wrong term is worse
+            than none, because it is machine-readable and will be
+            believed.
+        documentID: a document this file is about, for the
+            ``generic_file`` class's own ``document_id`` dependency.
+
+    Returns:
+        The ``ndi.document`` -- ``fileReference``, or ``generic_file``
+        when *attachFile* is True -- NOT yet added to the database.
+        The caller adds it, because it is normally created as part of a
+        set whose dependencies have to be wired before any of them is
+        stored. This matches the MATLAB contract.
+    """
+    if not os.path.isfile(filename):
+        raise FileNotFoundError(f"makeSourceFile: {filename!r} is not a regular file")
+
+    base = os.path.basename(filename)
+
+    # The algorithm names what the checksum IS. With no checksum there is
+    # nothing for it to name, and leaving 'MD5' there would advertise a
+    # hash that was never computed.
+    from .file import MD5 as _MD5
+    from .file import dateCreated as _dateCreated
+    from .file import dateUpdated as _dateUpdated
+
+    cksum = ""
+    algorithm = ""
+    if checksum:
+        cksum = _MD5(filename)
+        algorithm = "MD5"
+
+    # The dates are the file's own, not now(): a document created today
+    # from a file written last year should say last year. A filesystem
+    # that does not report one of them is not a reason to refuse the
+    # document; the checksum is the identifying field.
+    created = 0
+    updated = 0
+    try:
+        c = _dateCreated(filename)
+        if c is not None:
+            created = _datetime_to_matlab_datenum(c)
+    except Exception:
+        pass
+    try:
+        u = _dateUpdated(filename)
+        if u is not None:
+            updated = _datetime_to_matlab_datenum(u)
+    except Exception:
+        pass
+
+    if attachFile:
+        # generic_file: the database holds the bytes, and its schema
+        # requires them. Its property list has no size or algorithm
+        # fields, so it gets what it declares and nothing invented.
+        doc = (
+            _blank(
+                "generic_file",
+                generic_file={
+                    "filename": base,
+                    "formatOntology": formatOntology,
+                    "dateCreated": created,
+                    "dateUpdated": updated,
+                    "checksum": cksum,
+                },
+            )
+            + session.newdocument()
+        )
+        # The file itself must be attached. delete_original would be the
+        # MATLAB default (0): leave the source where the caller gave it.
+        doc = doc.add_file("generic_file.ext", filename)
+    else:
+        try:
+            fileSize = float(os.path.getsize(filename))
+        except OSError:
+            fileSize = 0
+        doc = (
+            _blank(
+                "fileReference",
+                fileReference={
+                    "filename": base,
+                    "originalPath": filename,
+                    "formatOntology": formatOntology,
+                    "dateCreated": created,
+                    "dateUpdated": updated,
+                    "fileSize": fileSize,
+                    "checksum": cksum,
+                    "checksumAlgorithm": algorithm,
+                },
+            )
+            + session.newdocument()
+        )
+
+    if documentID:
+        doc = doc.set_dependency_value("document_id", documentID, error_if_not_found=False)
+    return doc
+
+
+def readNotes(meta: dict[str, Any], gene_id) -> list[str]:
+    """Post-flight notes a .gef read produced that a probe could not.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.readNotes``
+
+    THESE ARE REPORTED, NOT RAISED. None of them makes the pyramid
+    wrong and all of them change what it means: counts that hit the
+    ceiling read low, an extent that came from attributes rather than
+    from the records is a claim rather than a measurement, and a gene
+    table trimmed by ``maxGenes`` leaves a pyramid missing genes with
+    nothing in it saying so.
+
+    They cannot be part of a pre-flight confirmation, which is the
+    reason this exists separately from the checks that can: every one
+    of them needs every record to have been read.
+
+    Args:
+        meta: the reader's ``meta`` dict, as returned by
+            ``ndr.format.stereoseq.readGEF``. Accepts a Python dict or
+            any object with ``.get(name, default)``.
+        gene_id: the gene accessions that came back, used to detect a
+            trimmed read against ``meta["nGenesInFile"]``.
+
+    Returns:
+        List of human-readable notes, empty when there is nothing to
+        say. Order matches MATLAB's cellstr.
+    """
+
+    def _get(obj, name, default):
+        if obj is None:
+            return default
+        if isinstance(obj, dict):
+            return obj.get(name, default)
+        return getattr(obj, name, default)
+
+    notes: list[str] = []
+
+    n_clamped = int(_get(meta, "nCountsClamped", 0) or 0)
+    if n_clamped > 0:
+        # Match MATLAB's thousands grouping: "1,234,567".
+        notes.append(f"{n_clamped:,} count(s) were clamped at the ceiling. Those pixels read low.")
+
+    src = _get(meta, "boxSource", "") or ""
+    if src:
+        notes.append(f"Extent taken from {src}.")
+
+    # SAW's own per-gene MID totals, when the reader surfaced them.
+    stat_totals = _get(meta, "statTotals", None)
+    if stat_totals is not None and len(stat_totals) > 0:
+        note = _get(meta, "statTotalsNote", "") or ""
+        if note:
+            notes.append(f"SAW /stat/gene: {note}")
+
+    n_got = len(gene_id) if gene_id is not None else 0
+    n_in_file = int(_get(meta, "nGenesInFile", n_got) or n_got)
+    if n_in_file > n_got:
+        notes.append(
+            f"Only {n_got} of the file's {n_in_file} genes were read. The pyramid is "
+            f"missing the rest and nothing in it says so."
+        )
+
+    if n_got == 0:
+        notes.append("The read returned no genes.")
+
+    return notes
+
+
+__all__ += ["fromGEF"]
+
+
+def _sub_progress(fcn, lo: float, hi: float):
+    """Re-scale a [0, 1] progress handle onto the ``[lo, hi]`` slice.
+
+    MATLAB equivalent of ``localSubProgress`` in fromGEF.m. ``None`` stays
+    ``None`` so a caller without a handle produces no callbacks at all.
+    """
+    if fcn is None:
+        return None
+
+    def sub(frac, txt):
+        fcn(lo + (hi - lo) * frac, txt)
+
+    return sub
+
+
+def fromGEF(
+    session,
+    gefPath: str,
+    subjectID: str = "",
+    maxGenes: int = 0,
+    binSizes=(1, 2, 4, 8, 16, 32),
+    grid: int | None = None,
+    tileBudgetBytes: int = 50 * 2**20,
+    gridRange=(3, 64),
+    basePixelSize=None,
+    pixelSizeUnits: str = "micrometer",
+    label: str = "",
+    assay: str = "Stereo-seq",
+    chipSerial: str = "",
+    pipelineVersion: str = "",
+    origin=None,
+    genomeAssembly: str = "",
+    annotationSource: str = "",
+    geneIdNamespace: str = "",
+    geneSymbolNamespace: str = "",
+    recordSource: bool = True,
+    checksum: bool = True,
+    verbose: bool = False,
+    progressFcn=None,
+):
+    """Build spatial gene expression documents from a Stereo-seq .gef.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.fromGEF``
+
+    Reads a BGI/MGI Stereo-seq .gef with ``ndr.format.stereoseq.readGEF``
+    and turns it into the documents that describe it: a ``geneList``, a
+    ``spatialGeneExpressionPyramid``, and one
+    ``spatialGeneExpressionTiles`` per level. This is the whole
+    .gef-to-database path in one call.
+
+    THE DIVISION IT OBSERVES: NDR reads the vendor's file and returns
+    arrays; NDI turns arrays into documents. Nothing here parses HDF5,
+    and nothing in NDR knows what a document is.
+
+    IT READS THE FILE ONCE. A real section is ~10^8 records and minutes;
+    the gene list and the pyramid both need those records, so they are
+    read once here rather than once per maker.
+
+    Args:
+        session: an ndi.session or ndi.dataset.
+        gefPath: path to the .gef.
+        subjectID: REQUIRED in practice: the pyramid document declares
+            ``subject_id`` mustbenotempty. Left with a default empty
+            string so the error comes from :func:`makePyramid`, which
+            explains it.
+        maxGenes: read only the first N genes; 0 is every gene. A
+            trimmed pyramid is missing genes and nothing in it records
+            that, so ``info["notes"]`` says so.
+        binSizes, grid, tileBudgetBytes, gridRange, basePixelSize,
+            pixelSizeUnits, label, assay, chipSerial, pipelineVersion,
+            origin: passed through to :func:`makePyramid`. NOTE that
+            ``grid`` defaults to None, which SIZES THE TILE GRID FROM
+            THE DATA rather than fixing it at 9x9 for a mouse section
+            and a ferret hemisphere alike. ``basePixelSize`` defaults
+            to None which takes it from the .gef's resolutionNm.
+        genomeAssembly, annotationSource, geneIdNamespace,
+            geneSymbolNamespace: passed through to
+            :func:`makeGeneList`. Counts are not reproducible without
+            the annotation they were made against and it cannot be
+            recovered from the .gef, so it is worth passing.
+        recordSource: create a ``fileReference`` document describing
+            the .gef and point every tiles document at it through
+            ``source_file_id``. See :func:`makeSourceFile`: it
+            DESCRIBES the file rather than ingesting a 9.4 GB copy.
+        checksum: compute the source file's MD5. Costs one full read
+            of the .gef on top of the ingest's own.
+        verbose: progress from the reader.
+        progressFcn: callable ``progressFcn(fraction, text)`` with
+            ``fraction`` in [0, 1] across this call. The read
+            dominates the time, so the fractions are weighted towards
+            it rather than spread evenly over the phases.
+            :func:`makePyramid` gets a handle onto the last 30%.
+
+    Returns:
+        ``(pyr_doc, tile_docs, gene_list_doc, info)``. ``info`` is a
+        dict with ``meta`` (the reader's), ``sourceDoc`` (the
+        ``fileReference`` or ``None`` when *recordSource* is False),
+        and ``notes`` (from :func:`readNotes` -- what the full read
+        found that a probe could not).
+    """
+    from ndr.format.stereoseq import readGEF as _readGEF
+
+    if not os.path.isfile(gefPath):
+        raise FileNotFoundError(f"fromGEF: {gefPath!r} is not a regular file")
+
+    _tick(progressFcn, 0.0, "Reading the GEF...")
+    x, y, gene_index, count, gene_id, gene_name, meta = _readGEF(
+        gefPath, maxGenes=maxGenes, verbose=verbose
+    )
+
+    # -- what the file said about itself ---------------------------------
+    # The chip serial and the pixel size are in the .gef, so a caller
+    # should not have to repeat them. An explicit value still wins: a
+    # caller who knows the file's own attribute is wrong needs a way to
+    # say so.
+    chip_serial = chipSerial
+    if not chip_serial:
+        meta_cs = (
+            meta.get("chipSerial") if isinstance(meta, dict) else getattr(meta, "chipSerial", "")
+        )
+        chip_serial = meta_cs or ""
+    if basePixelSize is None:
+        meta_res = (
+            meta.get("resolutionNm")
+            if isinstance(meta, dict)
+            else getattr(meta, "resolutionNm", None)
+        )
+        if meta_res is not None:
+            # resolutionNm is NANOMETRES and basePixelSize is micrometres.
+            # SAW's usual 500 nm becomes 0.5, which is also makePyramid's
+            # default -- so getting this conversion wrong looks like the
+            # default.
+            base_pixel_size = (float(meta_res) / 1000.0, float(meta_res) / 1000.0)
+        else:
+            base_pixel_size = (0.5, 0.5)
+    else:
+        base_pixel_size = tuple(float(v) for v in basePixelSize)
+
+    # -- documents, in dependency order ----------------------------------
+    _tick(progressFcn, 0.60, "Building the gene list...")
+    gene_list_doc = makeGeneList(
+        session,
+        gene_id,
+        gene_name,
+        genomeAssembly=genomeAssembly,
+        annotationSource=annotationSource,
+        geneIdNamespace=geneIdNamespace,
+        geneSymbolNamespace=geneSymbolNamespace,
+        label=label,
+    )
+
+    source_doc = None
+    source_file_id = ""
+    if recordSource:
+        _tick(progressFcn, 0.65, "Describing the source file...")
+        source_doc = makeSourceFile(session, gefPath, checksum=checksum)
+        session.database_add(source_doc)
+        source_file_id = source_doc.id
+
+    _tick(progressFcn, 0.70, "Building the pyramid...")
+    # The records go in AS READ. Promoting them to float here would cost
+    # 32 bytes a record where 14 does, held for the whole build, and
+    # makePyramid converts per level into temporaries it can release.
+    pyr_doc, tile_docs = makePyramid(
+        session,
+        np.asarray(x).ravel(),
+        np.asarray(y).ravel(),
+        np.asarray(gene_index).ravel(),
+        np.asarray(count).ravel(),
+        gene_list_doc,
+        subjectID=subjectID,
+        binSizes=binSizes,
+        grid=grid,
+        tileBudgetBytes=tileBudgetBytes,
+        gridRange=gridRange,
+        basePixelSize=base_pixel_size,
+        pixelSizeUnits=pixelSizeUnits,
+        label=label,
+        assay=assay,
+        chipSerial=chip_serial,
+        pipelineVersion=pipelineVersion,
+        origin=origin,
+        sourceFileID=source_file_id,
+        progressFcn=_sub_progress(progressFcn, 0.70, 1.00),
+    )
+
+    _tick(progressFcn, 1.0, "Pyramid complete.")
+    info = {
+        "meta": meta,
+        "sourceDoc": source_doc,
+        "notes": readNotes(meta, gene_id),
+    }
+    return pyr_doc, tile_docs, gene_list_doc, info
+
+
+__all__ += ["makeROI"]
+
+
+def _doc_id(doc) -> str:
+    """Id of a document, for callers that may pass None, '', or an id."""
+    if doc is None:
+        return ""
+    if isinstance(doc, str):
+        return doc
+    try:
+        return doc.id
+    except AttributeError:
+        return ""
+
+
+def makeROI(
+    session,
+    pyrDoc,
+    polygon,
+    sourceFileID: str = "",
+    label: str = "",
+    coordSpace: str = "gef_base_pixel",
+    coordUnits: str = "pixel",
+    nRecordsIn: int = 0,
+):
+    """Record the polygon that carved a per-subject pyramid.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.makeROI``
+
+    Creates a ``spatialGeneExpressionROI`` document: a provenance
+    sidecar that stores the drawn polygon alongside the pyramid built
+    from the records inside it. The pyramid remains a freestanding
+    one-subject document; this doc exists next to it.
+
+    Written by :func:`fromGEFbyROI` (and the interactive wrapper) so a
+    V2 importer can lift the geometry rather than ask the scientist to
+    redraw. No current tool reads it.
+
+    Args:
+        session: an ndi.session or ndi.dataset.
+        pyrDoc: the ``spatialGeneExpressionPyramid`` document this ROI
+            produced, or '' / None to leave the dependency unset. An
+            empty value is accepted for the empty-polygon case: when no
+            records fell inside, there is no pyramid to depend on but
+            the geometry is still worth recording.
+        polygon: ``(M, 2)`` numpy-array-like of polygon vertices in GEF
+            pixel coordinates (col 0 is x, col 1 is y, M>=3).
+        sourceFileID: id of the shared source-file document (the .gef
+            the pyramid was built from). Empty leaves the dependency
+            unset.
+        label: a human-readable label.
+        coordSpace: default ``gef_base_pixel``.
+        coordUnits: default ``pixel``.
+        nRecordsIn: number of records that landed inside the polygon.
+            Reported for provenance.
+
+    Returns:
+        The stored ``spatialGeneExpressionROI`` document.
+
+    Raises:
+        ValueError: if the polygon has fewer than 3 vertices or is not
+            an (M, 2) array.
+    """
+    poly = np.asarray(polygon, dtype=float)
+    if poly.ndim != 2 or poly.shape[1] != 2:
+        raise ValueError(
+            f"polygon must be (M, 2) [x y]; got shape {poly.shape}. "
+            f"Column 0 is x, column 1 is y."
+        )
+    if poly.shape[0] < 3:
+        raise ValueError(f"polygon must have at least 3 vertices; got {poly.shape[0]}.")
+
+    doc = (
+        _blank(
+            "spatialGeneExpressionROI",
+            spatialGeneExpressionROI={
+                "label": label,
+                "n_vertices": int(poly.shape[0]),
+                "vertices_x": poly[:, 0].tolist(),
+                "vertices_y": poly[:, 1].tolist(),
+                "coord_space": coordSpace,
+                "coord_units": coordUnits,
+                "n_records_in": int(nRecordsIn),
+                "roi_format_version": 1,
+            },
+        )
+        + session.newdocument()
+    )
+
+    pyr_id = _doc_id(pyrDoc)
+    if pyr_id:
+        doc = doc.set_dependency_value(
+            "spatialGeneExpressionPyramid_id", pyr_id, error_if_not_found=False
+        )
+    if sourceFileID:
+        doc = doc.set_dependency_value("source_file_id", sourceFileID, error_if_not_found=False)
+
+    session.database_add(doc)
+    return doc
+
+
+__all__ += ["fromGEFbyROI"]
+
+
+def fromGEFbyROI(
+    session,
+    gefPath: str,
+    subjects: list[str],
+    polygons: list,
+    maxGenes: int = 0,
+    binSizes=(1, 2, 4, 8, 16, 32),
+    grid: int | None = None,
+    tileBudgetBytes: int = 50 * 2**20,
+    gridRange=(3, 64),
+    basePixelSize=None,
+    pixelSizeUnits: str = "micrometer",
+    label: str = "",
+    assay: str = "Stereo-seq",
+    chipSerial: str = "",
+    pipelineVersion: str = "",
+    origin=None,
+    genomeAssembly: str = "",
+    annotationSource: str = "",
+    geneIdNamespace: str = "",
+    geneSymbolNamespace: str = "",
+    recordSource: bool = True,
+    checksum: bool = True,
+    verbose: bool = False,
+    progressFcn=None,
+):
+    """Import a .gef into N per-subject pyramids by polygon ROIs.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.fromGEFbyROI``.
+
+    Reads a Stereo-seq .gef ONCE and builds one spatial gene expression
+    pyramid per polygon, each attributed to the matching subject. Use
+    this when a single chip's section captured tissue from multiple
+    animals: a polygon per animal cuts the records in physical pixel
+    coordinates and writes a separate pyramid for each.
+
+    For picking polygons interactively on a quick preview of the file,
+    use :func:`fromGEFinteractive` instead; both call the same internal
+    path, so a script's three polygons and a scientist's three drawn
+    polygons produce the same result.
+
+    WHAT IS SHARED, WHAT IS NOT. One readGEF, one geneList, one
+    sourceFile. One pyramid and its tiles PER POLYGON, each with its
+    own subject on it. Overlap between polygons is honoured as drawn:
+    a record inside two polygons appears in both pyramids. Record
+    classification uses a full point-in-polygon test (matplotlib's
+    C-accelerated ``Path.contains_points``, the Python equivalent of
+    MATLAB's ``inpolygon``), not just a bounding box.
+
+    Args:
+        session: an ndi.session or ndi.dataset.
+        gefPath: path to the .gef.
+        subjects: list of subject ids, one per polygon. Each must be a
+            nonempty string -- the pyramid document declares
+            ``subject_id`` mustbenotempty.
+        polygons: list of ``(M, 2)`` arrays, one per subject, in GEF
+            pixel coordinates (column 0 is x, column 1 is y, M>=3).
+            These are the same units ``ndr.format.stereoseq.readGEF``
+            returns in ``X``, ``Y``.
+        maxGenes, binSizes, grid, tileBudgetBytes, gridRange,
+            basePixelSize, pixelSizeUnits, label, assay, chipSerial,
+            pipelineVersion, origin, genomeAssembly, annotationSource,
+            geneIdNamespace, geneSymbolNamespace, recordSource,
+            checksum, verbose, progressFcn: as :func:`fromGEF`. All are
+            shared across the N pyramids. ``subjectID`` is NOT accepted:
+            ``subjects`` replaces it, and quietly ignoring one when the
+            other is given would hide the intent.
+
+    Returns:
+        ``(pyr_docs, tile_docs_list, gene_list_doc, source_doc, info)``.
+
+        - ``pyr_docs``: list of pyramid documents; ``None`` for an
+          empty-polygon ROI.
+        - ``tile_docs_list``: list of tile-document lists; ``None`` for
+          an empty-polygon ROI.
+        - ``gene_list_doc``: the single shared geneList document.
+        - ``source_doc``: the single shared sourceFile document, or
+          ``None`` when *recordSource* is False.
+        - ``info``: dict with ``meta`` (the reader's), ``sourceDoc``,
+          ``notes`` (from :func:`readNotes`), ``nKeepPerROI`` (list of
+          counts per polygon) and ``roiDocs`` (list of
+          ``spatialGeneExpressionROI`` provenance documents).
+
+    See Also:
+        :func:`fromGEF`, :func:`fromGEFinteractive`, :func:`makePyramid`.
+    """
+    from ndr.format.stereoseq import readGEF as _readGEF
+
+    from ._roi_ingest import _tick, build_roi_pyramids
+
+    if not os.path.isfile(gefPath):
+        raise FileNotFoundError(f"fromGEFbyROI: {gefPath!r} is not a regular file")
+
+    _tick(progressFcn, 0.0, "Reading the GEF...")
+    x, y, gene_index, count, gene_id, gene_name, meta = _readGEF(
+        gefPath, maxGenes=maxGenes, verbose=verbose
+    )
+
+    options = {
+        "maxGenes": maxGenes,
+        "binSizes": binSizes,
+        "grid": grid,
+        "tileBudgetBytes": tileBudgetBytes,
+        "gridRange": gridRange,
+        "basePixelSize": basePixelSize,
+        "pixelSizeUnits": pixelSizeUnits,
+        "label": label,
+        "assay": assay,
+        "chipSerial": chipSerial,
+        "pipelineVersion": pipelineVersion,
+        "origin": origin,
+        "genomeAssembly": genomeAssembly,
+        "annotationSource": annotationSource,
+        "geneIdNamespace": geneIdNamespace,
+        "geneSymbolNamespace": geneSymbolNamespace,
+        "recordSource": recordSource,
+        "checksum": checksum,
+        "verbose": verbose,
+        "progressFcn": progressFcn,
+    }
+
+    return build_roi_pyramids(
+        session,
+        x,
+        y,
+        gene_index,
+        count,
+        gene_id,
+        gene_name,
+        meta,
+        gefPath,
+        list(subjects),
+        list(polygons),
+        options,
+    )
+
+
+__all__ += ["fromGEFinteractive"]
+
+
+def fromGEFinteractive(
+    session,
+    gefPath: str,
+    nSubjects: int = 0,
+    subjects: list[str] | None = None,
+    previewBin: int = 50,
+    logStretch: bool = True,
+    maxGenes: int = 0,
+    binSizes=(1, 2, 4, 8, 16, 32),
+    grid: int | None = None,
+    tileBudgetBytes: int = 50 * 2**20,
+    gridRange=(3, 64),
+    basePixelSize=None,
+    pixelSizeUnits: str = "micrometer",
+    label: str = "",
+    assay: str = "Stereo-seq",
+    chipSerial: str = "",
+    pipelineVersion: str = "",
+    origin=None,
+    genomeAssembly: str = "",
+    annotationSource: str = "",
+    geneIdNamespace: str = "",
+    geneSymbolNamespace: str = "",
+    recordSource: bool = True,
+    checksum: bool = True,
+    verbose: bool = False,
+    progressFcn=None,
+):
+    """Draw ROIs on a GEF preview and import N pyramids.
+
+    MATLAB equivalent: ``ndi.fun.doc.gene.fromGEFinteractive``.
+
+    Imports a Stereo-seq .gef as a set of per-subject pyramids with the
+    polygons picked on a quick preview rendered from the file's own
+    records. One readGEF covers both the preview and the subsequent
+    pyramids: the records loaded for drawing on are the records sliced
+    by each polygon.
+
+    DESIGN DECISION FOR THE UI (not in the MATLAB source). MATLAB uses
+    ``drawpolygon`` on a ``uifigure`` and ``listdlg`` for the subject
+    picker. Python has three reasonable choices:
+
+      (a) matplotlib with :class:`matplotlib.widgets.PolygonSelector`,
+      (b) Qt / PyQt with a custom widget,
+      (c) a Napari-integrated widget (the viewer at
+          ``src/ndi/gui/app/genepyramid/`` already has shapes-layer
+          plumbing).
+
+    This port picks (a). matplotlib is already a hard dep of NDI; a
+    PolygonSelector click-loop is a dozen lines; the figure can run
+    headless-off, scripted or in a notebook; and the subject picker is
+    a plain text prompt rather than a Qt dialog. Napari would give a
+    better UX inside the genepyramid viewer but makes this call a
+    heavier build and ties the helper to that viewer's lifecycle. If
+    MATLAB's own usage pattern (ingest driven from GEFManager) lands on
+    the Python side later, a Napari-integrated version will fit under
+    the same public name.
+
+    WORKFLOW. The function reads the .gef, bins the records to a
+    low-res density image (summed counts across all genes), opens a
+    matplotlib figure, and asks for one polygon per animal. After the
+    last polygon it prompts for a subject for each polygon: an
+    existing one from the session's subject list, or a new one typed
+    into a prompt -- the new subject is created in the session on the
+    fly, so a session that starts empty does not have to be set up
+    ahead of time. The N pyramids are then built in one pass sharing
+    a geneList and a sourceFile.
+
+    HOW LONG THE PICKING SITS. The read is the slow phase (minutes on
+    a ferret hemisphere) and happens BEFORE any UI appears, so a
+    scientist who clicks Import and leaves the room returns to a
+    figure already waiting for the first polygon. For a scripted run
+    with polygons known ahead of time, use :func:`fromGEFbyROI`; both
+    call the same internal path.
+
+    Args:
+        session: an ndi.session or ndi.dataset.
+        gefPath: path to the .gef.
+        nSubjects: number of polygons expected. 0 asks via :func:`input`
+            at the top of the picking step. Ignored when *subjects* is
+            supplied.
+        subjects: subject ids assigned ahead of time, one per polygon.
+            When supplied, N is ``len(subjects)`` and the per-polygon
+            subject prompt is skipped; useful when the caller knows the
+            subjects and only needs the user to draw.
+        previewBin: bin size in GEF base pixels for the preview density
+            image. 50 keeps a hemisphere preview under a few megapixels
+            and is coarse enough to render instantly while still showing
+            where tissue is.
+        logStretch: log-stretch the preview for visibility. Spot counts
+            span several decades; a linear stretch hides small sections
+            next to a dense one.
+        Other options: as :func:`fromGEF` / :func:`fromGEFbyROI`.
+
+    Returns:
+        As :func:`fromGEFbyROI`. ``info["roiDocs"]`` holds one
+        ``spatialGeneExpressionROI`` provenance document per drawn
+        polygon.
+
+    Raises:
+        RuntimeError: if the figure is closed before all polygons are
+            drawn, or if the subject prompt is abandoned.
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.widgets import PolygonSelector
+    from ndr.format.stereoseq import readGEF as _readGEF
+
+    from ._roi_ingest import _tick, build_roi_pyramids
+
+    if not os.path.isfile(gefPath):
+        raise FileNotFoundError(f"fromGEFinteractive: {gefPath!r} is not a regular file")
+
+    _tick(progressFcn, 0.0, "Reading the GEF...")
+    x, y, gene_index, count, gene_id, gene_name, meta = _readGEF(
+        gefPath, maxGenes=maxGenes, verbose=verbose
+    )
+
+    # -- build a quick preview density image -----------------------------
+    _tick(progressFcn, 0.50, "Rendering preview...")
+    img, x_range, y_range = _bin_density(x, y, count, previewBin)
+    img_disp = np.log1p(img.astype(np.float64)) if logStretch else img
+
+    # -- determine N and (optionally) pre-assign subjects ----------------
+    subjects_given = subjects is not None and len(subjects) > 0
+    if subjects_given:
+        n = len(subjects)
+        subs: list[str] = list(subjects)
+    else:
+        n = int(nSubjects)
+        if n == 0:
+            try:
+                answer = input("Number of subjects (one polygon each) [3]: ").strip() or "3"
+                n = int(answer)
+            except (EOFError, ValueError) as e:
+                raise RuntimeError(
+                    f"fromGEFinteractive cancelled at the subject-count prompt: {e}"
+                ) from e
+        if n < 1:
+            raise ValueError(f"Need a positive integer subject count; got {n}.")
+        subs = [""] * n
+
+    # -- draw N polygons -------------------------------------------------
+    polygons = [None] * n
+    fig, ax = plt.subplots()
+    fig.canvas.manager.set_window_title("Split GEF by ROI")
+    ax.imshow(
+        img_disp,
+        extent=(x_range[0], x_range[1], y_range[1], y_range[0]),
+        aspect="equal",
+        cmap="turbo",
+        origin="upper",
+    )
+    ax.set_xlabel("x (GEF pixels)")
+    ax.set_ylabel("y (GEF pixels)")
+
+    pending: dict[str, Any] = {"index": 0, "selector": None}
+
+    def _on_select(verts):
+        k = pending["index"]
+        if len(verts) < 3:
+            return
+        polygons[k] = np.asarray(verts, dtype=float)
+        pending["index"] += 1
+        if pending["selector"] is not None:
+            pending["selector"].disconnect_events()
+        if pending["index"] < n:
+            ax.set_title(
+                f"Polygon {pending['index'] + 1} of {n}: click to add vertices, "
+                f"close shape to finish"
+            )
+            pending["selector"] = PolygonSelector(ax, _on_select)
+            fig.canvas.draw_idle()
+        else:
+            ax.set_title(f"{n} polygon(s) drawn; close the figure to continue")
+            fig.canvas.draw_idle()
+
+    ax.set_title(f"Polygon 1 of {n}: click to add vertices, close shape to finish")
+    pending["selector"] = PolygonSelector(ax, _on_select)
+    plt.show()
+
+    if any(p is None for p in polygons):
+        raise RuntimeError(
+            f"fromGEFinteractive: only {sum(p is not None for p in polygons)} "
+            f"of {n} polygons were completed before the figure was closed."
+        )
+
+    # -- pick subjects per polygon ---------------------------------------
+    if not subjects_given:
+        subs = _pick_subjects(session, n)
+    if any(not s for s in subs):
+        raise RuntimeError("A subject was not picked for every polygon.")
+
+    # -- hand off to the shared core -------------------------------------
+    options = {
+        "maxGenes": maxGenes,
+        "binSizes": binSizes,
+        "grid": grid,
+        "tileBudgetBytes": tileBudgetBytes,
+        "gridRange": gridRange,
+        "basePixelSize": basePixelSize,
+        "pixelSizeUnits": pixelSizeUnits,
+        "label": label,
+        "assay": assay,
+        "chipSerial": chipSerial,
+        "pipelineVersion": pipelineVersion,
+        "origin": origin,
+        "genomeAssembly": genomeAssembly,
+        "annotationSource": annotationSource,
+        "geneIdNamespace": geneIdNamespace,
+        "geneSymbolNamespace": geneSymbolNamespace,
+        "recordSource": recordSource,
+        "checksum": checksum,
+        "verbose": verbose,
+        "progressFcn": progressFcn,
+    }
+    return build_roi_pyramids(
+        session,
+        x,
+        y,
+        gene_index,
+        count,
+        gene_id,
+        gene_name,
+        meta,
+        gefPath,
+        subs,
+        polygons,
+        options,
+    )
+
+
+def _bin_density(x, y, count, bin_px: int):
+    """Sum counts into a 2D grid for the preview.
+
+    MATLAB equivalent of ``localBinDensity``. Summing counts across all
+    genes puts every record in and avoids a per-gene decision at a step
+    the user does not need to see per-gene; the preview exists to show
+    where tissue is.
+
+    Returns:
+        ``(img, (x_min, x_max), (y_min, y_max))``. Rows of *img* are y
+        (so y=y_min is at the top of the image), matching MATLAB's
+        ``imagesc``.
+    """
+    x = np.asarray(x, dtype=np.float64)
+    y = np.asarray(y, dtype=np.float64)
+    count = np.asarray(count, dtype=np.float64)
+    x_min, x_max = float(x.min()), float(x.max())
+    y_min, y_max = float(y.min()), float(y.max())
+    x_bin = ((x - x_min) // bin_px).astype(np.int64)
+    y_bin = ((y - y_min) // bin_px).astype(np.int64)
+    nx_bin = int(x_bin.max()) + 1
+    ny_bin = int(y_bin.max()) + 1
+    img = np.zeros((ny_bin, nx_bin), dtype=np.float64)
+    np.add.at(img, (y_bin, x_bin), count)
+    return img, (x_min, x_max), (y_min, y_max)
+
+
+def _pick_subjects(session, n: int) -> list[str]:
+    """Prompt the user once per polygon, letting them pick an existing
+    subject or create a new one on the fly.
+
+    MATLAB equivalent of ``localPickSubjects`` (NDI-matlab 877faa1d6).
+    The listed options are every subject already in the session plus a
+    ``+ Create new subject...`` entry at the top; picking that entry
+    prompts for a ``local_identifier`` and creates the subject in the
+    session before using its id. A typed name that matches an existing
+    subject reuses that subject rather than duplicating. A session with
+    no subjects is not an error -- creation is the first option in the
+    list.
+
+    Groups are NOT auto-created. A session may hold several chips whose
+    groupings differ from the per-chip set, so group creation is left
+    to the caller; a GEFManager-level group prompt is a follow-up when
+    it is wanted.
+    """
+    from ..query import ndi_query
+
+    subject_docs = session.database_search(ndi_query("").isa("subject"))
+    labels: list[str] = []
+    for d in subject_docs:
+        try:
+            labels.append(d.document_properties["subject"]["local_identifier"])
+        except (KeyError, TypeError):
+            labels.append(d.id)
+    create_option = "+ Create new subject..."
+    subs: list[str] = []
+    k = 0
+    while k < n:
+        items = [create_option, *labels]
+        print(f"\nPick subject for polygon {k + 1} of {n}:")
+        for i, name in enumerate(items):
+            print(f"  [{i + 1}] {name}")
+        try:
+            answer = input("Choice: ").strip()
+            idx = int(answer) - 1
+            if not 0 <= idx < len(items):
+                raise ValueError(f"Choice {answer!r} is out of range.")
+        except (EOFError, ValueError) as e:
+            raise RuntimeError(
+                f"fromGEFinteractive cancelled at the subject picker for " f"polygon {k + 1}: {e}"
+            ) from e
+
+        if idx == 0:
+            # Create-new path. An empty input returns to the picker for
+            # this polygon (same k), so a wrong click on the first entry
+            # does not abandon the whole ingest.
+            try:
+                name_answer = input(
+                    f"Local identifier for the new subject "
+                    f"(polygon {k + 1} of {n}, blank to go back): "
+                ).strip()
+            except EOFError:
+                name_answer = ""
+            if not name_answer:
+                continue
+            # A typo of an existing identifier reuses it rather than
+            # duplicating the subject.
+            try:
+                existing = labels.index(name_answer)
+            except ValueError:
+                existing = -1
+            if existing >= 0:
+                subs.append(subject_docs[existing].id)
+            else:
+                new_sub = session.newdocument(
+                    "subject", **{"subject.local_identifier": name_answer}
+                )
+                session.database_add(new_sub)
+                subject_docs = list(subject_docs) + [new_sub]
+                labels.append(name_answer)
+                subs.append(new_sub.id)
+        else:
+            # Offset by one because index 0 is the create-new entry.
+            subs.append(subject_docs[idx - 1].id)
+        k += 1
+    return subs
