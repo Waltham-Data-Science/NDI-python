@@ -20,6 +20,16 @@ Complex numbers reach the database as two real fields, ``response_real`` and
 ``response_imaginary``, because that is what the ``stimulus_response_scalar``
 schema holds in both languages. F0 fills the imaginary field with zeros.
 
+MEAN+F1
+Whenever both the mean and F1 are computed, a fourth document with
+``response_type`` ``'mean+F1'`` is written. Each trial is
+``mean_i * exp(1j*theta) + F1_i``, theta being the phase of the
+vector-averaged F1 over the trials of the same stimulus id, so the averaged
+response has magnitude ``mean(F0) + abs(mean(F1))`` while F1 is still
+averaged with its phase. See :meth:`ndi_app_stimulus_tuning__response.meanPlusF1`.
+The document shares the F1 parameter document and is told apart from F1 by
+``response_type``; it does not depend on the mean or F1 response documents.
+
 THE MATH LIVES IN vlt, EXCEPT ONE LOOP
 NDI-matlab calls ``vlt.neuro.stimulus.stimulus_response_scalar``, and the
 Python toolbox has that function -- but as of vhlab-toolbox-python 9228e90 it
@@ -452,7 +462,7 @@ class ndi_app_stimulus_tuning__response(ndi_app):
             ndi_timeseries_obj: the element that responded.
             reset: remove the existing responses (and their parameter
                 documents) for this pair first, rebuilding from scratch.
-            do_mean_only: compute F0 only, skipping F1 and F2.
+            do_mean_only: compute F0 only, skipping F1, F2, and mean+F1.
 
         Returns:
             The ``stimulus_response_scalar`` documents written.
@@ -542,6 +552,12 @@ class ndi_app_stimulus_tuning__response(ndi_app):
         when any stimulus in the set declares a fundamental frequency. Each
         carries the response and the control response to every presentation,
         so a caller can average them however it likes.
+
+        Whenever both the mean (0) and F1 (1) are computed, a ``mean+F1``
+        document is written as well (see :meth:`meanPlusF1`). It depends on
+        the F1 parameter document; the two are told apart by
+        ``response_type``. Stimuli with no fundamental frequency get
+        ``mean+F1 == mean``.
 
         Args:
             ndi_stim_obj: the stimulator element.
@@ -664,6 +680,9 @@ class ndi_app_stimulus_tuning__response(ndi_app):
             )
 
         response_docs: list[ndi_document] = []
+        mean_computed: dict[str, np.ndarray] | None = None
+        f1_computed: dict[str, np.ndarray] | None = None
+        f1_param_doc: ndi_document | None = None
         for freq in freq_commands:
             response_type = "mean" if freq == 0 else f"F{int(freq)}"
             param_doc = self._parameter_document(
@@ -677,7 +696,10 @@ class ndi_app_stimulus_tuning__response(ndi_app):
             # An existing response for exactly these parameters is replaced,
             # not added beside: two documents claiming the same measurement
             # would make every later reader pick one arbitrarily.
-            self._remove_matching_responses(ndi_timeseries_obj, stim_doc, control_doc, param_doc)
+            # Scoped by response_type: mean+F1 shares the F1 parameter document.
+            self._remove_matching_responses(
+                ndi_timeseries_obj, stim_doc, control_doc, param_doc, response_type
+            )
 
             computed = scalar_responses(
                 data,
@@ -692,6 +714,11 @@ class ndi_app_stimulus_tuning__response(ndi_app):
             )
             response = np.asarray(computed["response"], dtype=complex)
             control = np.asarray(computed["control_response"], dtype=complex)
+            if freq == 0:
+                mean_computed = {"response": response, "control": control}
+            elif freq == 1:
+                f1_computed = {"response": response, "control": control}
+                f1_param_doc = param_doc
 
             doc = self._new_document("stimulus_response_scalar")
             doc.document_properties["stimulus_response_scalar"] = {
@@ -727,7 +754,143 @@ class ndi_app_stimulus_tuning__response(ndi_app):
             session.database_add(doc)
             response_docs.append(doc)
 
+        if mean_computed is not None and f1_computed is not None and f1_param_doc is not None:
+            response_type = "mean+F1"
+            self._remove_matching_responses(
+                ndi_timeseries_obj, stim_doc, control_doc, f1_param_doc, response_type
+            )
+            stimids = onsetoffsetid[:, 2].astype(int)
+            # Stimuli without a fundamental frequency have no F1. Out-of-range
+            # ids fall back to the first stimulus's frequency, as the response
+            # loop does (_frequency_for).
+            freq_index = stimids - 1
+            freq_index[(freq_index < 0) | (freq_index >= freq_mult.size)] = 0
+            has_f1 = freq_mult[freq_index] != 0 if freq_mult.size else np.zeros(stimids.size, bool)
+            combined, combined_control = self.meanPlusF1(
+                stimids,
+                np.real(mean_computed["response"]),
+                f1_computed["response"],
+                np.real(mean_computed["control"]),
+                f1_computed["control"],
+                has_f1,
+            )
+
+            doc = self._new_document("stimulus_response_scalar")
+            doc.document_properties["stimulus_response_scalar"] = {
+                "response_type": response_type,
+                "responses": {
+                    "stimid": [int(s) for s in stimids],
+                    "response_real": np.real(combined).tolist(),
+                    "response_imaginary": np.imag(combined).tolist(),
+                    "control_response_real": np.real(combined_control).tolist(),
+                    "control_response_imaginary": np.imag(combined_control).tolist(),
+                },
+            }
+            doc.document_properties["stimulus_response"] = {
+                "stimulator_epochid": epochid,
+                "element_epochid": element_epoch,
+            }
+            doc = doc.set_dependency_value(
+                "stimulus_response_scalar_parameters_id",
+                f1_param_doc.id,
+                error_if_not_found=False,
+            )
+            doc = doc.set_dependency_value(
+                "element_id", identifier(ndi_timeseries_obj), error_if_not_found=False
+            )
+            doc = doc.set_dependency_value(
+                "stimulus_presentation_id", stim_doc.id, error_if_not_found=False
+            )
+            if control_doc is not None:
+                doc = doc.set_dependency_value(
+                    "stimulus_control_id", control_doc.id, error_if_not_found=False
+                )
+            doc = doc.set_dependency_value(
+                "stimulator_id", identifier(ndi_stim_obj), error_if_not_found=False
+            )
+            session.database_add(doc)
+            response_docs.append(doc)
+
         return response_docs
+
+    @staticmethod
+    def meanPlusF1(  # noqa: N802 (MATLAB mirror)
+        stimids: Any,
+        mean_response: Any,
+        f1_response: Any,
+        mean_control_response: Any,
+        f1_control_response: Any,
+        has_f1: Any = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Combine per-trial mean (F0) and F1 responses into mean+F1 responses.
+
+        MATLAB equivalent: ``ndi.app.stimulus.tuning_response.meanPlusF1``.
+
+        For trial i of stimulus s::
+
+            combined[i] = mean_response[i] * exp(1j*theta[s]) + f1_response[i]
+
+        where theta[s] is the phase of the mean of ``f1_response`` over the
+        trials of stimulus s (NaN omitted). Rotating the mean onto the phase
+        of the vector-averaged F1 makes
+        ``abs(mean(combined[s])) == mean(mean_response[s]) + abs(mean(f1_response[s]))``
+        (for non-negative mean responses, as rates are), so the mean+F1
+        tuning curve is the sum of the mean and F1 curves while F1 is still
+        averaged with its phase. The control responses are combined the same
+        way with their own phase.
+
+        Args:
+            stimids: the stimulus id of each trial.
+            mean_response: per-trial mean responses (real).
+            f1_response: per-trial F1 responses (complex).
+            mean_control_response: per-trial mean control responses.
+            f1_control_response: per-trial F1 control responses.
+            has_f1: per-trial booleans, False for stimuli with no fundamental
+                frequency; their F1 contribution is taken as 0, so mean+F1
+                equals the mean. Default: all True.
+
+        Returns:
+            ``(combined, combined_control)``, complex arrays, one per trial.
+
+        Raises:
+            ValueError: when the inputs do not all have one entry per trial.
+        """
+        stimids = np.asarray(stimids).ravel()
+        n = stimids.size
+        mean_response = np.asarray(mean_response, dtype=float).ravel()
+        f1_response = np.asarray(f1_response, dtype=complex).ravel().copy()
+        mean_control_response = np.asarray(mean_control_response, dtype=float).ravel()
+        f1_control_response = np.asarray(f1_control_response, dtype=complex).ravel().copy()
+        has_f1 = (
+            np.ones(n, dtype=bool) if has_f1 is None else np.asarray(has_f1, dtype=bool).ravel()
+        )
+        if any(
+            a.size != n
+            for a in (
+                mean_response,
+                f1_response,
+                mean_control_response,
+                f1_control_response,
+                has_f1,
+            )
+        ):
+            raise ValueError(f"All inputs to meanPlusF1 must have one entry per trial ({n}).")
+
+        f1_response[~has_f1] = 0
+        f1_control_response[~has_f1] = 0
+
+        combined = np.full(n, np.nan + 1j * np.nan, dtype=complex)
+        combined_control = np.full(n, np.nan + 1j * np.nan, dtype=complex)
+        for stimid in np.unique(stimids):
+            trials = stimids == stimid
+            theta = np.angle(_complex_nanmean(f1_response[trials]))
+            combined[trials] = mean_response[trials] * np.exp(1j * theta) + f1_response[trials]
+            theta_control = np.angle(_complex_nanmean(f1_control_response[trials]))
+            combined_control[trials] = (
+                mean_control_response[trials] * np.exp(1j * theta_control)
+                + f1_control_response[trials]
+            )
+        return combined, combined_control
 
     # ------------------------------------------------------------------
     # tuning curves
@@ -1432,16 +1595,26 @@ class ndi_app_stimulus_tuning__response(ndi_app):
         query = session.searchquery() & ndi_query("").isa(
             "stimulus_response_scalar_parameters_basic"
         )
+        # An exact_number query cannot match an empty value, so empty
+        # parameters are left out of the query and checked on the results:
+        # a document matches only if those parameters are empty there too.
+        # (MATLAB does the same; without it the lookup never matched and
+        # recomputing added responses instead of replacing them.)
+        empty_fields = [field for field, value in parameters.items() if _is_empty(value)]
         for field, value in parameters.items():
-            if value is None:
+            if _is_empty(value):
                 continue
             operation = "exact_string" if isinstance(value, str) else "exact_number"
             query = query & ndi_query(
                 f"stimulus_response_scalar_parameters_basic.{field}", operation, value, ""
             )
-        existing = session.database_search(query)
-        if existing:
-            return existing[0]
+        for candidate in session.database_search(query):
+            stored = (
+                candidate.document_properties.get("stimulus_response_scalar_parameters_basic", {})
+                or {}
+            )
+            if all(_is_empty(stored.get(field)) for field in empty_fields):
+                return candidate
 
         doc = self._new_document("stimulus_response_scalar_parameters_basic")
         doc.document_properties["stimulus_response_scalar_parameters_basic"] = parameters
@@ -1481,8 +1654,13 @@ class ndi_app_stimulus_tuning__response(ndi_app):
         stim_doc: ndi_document,
         control_doc: ndi_document | None,
         param_doc: ndi_document,
+        response_type: str,
     ) -> None:
-        """Remove the response for exactly this element/stimulus/parameters."""
+        """Remove the response for exactly this element/stimulus/parameters/type.
+
+        Scoped by RESPONSE_TYPE because the mean+F1 document shares the F1
+        parameter document, and neither may remove the other.
+        """
         from ...query import ndi_query
 
         session = self._session
@@ -1493,6 +1671,7 @@ class ndi_app_stimulus_tuning__response(ndi_app):
             & ndi_query("").depends_on("element_id", identifier(ndi_timeseries_obj))
             & ndi_query("").depends_on("stimulus_presentation_id", stim_doc.id)
             & ndi_query("").depends_on("stimulus_response_scalar_parameters_id", param_doc.id)
+            & ndi_query("stimulus_response_scalar.response_type", "exact_string", response_type, "")
         )
         if control_doc is not None:
             query = query & ndi_query("").depends_on("stimulus_control_id", control_doc.id)
@@ -1507,6 +1686,23 @@ class ndi_app_stimulus_tuning__response(ndi_app):
 # ----------------------------------------------------------------------
 # small shared helpers
 # ----------------------------------------------------------------------
+def _is_empty(value: Any) -> bool:
+    """MATLAB's isempty for a stored parameter: None, or an empty list/array."""
+    if value is None:
+        return True
+    if isinstance(value, (list, tuple, np.ndarray)):
+        return len(value) == 0
+    return False
+
+
+def _complex_nanmean(values: np.ndarray) -> complex:
+    """Mean ignoring NaN entries; NaN when every entry is NaN or there are none."""
+    keep = ~np.isnan(values)
+    if not np.any(keep):
+        return complex(np.nan, np.nan)
+    return complex(np.mean(values[keep]))
+
+
 def _as_list(value: Any) -> list[Any]:
     """VALUE as a list. A bare string or dict is one item, not a sequence."""
     if value is None:

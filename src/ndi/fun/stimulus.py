@@ -89,7 +89,9 @@ def f0_f1_responses(
     Args:
         session: NDI session instance.
         doc: A ``stimulus_tuningcurve`` document, or one with a
-            ``stimulus_tuningcurve_id`` dependency.
+            ``stimulus_tuningcurve_id`` dependency. A ``mean+F1`` curve is
+            accepted too: the F0 and F1 returned are those of its ``mean``
+            and ``F1`` partner curves.
         response_index: Stimulus index (0-based here; MATLAB's is 1-based).
             If None, the index of the larger of the two peak responses is
             used, as MATLAB does.
@@ -101,8 +103,8 @@ def f0_f1_responses(
 
     Raises:
         ValueError: If *doc* is neither a tuning curve nor carries a
-            ``stimulus_tuningcurve_id``, if the response type is neither
-            mean nor F1, or if no partner curve is found.
+            ``stimulus_tuningcurve_id``, if the response type is not mean,
+            F1, or mean+F1, or if no partner curve is found.
     """
     import numpy as np
 
@@ -133,8 +135,15 @@ def f0_f1_responses(
     elif normalized == "f1":
         f0_curve_doc, f1_curve_doc = None, tc_doc
         target_response_type = "mean"
+    elif normalized == "mean+f1":
+        # A mean+F1 curve is the sum of its mean and F1 partners: find the
+        # mean partner and report the F0 and F1 of that pair, as MATLAB does.
+        partner = _find_partner_tuning_curve(session, tc_doc, scalar_doc, "mean")
+        if partner is None:
+            return float("nan"), float("nan"), None, None
+        return f0_f1_responses(session, partner, response_index)
     else:
-        raise ValueError(f"Unknown response type (expected mean or F1): {response_type}")
+        raise ValueError(f"Unknown response type (expected mean, F1, or mean+F1): {response_type}")
 
     partner = _find_partner_tuning_curve(session, tc_doc, scalar_doc, target_response_type)
     if partner is None:

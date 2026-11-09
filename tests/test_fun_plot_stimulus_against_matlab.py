@@ -347,5 +347,16 @@ class TestF0F1Responses:
         odd_scalar = scalar("sc-odd", "F2")
         odd_curve = tuning_curve("tc-odd", "sc-odd", "angle", [1.0])
         session = FakeSession([odd_scalar, odd_curve])
-        with pytest.raises(ValueError, match="expected mean or F1"):
+        with pytest.raises(ValueError, match="expected mean, F1, or mean\\+F1"):
             f0_f1_responses(session, odd_curve)
+
+    def test_a_mean_plus_f1_curve_reports_its_mean_and_f1_partners(self, paired_session):
+        session, _, _ = paired_session
+        combined_scalar = scalar("sc-mpf", "mean+F1")
+        combined_curve = tuning_curve("tc-mpf", "sc-mpf", "angle", [1.5, 5.25, 11.0])
+        session.docs += [combined_scalar, combined_curve]
+        f0, f1, f0_doc, f1_doc = f0_f1_responses(session, combined_curve, response_index=1)
+        assert f0 == pytest.approx(5.0)
+        assert f1 == pytest.approx(0.25)
+        assert f0_doc.id == "tc-mean"
+        assert f1_doc.id == "tc-f1"
