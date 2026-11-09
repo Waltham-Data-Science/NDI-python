@@ -132,13 +132,7 @@ PYTHON_ONLY_EXPECTED: frozenset[str] = frozenset(
 # must match its copy on the branch byte-for-byte, and the entry must go once
 # the branch merges (test_branch_pending_files_match_their_branch). Section 8
 # of docs/developer_notes/ndi_matlab_python_bridge.yaml.
-MATLAB_BRANCH_PENDING: dict[str, str] = {
-    # spatialGeneExpressionROI is on the NDI-matlab PR that adds ROI-based
-    # .gef ingest; the three files are byte-copied from that branch.
-    "database_documents/data/spatialGeneExpressionROI.json": "claude/modest-tesla-ls5952",
-    "database_documents/data/spatialGeneExpressionROI.md": "claude/modest-tesla-ls5952",
-    "schema_documents/data/spatialGeneExpressionROI_schema.json": "claude/modest-tesla-ls5952",
-}
+MATLAB_BRANCH_PENDING: dict[str, str] = {}
 
 
 # Files present on both sides that intentionally do not match byte-for-byte.

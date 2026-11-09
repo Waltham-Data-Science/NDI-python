@@ -1015,7 +1015,7 @@ ported_late:
 
   - name: GEFManager
     matlab_path: "+ndi/+gui/+app/GEFManager.m"
-    matlab_last_sync_hash: "d96fd856"
+    matlab_last_sync_hash: "65681ea4d"
     status: porting_deferred
     decision_log: >
       MATLAB App Designer window that lists, views, adds and removes
@@ -1065,17 +1065,15 @@ ported_late:
       NDI_FROM_MATLAB=1, and the View dialog saves the preference only when
       the user changed the launcher. Still deferred.
 
-      2026-11-08: NDI-matlab branch claude/modest-tesla-ls5952 (PR #1150)
-      extends the ingest dialog with a "How many subjects (animals) does
-      this section contain?" prompt. When > 1 it routes through
-      fromGEFinteractive -- askChoices, ingestPlan, ingestChoices,
-      runIngest all branch on splitByROI. Only the GEFManager app shell
-      changes; the underlying entry points (fromGEFbyROI,
-      fromGEFinteractive, makeROI, the private buildROIpyramids core,
-      and the spatialGeneExpressionROI document) are ALL PORTED in
-      src/ndi/fun/ndi_matlab_python_bridge.yaml (matlab_branch:
-      claude/modest-tesla-ls5952). The app itself and its dialog wiring
-      stay deferred -- a Napari-side ingest dialog is a separate design
-      project, same reason the pre-ROI dialog wiring stayed deferred.
-      Hash bump on this entry will come when the branch merges into
-      NDI-matlab main and brings those changes to GEFManager.m with it.
+      2026-11-09: NDI-matlab 8ec47c16d and 65681ea4d (VH-Lab/NDI-matlab
+      PR #1150, now on main) extend the ingest dialog with a "How many
+      subjects (animals) does this section contain?" prompt. When > 1
+      it routes through fromGEFinteractive -- askChoices, ingestPlan,
+      ingestChoices, runIngest all branch on splitByROI. Only the
+      GEFManager app shell changes; the underlying entry points
+      (fromGEFbyROI, fromGEFinteractive, makeROI, the private
+      buildROIpyramids core, and the spatialGeneExpressionROI document)
+      are ALL PORTED in src/ndi/fun/ndi_matlab_python_bridge.yaml. The
+      app itself and its dialog wiring stay deferred -- a Napari-side
+      ingest dialog is a separate design project, same reason the
+      pre-ROI dialog wiring stayed deferred.

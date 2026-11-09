@@ -3316,17 +3316,15 @@ functions:
   # =======================================================================
   # ROI import: a .gef split by polygon into N per-subject pyramids
   #
-  # These four live on the NDI-matlab branch claude/modest-tesla-ls5952
-  # (PR #1150). Each entry carries matlab_branch to say so; the entries
-  # here are ported, and the markers go once the branch merges into
-  # NDI-matlab main. Section 8 of
-  # docs/developer_notes/ndi_matlab_python_bridge.yaml.
+  # Ported against NDI-matlab PR #1150 (claude/modest-tesla-ls5952), which
+  # merged into NDI-matlab main as 73f46d194. The matlab_branch markers
+  # these entries used to carry were dropped in the same commit as this
+  # comment -- per Section 8, they go once the branch merges upstream.
   # =======================================================================
 
   - name: makeROI
     matlab_path: "+ndi/+fun/+doc/+gene/makeROI.m"
     matlab_last_sync_hash: "3edae164d"
-    matlab_branch: "claude/modest-tesla-ls5952"
     python_path: "ndi/fun/doc_gene.py"
     input_arguments:
       - name: session
@@ -3377,7 +3375,6 @@ functions:
   - name: buildROIpyramids
     matlab_path: "+ndi/+fun/+doc/+gene/private/buildROIpyramids.m"
     matlab_last_sync_hash: "3edae164d"
-    matlab_branch: "claude/modest-tesla-ls5952"
     python_path: "ndi/fun/_roi_ingest.py"
     input_arguments:
       - name: session
@@ -3457,7 +3454,6 @@ functions:
   - name: fromGEFbyROI
     matlab_path: "+ndi/+fun/+doc/+gene/fromGEFbyROI.m"
     matlab_last_sync_hash: "3edae164d"
-    matlab_branch: "claude/modest-tesla-ls5952"
     python_path: "ndi/fun/doc_gene.py"
     input_arguments:
       - name: session
@@ -3560,7 +3556,6 @@ functions:
   - name: fromGEFinteractive
     matlab_path: "+ndi/+fun/+doc/+gene/fromGEFinteractive.m"
     matlab_last_sync_hash: "877faa1d6"
-    matlab_branch: "claude/modest-tesla-ls5952"
     python_path: "ndi/fun/doc_gene.py"
     input_arguments:
       - name: session
@@ -3717,7 +3712,6 @@ functions:
   - name: exportGEF
     matlab_path: "+ndi/+fun/+doc/+gene/exportGEF.m"
     matlab_last_sync_hash: "e0bb96b17"
-    matlab_branch: "claude/modest-tesla-ls5952"
     python_path: "ndi/fun/doc_gene_export.py"
     decision_log: >
       Ported differently. Writes a pyramid level back out as a
