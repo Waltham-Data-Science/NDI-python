@@ -869,12 +869,45 @@ class TestTheWholePipeline:
     def test_a_stimulus_with_a_temporal_frequency_gets_all_three_responses(self):
         """mean, F1 and F2 -- which needs ndi.fun.stimulustemporalfrequency to
         actually find the frequency. When it silently found none, this
-        produced only the mean."""
+        produced only the mean. mean+F1 follows, since mean and F1 were both
+        computed."""
         _, responses, _ = self._run()
         types = [
             d.document_properties["stimulus_response_scalar"]["response_type"] for d in responses
         ]
-        assert types == ["mean", "F1", "F2"]
+        assert types == ["mean", "F1", "F2", "mean+F1"]
+
+    def test_the_mean_plus_f1_curve_is_the_sum_of_the_mean_and_f1_curves(self):
+        """The rotation makes the averaged mean+F1 response exactly
+        mean(F0) + |mean(F1)|, for the responses and for the controls."""
+        _, responses, _ = self._run()
+        mean_curve = self._curve(responses[0])
+        f1_curve = self._curve(responses[1])
+        combined_curve = self._curve(responses[3])
+        assert combined_curve["response_mean"] == pytest.approx(
+            np.add(mean_curve["response_mean"], f1_curve["response_mean"]), rel=1e-9
+        )
+        assert combined_curve["control_response_mean"] == pytest.approx(
+            np.add(mean_curve["control_response_mean"], f1_curve["control_response_mean"]),
+            rel=1e-9,
+        )
+
+    def test_mean_plus_f1_of_the_blank_is_its_mean(self):
+        """The blank has no fundamental frequency, so it has no F1 to add."""
+        _, responses, _ = self._run()
+        mean = responses[0].document_properties["stimulus_response_scalar"]["responses"]
+        combined = responses[3].document_properties["stimulus_response_scalar"]["responses"]
+        blank = [i for i, s in enumerate(combined["stimid"]) if s == 4]
+        assert [combined["response_real"][i] for i in blank] == pytest.approx(
+            [mean["response_real"][i] for i in blank]
+        )
+        assert [combined["response_imaginary"][i] for i in blank] == pytest.approx([0.0] * 3)
+
+    def test_mean_plus_f1_shares_the_f1_parameter_document(self):
+        _, responses, _ = self._run()
+        assert responses[3].dependency_value("stimulus_response_scalar_parameters_id") == responses[
+            1
+        ].dependency_value("stimulus_response_scalar_parameters_id")
 
     def test_the_f0_responses_are_the_rates_that_went_in(self):
         _, responses, _ = self._run()
@@ -920,3 +953,117 @@ class TestTheWholePipeline:
         )
         doc = _app(session).tuning_curve(response_doc, independent_parameter=["angle"])
         return doc.document_properties["stimulus_tuningcurve"]
+
+
+# ----------------------------------------------------------------------
+# mean+F1
+# ----------------------------------------------------------------------
+class TestMeanPlusF1:
+    """ndi_app_stimulus_tuning__response.meanPlusF1, mirroring
+    NDI-matlab's testTuningResponseMeanPlusF1."""
+
+    combine = staticmethod(ndi_app_stimulus_tuning__response.meanPlusF1)
+
+    def test_sum_of_magnitudes_whatever_the_phase(self):
+        stimids = [1, 1, 1, 2, 2, 2, 3, 3, 3]
+        mean = np.array([10, 12, 14, 5, 5, 5, 20, 18, 22], dtype=float)
+        phases = np.array([np.pi / 2] * 3 + [-2.5] * 3 + [1.0] * 3)
+        f1 = np.array([8, 10, 12, 3, 3, 3, 0.5, 0.5, 0.5]) * np.exp(1j * phases)
+        combined, control = self.combine(stimids, mean, f1, np.zeros(9), np.zeros(9))
+        for s in (1, 2, 3):
+            trials = np.asarray(stimids) == s
+            expected = mean[trials].mean() + abs(f1[trials].mean())
+            assert abs(combined[trials].mean()) == pytest.approx(expected, rel=1e-12)
+        assert np.abs(control) == pytest.approx(np.zeros(9), abs=1e-12)
+
+    def test_phase_scatter_lowers_the_f1_term_rather_than_inflating_it(self):
+        f1 = np.array([5, 5j])
+        combined, _ = self.combine([1, 1], [10, 10], f1, [0, 0], [0, 0])
+        assert abs(combined.mean()) == pytest.approx(10 + abs(f1.mean()))  # not 15
+
+    def test_controls_use_their_own_phase(self):
+        _, control = self.combine([1, 1, 2, 2], [1] * 4, [1] * 4, [2, 2, 3, 3], [1j, 1j, -1, -1])
+        assert abs(control[:2].mean()) == pytest.approx(3)
+        assert abs(control[2:].mean()) == pytest.approx(4)
+
+    def test_no_fundamental_frequency_gives_the_mean(self):
+        combined, _ = self.combine(
+            [1, 1, 2, 2],
+            [4, 6, 7, 9],
+            [4, 6, 1j, 1j],
+            [0] * 4,
+            [0] * 4,
+            has_f1=[False, False, True, True],
+        )
+        assert combined[:2] == pytest.approx([4, 6])
+        assert abs(combined[2:].mean()) == pytest.approx(9)
+
+    def test_nan_trials_are_left_out_of_the_phase(self):
+        combined, _ = self.combine([1, 1, 1], [10, 10, 10], [2j, np.nan, 2j], [0] * 3, [0] * 3)
+        assert np.isnan(combined[1])
+        assert combined[[0, 2]] == pytest.approx([12j, 12j])
+
+    def test_mismatched_sizes_raise(self):
+        with pytest.raises(ValueError, match="one entry per trial"):
+            self.combine([1, 1], [1, 1], [1], [0, 0], [0, 0])
+
+    def test_removal_is_scoped_by_response_type(self):
+        """mean+F1 shares the F1 parameter document; deleting one must not
+        delete the other."""
+        session = _session()
+        app = _app(session)
+        presentation = _presentation_doc([{"parameters": {}}], [1])
+        parameters = ndi_document("stimulus_response_scalar_parameters_basic")
+        app._remove_matching_responses(
+            SimpleNamespace(id="neuron-1"), presentation, None, parameters, "F1"
+        )
+        query = session.database_search.call_args.args[0]
+        clauses = [c for c in query.search_structure if isinstance(c, dict)]
+        assert {
+            "field": "stimulus_response_scalar.response_type",
+            "operation": "exact_string",
+            "param1": "F1",
+            "param2": "",
+        } in clauses
+
+
+class TestParameterDocumentReuse:
+    """Empty parameters are matched as empty, not left unconstrained."""
+
+    def _stored(self, prestimulus_time):
+        doc = ndi_document("stimulus_response_scalar_parameters_basic")
+        doc.document_properties["stimulus_response_scalar_parameters_basic"] = {
+            "temporalfreqfunc": "ndi.fun.stimulustemporalfrequency",
+            "freq_response": 1,
+            "prestimulus_time": prestimulus_time,
+            "prestimulus_normalization": None,
+            "isspike": 1,
+            "spiketrain_dt": 0.001,
+        }
+        return doc
+
+    def _lookup(self, stored_docs):
+        session = _session(search=lambda q: list(stored_docs))
+        app = _app(session)
+        return (
+            app._parameter_document(
+                "ndi.fun.stimulustemporalfrequency", 1, None, None, True, 0.001
+            ),
+            session,
+        )
+
+    def test_an_empty_stored_parameter_is_reused(self):
+        stored = self._stored(None)
+        found, session = self._lookup([stored])
+        assert found is stored
+        session.database_add.assert_not_called()
+
+    def test_a_set_stored_parameter_is_not_reused_for_an_empty_request(self):
+        found, session = self._lookup([self._stored(0.5)])
+        session.database_add.assert_called_once()
+        assert (
+            found.document_properties["stimulus_response_scalar_parameters_basic"][
+                "prestimulus_time"
+            ]
+            is None
+        )

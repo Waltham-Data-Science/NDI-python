@@ -1747,7 +1747,7 @@ functions:
   - name: f0_f1_responses
     type: function
     matlab_path: "+ndi/+fun/+stimulus/f0_f1_responses.m"
-    matlab_last_sync_hash: "fe64a9f53"
+    matlab_last_sync_hash: "e3fe3025c"
     python_path: "ndi/fun/stimulus.py"
     input_arguments:
       - name: session
@@ -1776,6 +1776,9 @@ functions:
     decision_log: >
       Exact match. Python now returns 4 separate outputs matching
       MATLAB: (f0, f1, f0_tuningcurve_doc, f1_tuningcurve_doc).
+      Synced to NDI-matlab e3fe3025c (VH-Lab/NDI-matlab#1209): a 'mean+F1'
+      tuning curve is accepted and reports the F0 and F1 of its mean and F1
+      partner curves.
 
       Examined against NDI-matlab fe64a9f53, the file's last-touching commit,
       AND THE POINT OF THE FUNCTION WAS MISSING. F0 and F1 live in SEPARATE

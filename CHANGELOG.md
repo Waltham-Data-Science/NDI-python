@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **`mean+F1` stimulus responses** (`ndi.app.stimulus.tuning_response`, MATLAB
+  VH-Lab/NDI-matlab#1209). Whenever the mean and F1 are both computed,
+  `compute_stimulus_response_scalar` also writes a `stimulus_response_scalar`
+  document with `response_type` `'mean+F1'`. Each trial is
+  `mean_i * exp(1j*theta) + F1_i`, theta being the phase of the
+  vector-averaged F1 for that stimulus, so the tuning curve value is
+  `mean(F0) + abs(mean(F1))` with F1 still averaged with its phase. Stimuli
+  without a fundamental frequency get the mean. It shares the F1 parameter
+  document. `ndi.fun.stimulus.f0_f1_responses` accepts a `mean+F1` curve.
+
 - **Stream files to an NDI Cloud session** (`ndi.cloud.session_writer.SessionWriter`,
   MATLAB `ndi.cloud.upload.SessionWriter`). To the lightsheet builders it looks
   like a session. Chunks are sent in the background as they are made,
@@ -268,6 +278,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `fileInfo`. `listFiles` and `getFileDetails` already pass `crc32` through.
 
 ### Fixed
+
+- **Recomputing stimulus responses replaced nothing** when the prestimulus
+  parameters were empty (the default): the parameter document lookup never
+  matched, so each run added new responses beside the old ones. Empty
+  parameters are now matched as empty, and the delete-before-recompute is
+  scoped by `response_type` (VH-Lab/NDI-matlab#1209).
 
 - **Uploads wait for NDI Cloud to record them** (mirroring VH-Lab/NDI-matlab#1027).
   `ndi.cloud.api.files.waitForFileUpload` polls until uploaded files are

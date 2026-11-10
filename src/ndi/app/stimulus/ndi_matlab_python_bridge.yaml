@@ -108,7 +108,7 @@ classes:
   - name: tuning_response
     type: class
     matlab_path: "src/ndi/+ndi/+app/+stimulus/tuning_response.m"
-    matlab_last_sync_hash: "ae7916628"
+    matlab_last_sync_hash: "f181c55e5"
     python_path: "ndi/app/stimulus/tuning_response.py"
     python_class: "ndi_app_stimulus_tuning__response"
     inherits: "ndi.app"
@@ -133,6 +133,13 @@ classes:
       VH-Lab/vhlab-toolbox-python#24. The module-level scalar_responses() here
       is that loop and only that loop, written to the same signature so it
       can be deleted for the toolbox function when the toolbox is fixed.
+
+      MEAN+F1, synced to NDI-matlab f181c55e5 (VH-Lab/NDI-matlab#1209):
+      compute_stimulus_response_scalar writes a 'mean+F1' response whenever
+      mean and F1 are both computed (meanPlusF1, ported as a staticmethod of
+      the same name); the delete-before-recompute is scoped by response_type;
+      and _parameter_document matches empty parameters as empty rather than
+      leaving them unconstrained, as MATLAB now does.
 
       MIRRORED UPSTREAM BUG: MATLAB passes control_stimulus_ids -- a
       per-presentation vector of control PRESENTATION numbers -- to vlt's
