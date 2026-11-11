@@ -498,7 +498,7 @@ classes:
   - name: ndi_gui_component_ProgressBarWindow
     type: class
     matlab_path: "+ndi/+gui/+component/ProgressBarWindow.m"
-    matlab_last_sync_hash: "aa96851e"
+    matlab_last_sync_hash: "f50c2291"
     python_path: "ndi/gui/component/ProgressBarWindow.py"
     python_class: "ndi_gui_component_ProgressBarWindow"
     inherits: "matlab.apps.AppBase"
@@ -548,6 +548,11 @@ classes:
       attributes spelled in PEP 8. Every MATLAB property that holds a VALUE
       -- Value, Size, Location, Title, UpdateInterval, Tag, Progress, State --
       does carry MATLAB's name here and is checked by the property gate.
+
+      2026-11-11: NDI-matlab f50c2291 (VH-Lab/NDI-matlab#1115) stops the
+      constructor printing "Using existing progress bar window" when it
+      reuses a window. The Python constructor already reuses a window from
+      _ACTIVE_WINDOWS without printing anything, so nothing to follow.
 
     properties:
       - name: ScreenFrac

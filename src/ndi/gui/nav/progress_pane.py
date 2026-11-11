@@ -133,11 +133,12 @@ class ProgressPane(NavPane):
         """Prepare and return the container docked bars render into.
 
         The grid mirrors MATLAB's ``uigridlayout`` with column widths
-        ``{'17.5x', '1.5x', '1x'}``: bar, percent label, close button. Column
-        stretches are ``35 : 3 : 2`` so the ratio is exact -- Qt's
-        ``setColumnStretch`` normalizes these, and any docking client
-        (ProgressBarWindow, in particular) can add rows into the shape it
-        expects rather than into a bare vertical stack.
+        ``{'1x', 48, 24}``: bar, percent label, close button. The bar column
+        takes all the stretch and the percent and button columns get fixed
+        pixel widths, so ``100%`` and the icon beside it are not cut off in
+        the narrow pane. Any docking client (ProgressBarWindow, in particular)
+        can add rows into the shape it expects rather than into a bare
+        vertical stack.
         """
         from PySide6 import QtWidgets
 
@@ -147,11 +148,13 @@ class ProgressPane(NavPane):
         grid = QtWidgets.QGridLayout(holder)
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setVerticalSpacing(0)
-        # 17.5x : 1.5x : 1x -- the bar / percent / close column shape the
-        # standalone ProgressBarWindow uses, expressed as integers.
-        grid.setColumnStretch(0, 35)
-        grid.setColumnStretch(1, 3)
-        grid.setColumnStretch(2, 2)
+        # {'1x', 48, 24} -- the bar stretches; the percent and close columns
+        # keep fixed pixel widths whatever the pane width.
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 0)
+        grid.setColumnStretch(2, 0)
+        grid.setColumnMinimumWidth(1, 48)
+        grid.setColumnMinimumWidth(2, 24)
 
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
