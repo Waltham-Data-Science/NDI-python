@@ -884,7 +884,7 @@ classes:
   - name: system
     type: class
     matlab_path: "+ndi/+daq/system.m"
-    matlab_last_sync_hash: "375a0ff7e"
+    matlab_last_sync_hash: "f50c2291"
     python_path: "ndi/daq/system.py"
     python_class: "ndi_daq_system"
     inherits: "ndi.ido"
@@ -905,6 +905,10 @@ classes:
       filenavigator or session.
       NDI-matlab 375a0ff7e only preallocates in ingest's loops (Code Analyzer);
       nothing to follow.
+      2026-11-11: NDI-matlab f50c2291 (VH-Lab/NDI-matlab#1115) skips
+      buildepochtable's in-loop progress update on the last epoch, so the
+      auto-closing bar is not updated after it closes. Python's
+      buildepochtable shows no progress bar, so nothing to follow.
 
     properties:
       - name: name

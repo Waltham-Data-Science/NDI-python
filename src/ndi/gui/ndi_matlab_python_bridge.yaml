@@ -897,9 +897,14 @@ ported_late:
 
   - name: progressPane
     matlab_path: "+ndi/+gui/+nav/progressPane.m"
-    matlab_last_sync_hash: "0e2caa09"
+    matlab_last_sync_hash: "f50c2291"
     python_path: "ndi/gui/nav/progress_pane.py"
-    decision_log: "Ported in #103 with sessionInfo."
+    decision_log: >
+      Ported in #103 with sessionInfo.
+      2026-11-11: NDI-matlab f50c2291 (VH-Lab/NDI-matlab#1115) gives the
+      docked bar grid fixed pixel widths for the percent and button columns,
+      {'1x', 48, 24}. Ported: adopt_bar_grid stretches only the bar column
+      and gives the other two minimum widths of 48 and 24 px.
 
   - name: sessionInfo
     matlab_path: "+ndi/+gui/+nav/sessionInfo.m"
