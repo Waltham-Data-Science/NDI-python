@@ -749,9 +749,14 @@ ported_late:
   # --- ndi.gui.nav: the navigator's pane stack ---------------------------
   - name: pane
     matlab_path: "+ndi/+gui/+nav/pane.m"
-    matlab_last_sync_hash: "87c6d08a"
+    matlab_last_sync_hash: "666a0ddfa"
     python_path: "ndi/gui/nav/pane.py"
-    decision_log: "Base pane: geometry, palette, show/hide. Ported in #88."
+    decision_log: >
+      Base pane: geometry, palette, show/hide. Ported in #88.
+      2026-11-12: pane.refreshButton / reloadIconFile (NDI-matlab 666a0ddfa)
+      -> NavPane.refresh_button and module function reload_icon_file (moved
+      here from cloud_pane, which re-exports it), with the same glyph
+      fallback.
 
   - name: ndiPane
     matlab_path: "+ndi/+gui/+nav/ndiPane.m"
@@ -811,7 +816,7 @@ ported_late:
 
   - name: jobsPane
     matlab_path: "+ndi/+gui/+nav/jobsPane.m"
-    matlab_last_sync_hash: "475eaf4c8"
+    matlab_last_sync_hash: "666a0ddfa"
     python_path: "ndi/gui/nav/jobs_pane.py"
     python_class: "JobsPane"
     decision_log: >-
@@ -833,6 +838,9 @@ ported_late:
       kind only MATLAB defines can be paused but not resumed here (Resume is
       disabled: it is an ndi_job_ForeignJob); lightsheetToCloud jobs, ported,
       are resumed here like any other.
+      2026-11-12: NDI-matlab 666a0ddfa: a header refresh button re-reads the
+      jobs from disk, so jobs run by another process show their state.
+      Ported: JobsPane.build_header_right / right_width (26).
 
   - name: updateDialog
     matlab_path: "+ndi/+gui/+nav/updateDialog.m"
@@ -862,7 +870,7 @@ ported_late:
 
   - name: datasetsPane
     matlab_path: "+ndi/+gui/+nav/datasetsPane.m"
-    matlab_last_sync_hash: "ffee1bc"
+    matlab_last_sync_hash: "666a0ddfa"
     python_path: "ndi/gui/nav/datasets_pane.py"
     decision_log: >
       The navigator's elastic pane, ported across #103, #109, #110 and
@@ -899,6 +907,10 @@ ported_late:
       open_cloud_dataset_by_id. datasets_cloud.sync_dataset/mirror_dataset
       stay, now called by the comparison window, with sync_files and dry_run
       passed through as SyncOptions.
+      2026-11-12: NDI-matlab 666a0ddfa: the header "Refresh" text button is
+      the refresh symbol (rightWidth 108 -> 56; REFRESH_WIDTH follows). The
+      attribute is refresh_btn because refresh_button is now the NavPane
+      factory method.
 
   - name: cloudComparison
     matlab_path: "+ndi/+gui/+nav/cloudComparison.m"
@@ -935,7 +947,7 @@ ported_late:
 
   - name: cloudPane
     matlab_path: "+ndi/+gui/+nav/cloudPane.m"
-    matlab_last_sync_hash: "ffee1bc"
+    matlab_last_sync_hash: "666a0ddfa"
     python_path: "ndi/gui/nav/cloud_pane.py"
     decision_log: >
       Cloud status and actions pane. Ported in #112. NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037)
@@ -945,6 +957,8 @@ ported_late:
       2026-11-12: NDI-matlab ffee1bc (VH-Lab/NDI-matlab#1230) only renames
       "Check Cloud status" to "Cloud info..." in two comments; nothing to
       follow.
+      2026-11-12: NDI-matlab 666a0ddfa: the reload button is built by the
+      shared pane.refreshButton; same icon and tooltip.
 
   - name: progressPane
     matlab_path: "+ndi/+gui/+nav/progressPane.m"

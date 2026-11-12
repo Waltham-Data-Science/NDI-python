@@ -16,7 +16,9 @@ and when it last updated.
 
 A job runs in this process, so while one runs the window is busy; the job
 lets the window redraw at every heartbeat (``ndi_job_Job._refreshPane``),
-which is when Pause and the progress column respond. Jobs MATLAB runs are
+which is when Pause and the progress column respond. A job run by ANOTHER
+process (a second Python, or MATLAB) does not tell this window, so the
+header's refresh button re-reads every job's record from disk. Jobs MATLAB runs are
 listed too, and Python can pause them (MATLAB sees the request at its next
 heartbeat) and resume them -- except a kind only MATLAB defines, which loads
 as an ndi_job_ForeignJob and can only be paused.
@@ -33,7 +35,7 @@ import datetime as _dt
 import math
 from typing import Any
 
-from .pane import HEADER_HEIGHT, NavPane
+from .pane import HEADER_HEIGHT, REFRESH_BUTTON_WIDTH, NavPane
 
 __all__ = ["JobsPane", "BODY_HEIGHT", "COLUMNS", "rows_for", "duration_text", "short_time"]
 
@@ -159,10 +161,22 @@ class JobsPane(NavPane):
         self.resume_button: Any = None
         self.restart_button: Any = None
         self.remove_button: Any = None
+        self.refresh_btn: Any = None
         self._selected_id = ""
 
     def has_body(self) -> bool:
         return True
+
+    def right_width(self) -> float:
+        return REFRESH_BUTTON_WIDTH
+
+    def build_header_right(self, layout: Any) -> None:
+        """One refresh-symbol button: re-read the jobs from disk, so jobs run
+        by other processes show their current state."""
+        self.refresh_btn = self.refresh_button(
+            "Re-read the jobs (shows progress of jobs run by other processes)", self.refresh
+        )
+        layout.addWidget(self.refresh_btn)
 
     # MATLAB's public property names (SetAccess = protected), read-only here.
     @property

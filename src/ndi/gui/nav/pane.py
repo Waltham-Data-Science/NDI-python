@@ -9,11 +9,37 @@ plain Python while only :meth:`NavPane.build` touches Qt.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from ..cloud_colors import cloud_colors, rgb_to_hex
 
-__all__ = ["NavPane", "HEADER_HEIGHT", "TRIANGLE_RIGHT", "TRIANGLE_DOWN"]
+__all__ = [
+    "NavPane",
+    "HEADER_HEIGHT",
+    "TRIANGLE_RIGHT",
+    "TRIANGLE_DOWN",
+    "REFRESH_BUTTON_WIDTH",
+    "RELOAD_GLYPH",
+    "reload_icon_file",
+]
+
+#: Width of the compact, icon-only refresh button in a pane header.
+REFRESH_BUTTON_WIDTH = 26
+
+#: U+21BB CLOCKWISE OPEN CIRCLE ARROW. Used only if the SVG icon will not
+#: render -- a blank button is worse than an approximate glyph.
+RELOAD_GLYPH = "\u21bb"
+
+
+def reload_icon_file() -> Path:
+    """Absolute path to the refresh symbol (MATLAB: ``pane.reloadIconFile``).
+
+    The SVG is a byte-for-byte copy of MATLAB's ``+ndi/+gui/reload_icon.svg``,
+    kept at the mirrored location so the two ports draw the same button.
+    """
+    return Path(__file__).resolve().parent.parent / "reload_icon.svg"
+
 
 #: Header row height, in pixels. MATLAB's ndi.gui.nav.pane.HeaderHeight.
 HEADER_HEIGHT = 28
@@ -269,6 +295,29 @@ class NavPane:
     # ------------------------------------------------------------------
     def build_header_right(self, layout: Any) -> None:
         """Add the right-hand header control. Default none."""
+
+    def refresh_button(self, tooltip: str, slot: Any) -> Any:
+        """A compact header button showing the refresh symbol.
+
+        MATLAB counterpart: ``pane.refreshButton``. Every pane's refresh looks
+        the same; TOOLTIP says what it refreshes. The caller adds it to the
+        header layout.
+        """
+        from PySide6 import QtGui, QtWidgets
+
+        btn = QtWidgets.QPushButton()
+        btn.setFixedWidth(REFRESH_BUTTON_WIDTH)
+        btn.setToolTip(tooltip)
+        icon = QtGui.QIcon(str(reload_icon_file()))
+        if icon.isNull():
+            # No SVG support in this Qt build, or the file is missing. A
+            # button with neither icon nor text is invisible to the user.
+            btn.setText(RELOAD_GLYPH)
+        else:
+            btn.setIcon(icon)
+        btn.clicked.connect(slot)
+        self.accent_button(btn)
+        return btn
 
     def build_body(self, container: Any) -> None:
         """Populate the pane body. Default none."""

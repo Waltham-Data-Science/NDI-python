@@ -183,6 +183,56 @@ class TestThePane:
         assert (jobs_dir / rec["id"] / "pause.request").is_file()
 
 
+class TestTheRefreshButton:
+    """A job run by another process writes only to disk; the header's refresh
+    button is how this window catches up with it."""
+
+    def test_a_job_written_by_another_process_appears_on_refresh(self, jobs_dir):
+        p = JobsPane(FakeNavigator())
+        p.refresh()
+        assert p.jobs == []
+        # Another process: the record lands on disk, this pane is not told.
+        other = Steps.create(4, "elsewhere")
+        assert p.jobs == []
+        p.refresh()
+        assert [j.id for j in p.jobs] == [other.id]
+
+    def test_progress_from_another_process_shows_on_refresh(self, jobs_dir):
+        job = Steps.create(4)
+        p = JobsPane(FakeNavigator())
+        p.refresh()
+        before = rows_for(p.jobs)[0][2]
+        job.PauseAfterBeats = 2
+        job.run()  # stands in for the other process
+        p.refresh()
+        assert rows_for(p.jobs)[0][2] != before
+        assert p.jobs[0].state == "paused"
+
+    def test_the_header_has_a_refresh_symbol_button(self):
+        pytest.importorskip("PySide6")
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        try:
+            from ndi.gui._qt_helpers import get_or_create_app
+
+            get_or_create_app()
+        except Exception as exc:  # noqa: BLE001
+            pytest.skip(f"no usable Qt platform plugin: {exc}")
+        from PySide6 import QtWidgets
+
+        from ndi.gui.nav.pane import REFRESH_BUTTON_WIDTH
+
+        holder = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(holder)
+        p = JobsPane(FakeNavigator())
+        p.build(layout, 0)
+        assert p.right_width() == REFRESH_BUTTON_WIDTH
+        assert p.refresh_btn is not None
+        assert not p.refresh_btn.icon().isNull() or p.refresh_btn.text()
+        Steps.create(2)
+        p.refresh_btn.click()
+        assert len(p.jobs) == 1
+
+
 class TestARunningJobRefreshesThePane:
     def test_without_the_gui_loaded_nothing_is_imported(self, monkeypatch):
         monkeypatch.delitem(sys.modules, "ndi.gui.navigator", raising=False)

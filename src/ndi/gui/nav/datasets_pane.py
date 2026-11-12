@@ -66,8 +66,8 @@ __all__ = [
 GRIP_HEIGHT = 6
 
 #: Width of the header's right-hand control column, in pixels. MATLAB's
-#: rightWidth: the "+" square plus the Refresh button.
-REFRESH_WIDTH = 108
+#: rightWidth: the "+" square, 4 px, and the refresh-symbol square.
+REFRESH_WIDTH = 56
 
 #: Width of the compact "+" button, in pixels.
 PLUS_WIDTH = 26
@@ -178,7 +178,7 @@ class DatasetsPane(NavPane):
         self.tree: Any = None
         self.grip: Any = None
         self.add_button: Any = None
-        self.refresh_button: Any = None
+        self.refresh_btn: Any = None
         #: Cached QMenu, built lazily on first "+" click and reused thereafter.
         self._add_menu: Any = None
 
@@ -241,7 +241,7 @@ class DatasetsPane(NavPane):
         self.populate_tree()
 
     def build_header_right(self, layout: Any) -> None:
-        """The header's right-hand controls: [+] then Refresh."""
+        """The header's right-hand controls: [+] then the refresh symbol."""
         from PySide6 import QtWidgets
 
         self.add_button = QtWidgets.QPushButton("+")
@@ -254,11 +254,10 @@ class DatasetsPane(NavPane):
         self.accent_button(self.add_button)
         layout.addWidget(self.add_button)
 
-        self.refresh_button = QtWidgets.QPushButton("Refresh")
-        self.refresh_button.setToolTip("Rebuild the list of datasets and sessions")
-        self.refresh_button.clicked.connect(self.refresh)
-        self.accent_button(self.refresh_button)
-        layout.addWidget(self.refresh_button)
+        self.refresh_btn = self.refresh_button(
+            "Rebuild the list of datasets and sessions", self.refresh
+        )
+        layout.addWidget(self.refresh_btn)
 
     # ------------------------------------------------------------------
     # the "+" add menu and its flows
