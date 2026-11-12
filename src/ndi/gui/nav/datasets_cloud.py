@@ -1,8 +1,14 @@
 """The NDI Cloud actions behind the datasets pane's menu.
 
 MATLAB counterpart: the cloud action methods of
-``src/ndi/+ndi/+gui/+nav/datasetsPane.m`` (``cloudCheckStatus``,
-``cloudUploadDataset``, ``cloudCheckForNew``, ``cloudSync``, ``cloudMirror``)
+``src/ndi/+ndi/+gui/+nav/datasetsPane.m`` (``cloudInfo``,
+``cloudUploadDataset``) and the sync buttons of
+``src/ndi/+ndi/+gui/+nav/cloudComparison.m`` (``runAction``)
+
+The navigator no longer offers sync operations from the dataset menu
+(VH-Lab/NDI-matlab#1230): syncing happens only in the Cloud comparison
+window, where the user can see both sides first. :func:`sync_dataset` and
+:func:`mirror_dataset` are what that window's buttons call.
 
 Each action here does the work and RETURNS what happened. It never shows a
 dialog, never touches a widget and never raises: a failure comes back as a
@@ -40,7 +46,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, NamedTuple
 
-from .datasets_text import cloud_check_message, sync_result_message
+from .datasets_text import sync_result_message
 
 __all__ = [
     "CloudActionResult",
@@ -48,9 +54,8 @@ __all__ = [
     "MIRROR_MODES",
     "mirror_prompt",
     "resolve_cloud_target",
-    "check_cloud_status",
+    "cloud_info",
     "upload_dataset",
-    "check_for_new",
     "sync_dataset",
     "mirror_dataset",
 ]
@@ -71,7 +76,7 @@ class CloudActionResult(NamedTuple):
     icon: str = "info"
     state: str | None = None
     #: The NDI Cloud dataset id, when the action learned it ("" otherwise).
-    #: Set by "Check Cloud status" so its dialog can show and copy the id.
+    #: Set by "Cloud info" so its dialog can show and copy the id.
     cloud_dataset_id: str = ""
 
 
@@ -149,15 +154,20 @@ def resolve_cloud_target(dataset: Any) -> str:
     return cloud_id
 
 
-def check_cloud_status(dataset: Any) -> CloudActionResult:
-    """Is DATASET linked to NDI Cloud? (the "Check Cloud status" command)
+def cloud_info(dataset: Any) -> CloudActionResult:
+    """Is DATASET linked to NDI Cloud? (the "Cloud info..." command)
+
+    MATLAB counterpart: ``datasetsPane/cloudInfo`` (formerly
+    ``cloudCheckStatus``). The pane shows the result in a
+    :class:`~ndi.gui.nav.cloud_info_dialog.CloudInfoDialog` together with the
+    dataset's name and local path.
 
     The only cloud action that asks the dataset itself rather than the
     network: ``is_in_cloud`` is a local check for the ``dataset_remote``
     document. Because it is on demand, the cost is paid when the user asks
     rather than on every refresh.
     """
-    title = "Check Cloud Status"
+    title = "Cloud Info"
     try:
         answer = dataset.is_in_cloud()
         in_cloud = answer[0] if isinstance(answer, tuple) else answer
@@ -212,39 +222,25 @@ def upload_dataset(
     return CloudActionResult(False, title, f"Upload did not complete: {message}", "error", None)
 
 
-def check_for_new(dataset: Any, side: str) -> CloudActionResult:
-    """How many documents are new on one SIDE. Reads ids only; changes nothing.
-
-    ``side`` is ``"remote"`` (cloud documents missing locally) or
-    ``"local"`` (local documents missing on the cloud).
-    """
-    if side not in ("remote", "local"):
-        raise ValueError(f"side must be 'remote' or 'local'; got {side!r}.")
-    title = "Check Cloud for New" if side == "remote" else "Check Local for New"
-
-    from ...cloud.sync import documentDifference
-
-    try:
-        report = documentDifference(dataset)
-    except Exception as exc:  # noqa: BLE001
-        return CloudActionResult(False, title, str(exc), "error", None)
-
-    count = report["num_remote_only"] if side == "remote" else report["num_local_only"]
-    return CloudActionResult(True, title, cloud_check_message(side, count), "info", None)
-
-
-def sync_dataset(dataset: Any, mode: str) -> CloudActionResult:
+def sync_dataset(
+    dataset: Any, mode: str, *, sync_files: bool = False, dry_run: bool = False
+) -> CloudActionResult:
     """Run an additive sync MODE and report what changed.
 
     ``mode`` is a key of :data:`SYNC_MODES`. None of these delete documents,
-    so no confirmation is required.
+    so no confirmation is required. SYNC_FILES and DRY_RUN are the
+    :class:`~ndi.cloud.sync.SyncOptions` the comparison window exposes.
     """
     if mode not in SYNC_MODES:
         raise ValueError(f"mode must be one of {sorted(SYNC_MODES)}; got {mode!r}.")
-    return _run_sync(dataset, *SYNC_MODES[mode], failure_verb="Sync")
+    return _run_sync(
+        dataset, *SYNC_MODES[mode], failure_verb="Sync", sync_files=sync_files, dry_run=dry_run
+    )
 
 
-def mirror_dataset(dataset: Any, direction: str) -> CloudActionResult:
+def mirror_dataset(
+    dataset: Any, direction: str, *, sync_files: bool = False, dry_run: bool = False
+) -> CloudActionResult:
     """Mirror one side onto the other. THE CALLER MUST HAVE CONFIRMED FIRST.
 
     ``direction`` is a key of :data:`MIRROR_MODES`. Both directions delete
@@ -254,14 +250,27 @@ def mirror_dataset(dataset: Any, direction: str) -> CloudActionResult:
     """
     if direction not in MIRROR_MODES:
         raise ValueError(f"direction must be one of {sorted(MIRROR_MODES)}; got {direction!r}.")
-    return _run_sync(dataset, *MIRROR_MODES[direction], failure_verb="Mirror")
+    return _run_sync(
+        dataset,
+        *MIRROR_MODES[direction],
+        failure_verb="Mirror",
+        sync_files=sync_files,
+        dry_run=dry_run,
+    )
 
 
 def _run_sync(
-    dataset: Any, function_name: str, title: str, *, failure_verb: str
+    dataset: Any,
+    function_name: str,
+    title: str,
+    *,
+    failure_verb: str,
+    sync_files: bool = False,
+    dry_run: bool = False,
 ) -> CloudActionResult:
     """Resolve the target, call one sync function, and summarise the report."""
     from ...cloud import sync as sync_module
+    from ...cloud.sync import SyncOptions
 
     try:
         cloud_id = resolve_cloud_target(dataset)
@@ -270,7 +279,8 @@ def _run_sync(
 
     operation = getattr(sync_module, function_name)
     try:
-        success, message, report = operation(dataset, cloud_id)
+        options = SyncOptions(sync_files=bool(sync_files), dry_run=bool(dry_run), verbose=False)
+        success, message, report = operation(dataset, cloud_id, options)
     except Exception as exc:  # noqa: BLE001
         return CloudActionResult(
             False, title, f"{failure_verb} did not complete: {exc}", "error", None
@@ -296,4 +306,7 @@ def _run_sync(
     # this port's job is to mirror MATLAB's behaviour rather than quietly
     # improve on it; a badge that updates in one language and not the other
     # is exactly the kind of drift the symmetry work exists to prevent.
-    return CloudActionResult(True, title, sync_result_message(report), "success", None)
+    summary = sync_result_message(report)
+    if dry_run:
+        summary = f"Dry run - nothing was changed. {summary}"
+    return CloudActionResult(True, title, summary, "success", None)

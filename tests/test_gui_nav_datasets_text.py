@@ -18,7 +18,6 @@ from ndi.gui.nav.datasets_text import (
     UNNAMED_SESSION,
     append_count_phrase,
     append_workspace_var_names,
-    cloud_check_message,
     cloud_dataset_id_label,
     cloud_summary_message,
     dataset_label,
@@ -174,28 +173,6 @@ class TestCloudSummaryMessage:
     def test_zero_errors_adds_nothing(self):
         msg = cloud_summary_message({"total": 5, "in_cloud": 3, "errors": 0})
         assert "could not be checked" not in msg
-
-
-class TestCloudCheckMessage:
-    @pytest.mark.parametrize("side", ["remote", "local"])
-    @pytest.mark.parametrize("count", [0, 1, 2])
-    def test_every_branch_produces_a_sentence(self, side, count):
-        msg = cloud_check_message(side, count)
-        assert msg and msg.endswith(".")
-
-    def test_remote_wording(self):
-        assert "no new documents on the cloud" in cloud_check_message("remote", 0)
-        assert cloud_check_message("remote", 1).startswith("There is 1 document")
-        assert "There are 4 documents" in cloud_check_message("remote", 4)
-
-    def test_local_wording(self):
-        assert "no new local documents" in cloud_check_message("local", 0)
-        assert cloud_check_message("local", 1).startswith("There is 1 local document")
-        assert "There are 4 local documents" in cloud_check_message("local", 4)
-
-    def test_bad_side_raises(self):
-        with pytest.raises(ValueError, match="remote"):
-            cloud_check_message("sideways", 1)
 
 
 class TestSyncResultMessage:

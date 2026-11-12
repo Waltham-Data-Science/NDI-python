@@ -37,7 +37,6 @@ __all__ = [
     "workspace_name_error",
     "dataset_menu_enable",
     "cloud_summary_message",
-    "cloud_check_message",
     "sync_result_message",
     "order_app_menu",
     "dataset_label",
@@ -262,33 +261,6 @@ def cloud_summary_message(report: Mapping[str, Any]) -> str:
     elif errors > 1:
         msg += f" {errors} datasets could not be checked."
     return msg
-
-
-def cloud_check_message(side: str, count: int) -> str:
-    """Status text for a "Check ... for New" command.
-
-    ``side`` is ``"remote"`` (COUNT cloud documents are missing locally) or
-    ``"local"`` (COUNT local documents are missing on the cloud).
-    """
-    count = int(count)
-    if side == "remote":
-        if count == 0:
-            return (
-                "There are no new documents on the cloud. Your local dataset "
-                "already has every cloud document."
-            )
-        if count == 1:
-            return "There is 1 document on the cloud that is not in your local dataset."
-        return f"There are {count} documents on the cloud that are not in your " "local dataset."
-    if side == "local":
-        if count == 0:
-            return (
-                "There are no new local documents. Every local document is " "already on the cloud."
-            )
-        if count == 1:
-            return "There is 1 local document that is not on the cloud."
-        return f"There are {count} local documents that are not on the cloud."
-    raise ValueError("side must be 'remote' or 'local'.")
 
 
 def sync_result_message(report: Mapping[str, Any] | None) -> str:

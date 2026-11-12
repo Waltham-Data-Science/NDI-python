@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Navigator: Cloud comparison, Cloud info and a cloud dataset browser**
+  (`ndi.gui.nav`, MATLAB VH-Lab/NDI-matlab#1230 and #1231). A dataset's Cloud
+  menu is now "Cloud info...", "Upload to Cloud" and "Cloud comparison...".
+  `CloudComparison` names the local copy's folder and the cloud dataset id,
+  compares documents (`documentDifference`), and runs every sync mode from
+  buttons, with "Also sync data files" and "Dry run"; a mirror's warning says
+  how many documents it will delete. The direct sync items in the menu are
+  gone. `CloudInfoDialog` (was `CloudStatusDialog`) adds the dataset name and
+  local path, each copyable. "+" gains "Browse my Cloud datasets...":
+  `CloudDatasetBrowser` lists the user's cloud datasets with document and file
+  counts and dates, sorts by any column, opens one, and deletes one only after
+  a typed-name confirmation (plus an extra box for a group organization).
+  "Remove from list" on a dataset hides it from the navigator without deleting
+  anything.
+
 - **`mean+F1` stimulus responses** (`ndi.app.stimulus.tuning_response`, MATLAB
   VH-Lab/NDI-matlab#1209). Whenever the mean and F1 are both computed,
   `compute_stimulus_response_scalar` also writes a `stimulus_response_scalar`

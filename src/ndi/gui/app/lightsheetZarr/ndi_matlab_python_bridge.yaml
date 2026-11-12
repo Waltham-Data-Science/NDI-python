@@ -36,7 +36,7 @@ functions:
   # -----------------------------------------------------------------------
   - name: LightsheetManager
     matlab_path: "+ndi/+gui/+app/LightsheetManager.m"
-    matlab_last_sync_hash: "a6ff6b8be"
+    matlab_last_sync_hash: "ffee1bc"
     status: matlab_only
     decision_log: >-
       matlab_only: napari is Python-only, so the manager class stays
@@ -90,6 +90,11 @@ functions:
       same reason: the manager is a MATLAB uifigure app whose View button
       launches this package's napari viewer; nothing here reads its
       dialog. The napari viewer it launches is unaffected by the rename.
+
+      2026-11-12: examined against ffee1bc (was a6ff6b8be).
+      VH-Lab/NDI-matlab#1230 adds a "Sort by" control to the manager's
+      table (sortRows, sortDirText). Still matlab_only; nothing on the
+      Python side lists pyramids.
 
   # -----------------------------------------------------------------------
   # CLI (napariViewLightsheet).

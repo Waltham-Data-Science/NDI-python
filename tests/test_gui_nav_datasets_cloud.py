@@ -33,20 +33,20 @@ class FakeDataset:
         return self._in_cloud, "cloud-id" if self._in_cloud else ""
 
 
-class TestCheckCloudStatus:
+class TestCloudInfo:
     def test_linked(self):
-        r = dc.check_cloud_status(FakeDataset(in_cloud=True))
+        r = dc.cloud_info(FakeDataset(in_cloud=True))
         assert r.ok and r.state == "incloud"
         assert "linked to NDI Cloud" in r.message
 
     def test_not_linked_points_at_the_next_step(self):
-        r = dc.check_cloud_status(FakeDataset(in_cloud=False))
+        r = dc.cloud_info(FakeDataset(in_cloud=False))
         assert r.ok and r.state == "notincloud"
         assert "Upload to Cloud" in r.message
 
     def test_a_failure_records_no_state(self):
         """Not knowing must not be recorded as a definite answer."""
-        r = dc.check_cloud_status(FakeDataset(raises=True))
+        r = dc.cloud_info(FakeDataset(raises=True))
         assert not r.ok
         assert r.state is None
         assert r.icon == "error"
@@ -56,7 +56,7 @@ class TestCheckCloudStatus:
             def is_in_cloud(self):
                 return True
 
-        assert dc.check_cloud_status(Bare()).state == "incloud"
+        assert dc.cloud_info(Bare()).state == "incloud"
 
 
 class TestUploadDataset:
@@ -93,49 +93,11 @@ class TestUploadDataset:
         assert "network down" in r.message
 
 
-class TestCheckForNew:
-    def _patch_difference(self, monkeypatch, report):
-        import ndi.cloud.sync as sync_module
-
-        monkeypatch.setattr(sync_module, "documentDifference", lambda ds: report)
-
-    def test_remote_side_reads_the_remote_only_count(self, monkeypatch):
-        self._patch_difference(monkeypatch, {"num_remote_only": 3, "num_local_only": 7})
-        r = dc.check_for_new(FakeDataset(), "remote")
-        assert r.ok
-        assert "3 documents on the cloud" in r.message
-
-    def test_local_side_reads_the_local_only_count(self, monkeypatch):
-        self._patch_difference(monkeypatch, {"num_remote_only": 3, "num_local_only": 7})
-        r = dc.check_for_new(FakeDataset(), "local")
-        assert "7 local documents" in r.message
-
-    def test_zero_is_reported_as_nothing_new(self, monkeypatch):
-        self._patch_difference(monkeypatch, {"num_remote_only": 0, "num_local_only": 0})
-        assert "no new documents on the cloud" in dc.check_for_new(FakeDataset(), "remote").message
-
-    def test_an_unlinked_dataset_is_an_error_not_a_count_of_zero(self, monkeypatch):
-        """'Not linked' and 'nothing new' are different answers."""
-        import ndi.cloud.sync as sync_module
-
-        def unlinked(ds):
-            raise RuntimeError("This dataset is not linked to a cloud dataset.")
-
-        monkeypatch.setattr(sync_module, "documentDifference", unlinked)
-        r = dc.check_for_new(FakeDataset(), "remote")
-        assert not r.ok
-        assert "not linked" in r.message
-
-    def test_a_bad_side_is_rejected(self):
-        with pytest.raises(ValueError, match="side must be"):
-            dc.check_for_new(FakeDataset(), "sideways")
-
-
 class TestSyncAndMirror:
     def _patch_op(self, monkeypatch, name, result):
         import ndi.cloud.sync as sync_module
 
-        def op(dataset, cloud_id):
+        def op(dataset, cloud_id, options=None):
             if isinstance(result, Exception):
                 raise result
             # The sync functions return (success, errorMessage, report).
@@ -198,7 +160,7 @@ class TestSyncAndMirror:
 
         calls = []
 
-        def must_not_run(path, cloud_id):
+        def must_not_run(path, cloud_id, options=None):
             calls.append((path, cloud_id))
             return {}
 
@@ -239,6 +201,44 @@ class TestSyncAndMirror:
             dc.sync_dataset(FakeDataset(), "sideways")
         with pytest.raises(ValueError, match="direction must be"):
             dc.mirror_dataset(FakeDataset(), "sideways")
+
+
+class TestSyncOptionsReachTheSyncFunction:
+    """The comparison window's "Also sync data files" and "Dry run" boxes
+    become SyncOptions on the call."""
+
+    def test_sync_files_and_dry_run_are_passed(self, monkeypatch):
+        import ndi.cloud.sync as sync_module
+
+        seen = {}
+
+        def op(dataset, cloud_id, options=None):
+            seen["options"] = options
+            return True, "", {"uploaded": []}
+
+        monkeypatch.setattr(dc, "resolve_cloud_target", lambda ds: "cid")
+        monkeypatch.setattr(sync_module, "uploadNew", op, raising=False)
+        r = dc.sync_dataset(FakeDataset(), "upload_new", sync_files=True, dry_run=True)
+        assert seen["options"].sync_files is True
+        assert seen["options"].dry_run is True
+        assert seen["options"].verbose is False
+        assert r.message.startswith("Dry run - nothing was changed.")
+
+    def test_defaults_change_nothing(self, monkeypatch):
+        import ndi.cloud.sync as sync_module
+
+        seen = {}
+
+        def op(dataset, cloud_id, options=None):
+            seen["options"] = options
+            return True, "", {"deleted_local": ["x"]}
+
+        monkeypatch.setattr(dc, "resolve_cloud_target", lambda ds: "cid")
+        monkeypatch.setattr(sync_module, "mirrorFromRemote", op, raising=False)
+        r = dc.mirror_dataset(FakeDataset(), "from_remote")
+        assert seen["options"].sync_files is False
+        assert seen["options"].dry_run is False
+        assert not r.message.startswith("Dry run")
 
 
 class TestMirrorPrompt:
