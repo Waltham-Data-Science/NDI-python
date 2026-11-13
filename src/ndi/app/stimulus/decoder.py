@@ -178,7 +178,13 @@ class ndi_app_stimulus_decoder(ndi_app):
         data = data or {}
         t = t or {}
 
-        stimuli = [{"parameters": p} for p in data.get("parameters", [])]
+        parameters = data.get("parameters", [])
+        if isinstance(parameters, dict):
+            # Ingested metadata can decode to a single struct rather than a
+            # list of them (MATLAB's jsondecode gives a struct array); iterating
+            # a dict would walk its keys, so wrap it as MATLAB's guard does.
+            parameters = [parameters]
+        stimuli = [{"parameters": p} for p in (parameters or [])]
         presentation_time = _presentation_time(t, timeref)
 
         from ...database_fun import write_presentation_time_structure

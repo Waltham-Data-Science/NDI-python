@@ -179,6 +179,21 @@ class TestParseStimuli:
         assert presentation["presentation_order"] == [1, 2, 1, 2]
         assert presentation["stimuli"][0]["parameters"] == {"isblank": 0, "angle": 30}
 
+    def test_a_single_parameter_struct_is_one_stimulus_not_its_keys(self):
+        """Ingested metadata can come back as one dict rather than a list;
+        MATLAB guards the same case (a struct array) in parse_stimuli."""
+
+        class OneStim(FakeStimulator):
+            def readtimeseriesepoch(self, epoch, t0, t1):
+                data, t, ref = super().readtimeseriesepoch(epoch, t0, t1)
+                data["parameters"] = {"isblank": 0, "angle": 30}
+                return data, t, ref
+
+        session, element_id = real_session()
+        newdocs, _ = ndi_app_stimulus_decoder(session).parse_stimuli(OneStim(element_id))
+        stimuli = newdocs[0].document_properties["stimulus_presentation"]["stimuli"]
+        assert stimuli == [{"parameters": {"isblank": 0, "angle": 30}}]
+
     def test_it_depends_on_the_element_it_decoded(self):
         session, element_id = real_session()
         newdocs, _ = ndi_app_stimulus_decoder(session).parse_stimuli(FakeStimulator(element_id))
