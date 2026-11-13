@@ -1327,8 +1327,14 @@ class ndi_dataset_dir(ndi_dataset):
             # A batch add is atomic, so on failure it falls back to per-document
             # adds to find out which ones are bad -- add_doc_failures has to
             # name them, not just report that something went wrong.
+            #
+            # Schema validation is skipped (validate=False), as MATLAB does
+            # (NDI-matlab#1240): these documents come from an existing dataset,
+            # e.g. one downloaded from NDI Cloud, and were validated when they
+            # were first added. Validating them again is slow for large
+            # datasets and unnecessary.
             try:
-                self._session._database.add_many(documents)
+                self._session._database.add_many(documents, validate=False)
             except Exception as batch_exc:
                 # The batch is validated as a unit, so one bad document takes
                 # the whole set down. Record *that* reason first: it is the
@@ -1338,7 +1344,7 @@ class ndi_dataset_dir(ndi_dataset):
                 self.add_doc_failures.append(("<batch>", str(batch_exc)))
                 for doc in documents:
                     try:
-                        self._session._database.add(doc)
+                        self._session._database.add(doc, validate=False)
                     except Exception as exc:
                         doc_id = self._get_doc_id(doc)
                         self.add_doc_failures.append((doc_id, str(exc)))

@@ -109,8 +109,12 @@ class SQLiteDriver:
                 f"{sorted(existing_branches)} but not {branch_id!r}."
             )
 
-    def add(self, document: dict) -> None:
-        """Add a document to the database."""
+    def add(self, document: dict, *, validate: bool = True) -> None:
+        """Add a document to the database.
+
+        ``validate`` is passed to ``did.database.add_docs``; see
+        :meth:`ndi_database.add`.
+        """
         doc_id = document.get("base", {}).get("id", "")
         if not doc_id:
             raise ValueError("ndi_document must have a base.id")
@@ -122,7 +126,12 @@ class SQLiteDriver:
 
         # Create DID ndi_document and add (DID-python now populates doc_data)
         did_doc = self._DIDDocument(document)
-        self._db.add_docs([did_doc], self._branch_id, custom_file_handler=_cloud_file_handler)
+        self._db.add_docs(
+            [did_doc],
+            self._branch_id,
+            validate=validate,
+            custom_file_handler=_cloud_file_handler,
+        )
 
     def bulk_add(self, documents: list[dict]) -> tuple[int, int]:
         """Add many documents at once, bypassing per-doc duplicate checks.
@@ -304,11 +313,16 @@ class ndi_database:
 
     # === CRUD Operations ===
 
-    def add(self, document: ndi_document) -> ndi_document:
+    def add(self, document: ndi_document, *, validate: bool = True) -> ndi_document:
         """Add a document to the database.
 
         Args:
             document: The ndi_document to add.
+            validate: If True (default), check the document against its schema
+                before adding it. Set False to skip this (slow) step for
+                documents already known to be valid, such as those downloaded
+                from NDI Cloud. Mirrors MATLAB ``ndi.database/add``'s
+                ``'Validate'`` name/value pair.
 
         Returns:
             The added document.
@@ -321,7 +335,7 @@ class ndi_database:
             db.add(doc)
         """
         try:
-            self._driver.add(document.document_properties)
+            self._driver.add(document.document_properties, validate=validate)
         except FileExistsError as exc:
             raise ValueError(
                 f"ndi_document with ID {document.id} already exists. "
@@ -515,11 +529,18 @@ class ndi_database:
 
     # === Batch Operations ===
 
-    def add_many(self, documents: list[ndi_document]) -> list[ndi_document]:
+    def add_many(
+        self, documents: list[ndi_document], *, validate: bool = True
+    ) -> list[ndi_document]:
         """Add multiple documents.
 
         Args:
             documents: List of Documents to add.
+            validate: If True (default), check the documents against their
+                schemas before adding them. Set False to skip this (slow) step
+                for documents already known to be valid, such as those
+                downloaded from NDI Cloud. Mirrors MATLAB ``ndi.database/add``'s
+                ``'Validate'`` name/value pair.
 
         Returns:
             List of added Documents.
@@ -546,6 +567,7 @@ class ndi_database:
             self._driver._db.add_docs(
                 did_docs,
                 self._driver._branch_id,
+                validate=validate,
                 custom_file_handler=_cloud_file_handler,
             )
         return list(documents)

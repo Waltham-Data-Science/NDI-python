@@ -388,7 +388,7 @@ classes:
   - name: dir
     type: class
     matlab_path: "+ndi/+dataset/dir.m"
-    matlab_last_sync_hash: "26d0638bf"
+    matlab_last_sync_hash: "400277e44"
     python_path: "ndi/dataset/_dataset.py"
     python_class: "ndi_dataset_dir"
     inherits: "ndi.dataset"
@@ -430,6 +430,10 @@ classes:
         decision_log: >
           Python constructor supports MATLAB calling conventions:
           dir(path), dir(reference, path), dir(reference, path, docs).
+          The docs form adds the documents without schema validation
+          (add_many(..., validate=False)), as MATLAB does since
+          NDI-matlab#1240: they were validated when first added.
+          Synchronized 2026-11-13.
 
     static_methods:
       - name: dataset_erase
