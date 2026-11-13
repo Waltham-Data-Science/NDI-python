@@ -988,7 +988,7 @@ ported_late:
 
   - name: sessionTable
     matlab_path: "+ndi/+gui/+nav/sessionTable.m"
-    matlab_last_sync_hash: "c5174ab"
+    matlab_last_sync_hash: "c96e86e"
     python_path: "ndi/gui/nav/session_table.py"
     decision_log: >
       Added with VH-Lab/NDI-matlab#1243: the window behind the navigator's
@@ -1005,7 +1005,9 @@ ported_late:
       ndi:gui:nav:sessionTable:unknownKind. The workspace is __main__'s
       globals, as for datasetsPane's "Assign to workspace...".
       assign_to_workspace and export_csv take an optional name / path so
-      they can run without dialogs.
+      they can run without dialogs, as MATLAB's public assignToWorkspace and
+      exportCsv do since NDI-matlab c96e86e (both return the name / path, or
+      MATLAB '' / Python None when nothing was done).
 
   - name: daqSystemBrowser
     matlab_path: "+ndi/+gui/+nav/daqSystemBrowser.m"
