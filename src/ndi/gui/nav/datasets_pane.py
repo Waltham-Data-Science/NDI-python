@@ -704,6 +704,15 @@ class DatasetsPane(NavPane):
         session_root.addAction("Info...", lambda: self.show_session_info(node))
         session_root.addAction("Ingest", lambda: self.ingest_session_node(node))
         session_root.addAction("Ingestion Status", lambda: self.update_session_status(node))
+        # "Tables" exposes the session summary tables of ndi.fun.doc_table
+        # (VH-Lab/NDI-matlab#1243); see ndi.gui.nav.session_table.
+        from .session_table import table_kinds
+
+        tables_root = session_root.addMenu("Tables")
+        for info in table_kinds():
+            tables_root.addAction(
+                info["Label"], lambda k=info["Kind"], n=node: self.show_session_table(n, k)
+            )
         return menu
 
     def _unaffiliated_menu(self, node: Any) -> Any:
@@ -907,6 +916,27 @@ class DatasetsPane(NavPane):
         self.open_windows.append(browser)
         browser.show()
         return browser
+
+    def show_session_table(self, node: Any, kind: str) -> Any:
+        """Build one summary table of NODE's session and show it.
+
+        KIND is a kind from :func:`ndi.gui.nav.session_table.table_kinds`
+        (``element``, ``epoch``, ``probe``, ``subject`` or ``treatment``).
+        """
+        from .session_table import SessionTable, kind_info
+
+        title = kind_info(kind)["Title"]
+        session = self._resolve_or_report(node, title)
+        if session is None:
+            return None
+        try:
+            window = SessionTable(session, kind)
+        except Exception as exc:  # noqa: BLE001
+            self._alert(str(exc), title, success=False)
+            return None
+        self.open_windows.append(window)
+        window.show()
+        return window
 
     def assign_session_to_workspace(self, node: Any) -> str | None:
         """Put NODE's session in a workspace variable (default ``S``).
