@@ -14,7 +14,7 @@ classes:
   - name: dataset
     type: class
     matlab_path: "+ndi/dataset.m"
-    matlab_last_sync_hash: "f3940dbc"
+    matlab_last_sync_hash: "4930b5dd"
     python_path: "ndi/dataset/_dataset.py"
     python_class: "ndi_dataset"
     decision_log: >
@@ -235,10 +235,21 @@ classes:
           - name: document
             type_matlab: "ndi.document | cell"
             type_python: "ndi_document | list[ndi_document]"
+          - name: RestoreDeletedId
+            type_matlab: "logical (name-value)"
+            type_python: "bool (keyword-only, spelled restore_deleted_id)"
+            default: "False"
         output_arguments:
           - name: ndi_dataset_obj
             type_python: "ndi_dataset"
-        decision_log: "Exact match."
+        decision_log: >
+          Exact match. MATLAB's
+          'RestoreDeletedId' name-value pair (default false, NDI-matlab#1238)
+          is Python's keyword-only restore_deleted_id=False, snake_cased like
+          error_if_not_found. True lets a document whose id DID retired on
+          deletion be added again, for the same document being restored (the
+          cloud sync's downloads); it maps to DID's OnDeletedId="restore".
+          Synchronized 2026-11-13.
 
       - name: database_rm
         input_arguments:

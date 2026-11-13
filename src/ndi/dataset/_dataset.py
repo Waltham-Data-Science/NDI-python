@@ -537,10 +537,20 @@ class ndi_dataset:
     # ndi_database Operations (delegated to internal session)
     # =========================================================================
 
-    def database_add(self, document: ndi_document | list[ndi_document]) -> ndi_dataset:
+    def database_add(
+        self,
+        document: ndi_document | list[ndi_document],
+        *,
+        restore_deleted_id: bool = False,
+    ) -> ndi_dataset:
         """Add document(s) to the dataset database.
 
         MATLAB equivalent: ``ndi.dataset/database_add``
+
+        ``restore_deleted_id`` allows a document whose id was previously
+        deleted to be added again; use it only when restoring that same
+        document, e.g. from the cloud (NDI-matlab#1238). MATLAB's
+        ``'RestoreDeletedId'``.
 
         Routes documents to the appropriate session based on their
         ``base.session_id``. Documents whose session_id matches the
@@ -559,10 +569,10 @@ class ndi_dataset:
             sid = doc.session_id
             if not sid or sid == empty_id() or sid == ds_id:
                 # Belongs to the dataset's own session
-                self._session.database_add(doc)
+                self._session.database_add(doc, restore_deleted_id=restore_deleted_id)
             else:
                 # Belongs to another session - add directly to database
-                self._session._database.add(doc)
+                self._session._database.add(doc, restore_deleted_id=restore_deleted_id)
         return self
 
     def database_rm(
