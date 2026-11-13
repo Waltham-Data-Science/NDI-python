@@ -17,10 +17,15 @@ classes:
   - name: metadatareader
     type: class
     matlab_path: "+ndi/+daq/metadatareader.m"
-    matlab_last_sync_hash: "fe64a9f5"
+    matlab_last_sync_hash: "9ded19a"
     python_path: "ndi/daq/metadatareader/__init__.py"
     python_class: "ndi_daq_metadatareader"
     inherits: "ndi.ido"
+    decision_log: >
+      Examined NDI-matlab 9ded19a (readmetadata_ingested now converts a struct
+      array to a cell array of structs). No Python change needed:
+      readmetadata_ingested here already returns a list of dicts, wrapping a
+      single dict in a list.
 
     properties:
       - name: tab_separated_file_parameter

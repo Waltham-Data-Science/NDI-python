@@ -17,7 +17,7 @@ classes:
   - name: decoder
     type: class
     matlab_path: "src/ndi/+ndi/+app/+stimulus/decoder.m"
-    matlab_last_sync_hash: "0e2caa0"
+    matlab_last_sync_hash: "9ded19a"
     python_path: "ndi/app/stimulus/decoder.py"
     python_class: "ndi_app_stimulus_decoder"
     inherits: "ndi.app"
