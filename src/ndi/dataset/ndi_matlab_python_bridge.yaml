@@ -388,7 +388,7 @@ classes:
   - name: dir
     type: class
     matlab_path: "+ndi/+dataset/dir.m"
-    matlab_last_sync_hash: "26d0638bf"
+    matlab_last_sync_hash: "400277e44"
     python_path: "ndi/dataset/_dataset.py"
     python_class: "ndi_dataset_dir"
     inherits: "ndi.dataset"
