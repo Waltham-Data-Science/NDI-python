@@ -23,11 +23,10 @@ cloud action in the datasets pane runs against whatever it last selected.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from .datasets_text import cloud_summary_message
-from .pane import NavPane
+from .pane import RELOAD_GLYPH, NavPane, reload_icon_file  # noqa: F401 - re-exported
 
 __all__ = [
     "CloudPane",
@@ -43,9 +42,6 @@ CHECK_WIDTH = 26
 PROFILE_WIDTH = 62
 BUTTON_SPACING = 4
 
-#: U+21BB CLOCKWISE OPEN CIRCLE ARROW. Used only if the SVG icon will not
-#: render -- a blank button is worse than an approximate glyph.
-RELOAD_GLYPH = "↻"
 
 LOGOUT_MESSAGE = (
     "Cleared the current NDI Cloud login. The next NDI Cloud action will "
@@ -53,16 +49,6 @@ LOGOUT_MESSAGE = (
 )
 
 NO_DATASETS_PANE = "No datasets pane is available."
-
-
-def reload_icon_file() -> Path:
-    """Absolute path to the reload button icon.
-
-    The SVG is a byte-for-byte copy of MATLAB's
-    ``+ndi/+gui/reload_icon.svg``, kept at the mirrored location here so the
-    two ports draw the same button rather than each inventing an icon.
-    """
-    return Path(__file__).resolve().parent.parent / "reload_icon.svg"
 
 
 class CloudPane(NavPane):
@@ -84,20 +70,11 @@ class CloudPane(NavPane):
     # Qt
     # ------------------------------------------------------------------
     def build_header_right(self, layout: Any) -> None:
-        from PySide6 import QtGui, QtWidgets
+        from PySide6 import QtWidgets
 
-        self.reload_button = QtWidgets.QPushButton()
-        self.reload_button.setFixedWidth(RELOAD_WIDTH)
-        self.reload_button.setToolTip("Refresh NDI Cloud login (logout)")
-        icon = QtGui.QIcon(str(reload_icon_file()))
-        if icon.isNull():
-            # No SVG support in this Qt build, or the file is missing. A
-            # button with neither icon nor text is invisible to the user.
-            self.reload_button.setText(RELOAD_GLYPH)
-        else:
-            self.reload_button.setIcon(icon)
-        self.reload_button.clicked.connect(self.refresh_login)
-        self.accent_button(self.reload_button)
+        self.reload_button = self.refresh_button(
+            "Refresh NDI Cloud login (logout)", self.refresh_login
+        )
         layout.addWidget(self.reload_button)
 
         self.check_button = QtWidgets.QPushButton("C")

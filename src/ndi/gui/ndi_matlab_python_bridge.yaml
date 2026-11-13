@@ -749,9 +749,14 @@ ported_late:
   # --- ndi.gui.nav: the navigator's pane stack ---------------------------
   - name: pane
     matlab_path: "+ndi/+gui/+nav/pane.m"
-    matlab_last_sync_hash: "87c6d08a"
+    matlab_last_sync_hash: "666a0ddfa"
     python_path: "ndi/gui/nav/pane.py"
-    decision_log: "Base pane: geometry, palette, show/hide. Ported in #88."
+    decision_log: >
+      Base pane: geometry, palette, show/hide. Ported in #88.
+      2026-11-12: pane.refreshButton / reloadIconFile (NDI-matlab 666a0ddfa)
+      -> NavPane.refresh_button and module function reload_icon_file (moved
+      here from cloud_pane, which re-exports it), with the same glyph
+      fallback.
 
   - name: ndiPane
     matlab_path: "+ndi/+gui/+nav/ndiPane.m"
@@ -811,7 +816,7 @@ ported_late:
 
   - name: jobsPane
     matlab_path: "+ndi/+gui/+nav/jobsPane.m"
-    matlab_last_sync_hash: "475eaf4c8"
+    matlab_last_sync_hash: "666a0ddfa"
     python_path: "ndi/gui/nav/jobs_pane.py"
     python_class: "JobsPane"
     decision_log: >-
@@ -833,6 +838,9 @@ ported_late:
       kind only MATLAB defines can be paused but not resumed here (Resume is
       disabled: it is an ndi_job_ForeignJob); lightsheetToCloud jobs, ported,
       are resumed here like any other.
+      2026-11-12: NDI-matlab 666a0ddfa: a header refresh button re-reads the
+      jobs from disk, so jobs run by another process show their state.
+      Ported: JobsPane.build_header_right / right_width (26).
 
   - name: updateDialog
     matlab_path: "+ndi/+gui/+nav/updateDialog.m"
@@ -862,7 +870,7 @@ ported_late:
 
   - name: datasetsPane
     matlab_path: "+ndi/+gui/+nav/datasetsPane.m"
-    matlab_last_sync_hash: "d2b5170"
+    matlab_last_sync_hash: "666a0ddfa"
     python_path: "ndi/gui/nav/datasets_pane.py"
     decision_log: >
       The navigator's elastic pane, ported across #103, #109, #110 and
@@ -884,16 +892,73 @@ ported_late:
       rest of this pane, Python's names are snake_case (workspaceNameError ->
       datasets_text.workspace_name_error, assignToWorkspace ->
       assign_to_workspace, relabelNodes -> relabel_nodes).
+      2026-11-12: synchronized with NDI-matlab ffee1bc (VH-Lab/NDI-matlab#1230,
+      #1231): the dataset menu gains "Remove from list" (removeDatasetFromList
+      -> remove_dataset_from_list; hidden ids filtered by withoutIds ->
+      datasets_model.without_ids); its Cloud submenu is now "Cloud info...",
+      "Upload to Cloud", "Cloud comparison..." -- the Check/Download/Upload/
+      Two Way/Mirror items are gone (cloudCheckForNew, cloudSync, cloudMirror
+      and cloudCheckMessage removed; Python's check_for_new,
+      cloud_check_message, _run_sync and _run_mirror with them).
+      cloudCheckStatus became cloudInfo (datasets_cloud.check_cloud_status ->
+      cloud_info). The "+" menu gains "Browse my Cloud datasets..."
+      (browseCloudDatasets -> browse_cloud_datasets), and the download step
+      of openCloudDataset is shared as openCloudDatasetById ->
+      open_cloud_dataset_by_id. datasets_cloud.sync_dataset/mirror_dataset
+      stay, now called by the comparison window, with sync_files and dry_run
+      passed through as SyncOptions.
+      2026-11-12: NDI-matlab 666a0ddfa: the header "Refresh" text button is
+      the refresh symbol (rightWidth 108 -> 56; REFRESH_WIDTH follows). The
+      attribute is refresh_btn because refresh_button is now the NavPane
+      factory method.
+
+  - name: cloudComparison
+    matlab_path: "+ndi/+gui/+nav/cloudComparison.m"
+    matlab_last_sync_hash: "ffee1bc"
+    python_path: "ndi/gui/nav/cloud_comparison.py"
+    decision_log: >
+      The Cloud comparison window (VH-Lab/NDI-matlab#1230): header naming the
+      local copy's folder and the cloud id, id-only comparison
+      (documentDifference), "Check content" (validate), Refresh, and one
+      button per sync mode with SyncFiles/DryRun options. Class
+      CloudComparison; snake_case like the rest of ndi.gui.nav
+      (summaryText -> summary_text, comparisonRows -> comparison_rows,
+      mirrorWarning -> mirror_warning, actionSpecs -> module constant
+      ACTION_SPECS, runAction -> run_action). run_action takes the mirror
+      confirmation as a callable, so the rule that a mirror cannot run
+      unconfirmed is testable without a display. NDI-python's validate does
+      not compare document contents yet (no mismatched_ids), so "Check
+      content" says so instead of implying the contents match.
+
+  - name: cloudDatasetBrowser
+    matlab_path: "+ndi/+gui/+nav/cloudDatasetBrowser.m"
+    matlab_last_sync_hash: "ffee1bc"
+    python_path: "ndi/gui/nav/cloud_dataset_browser.py"
+    decision_log: >
+      Browse, open and delete the user's NDI Cloud datasets
+      (VH-Lab/NDI-matlab#1231). Class CloudDatasetBrowser; snake_case names
+      (entriesFromList -> entries_from_list, sortEntries -> sort_entries,
+      deleteAllowed -> delete_allowed, isGroupOrganization ->
+      is_group_organization, confirmDelete -> confirm_delete, ColumnNames ->
+      module constant COLUMN_NAMES). Entries are dicts rather than a struct
+      array; unknown counts are NaN as in MATLAB. delete_selected takes the
+      confirmation as a callable for the same testability reason as
+      CloudComparison.run_action.
 
   - name: cloudPane
     matlab_path: "+ndi/+gui/+nav/cloudPane.m"
-    matlab_last_sync_hash: "293ec411"
+    matlab_last_sync_hash: "666a0ddfa"
     python_path: "ndi/gui/nav/cloud_pane.py"
     decision_log: >
       Cloud status and actions pane. Ported in #112. NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037)
       changed only a comment in refreshLogin (logout now clears the cached
       organization list, not NDI_CLOUD_ORGANIZATION_ID); Python's docstring
       already says "the locally stored credentials", so nothing to follow.
+      2026-11-12: NDI-matlab ffee1bc (VH-Lab/NDI-matlab#1230) only renames
+      "Check Cloud status" to "Cloud info..." in two comments; nothing to
+      follow.
+      2026-11-12: NDI-matlab 666a0ddfa: the reload button is built by the
+      shared pane.refreshButton; same icon and tooltip.
 
   - name: progressPane
     matlab_path: "+ndi/+gui/+nav/progressPane.m"
@@ -939,18 +1004,25 @@ ported_late:
       array (a Code Analyzer performance warning); the result is unchanged,
       so nothing to follow.
 
-  - name: cloudStatusDialog
-    matlab_path: "+ndi/+gui/+nav/cloudStatusDialog.m"
-    matlab_last_sync_hash: "a5b3690"
-    python_path: "ndi/gui/nav/cloud_status_dialog.py"
+  - name: cloudInfoDialog
+    matlab_path: "+ndi/+gui/+nav/cloudInfoDialog.m"
+    matlab_last_sync_hash: "ffee1bc"
+    python_path: "ndi/gui/nav/cloud_info_dialog.py"
     decision_log: >
-      The "Check Cloud status" result window: status, read-only cloud dataset
-      id, Copy (disabled when not in the cloud). Ported with
+      The "Cloud info..." result window (renamed from cloudStatusDialog in
+      VH-Lab/NDI-matlab#1230, which added the dataset name and local path rows,
+      each copyable; Python: CloudStatusDialog -> CloudInfoDialog,
+      cloud_status_dialog.py -> cloud_info_dialog.py, valueText -> value_text,
+      DatasetName/LocalPath/NameField/PathField/NameCopyButton/PathCopyButton
+      -> dataset_name/local_path/name_field/path_field/name_copy_button/
+      path_copy_button). Before the rename: the "Check Cloud status" result
+      window: status, read-only cloud dataset id, Copy (disabled when not in
+      the cloud). Ported with
       VH-Lab/NDI-matlab#1058; snake_case methods as in the rest of
       ndi.gui.nav (copyEnable -> copy_enable, idText -> id_text, ...). Copy
       uses the Qt clipboard. The cloud id reaches it through
       datasets_cloud.CloudActionResult.cloud_dataset_id. Class
-      CloudStatusDialog; like the other ndi.gui.nav entries it names no
+      CloudInfoDialog; like the other ndi.gui.nav entries it names no
       python_class, because its attributes are snake_case: InCloud/
       CloudDatasetId/Figure/IdField/CopyButton -> in_cloud/cloud_dataset_id/
       figure/id_field/copy_button.

@@ -251,7 +251,11 @@ class TestTheGuiReportsAPartialSyncAsAFailure:
         monkeypatch.setattr(
             sync_module,
             "uploadNew",
-            lambda ds, cid: (False, "1 document(s) did not transfer: bad", {"uploaded": ["good"]}),
+            lambda ds, cid, options=None: (
+                False,
+                "1 document(s) did not transfer: bad",
+                {"uploaded": ["good"]},
+            ),
             raising=False,
         )
 
@@ -269,7 +273,10 @@ class TestTheGuiReportsAPartialSyncAsAFailure:
 
         monkeypatch.setattr(dc, "resolve_cloud_target", lambda ds: "cid")
         monkeypatch.setattr(
-            sync_module, "uploadNew", lambda ds, cid: (True, "", {"uploaded": ["a"]}), raising=False
+            sync_module,
+            "uploadNew",
+            lambda ds, cid, options=None: (True, "", {"uploaded": ["a"]}),
+            raising=False,
         )
 
         result = dc.sync_dataset(object(), "upload_new")

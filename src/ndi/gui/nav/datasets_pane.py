@@ -66,8 +66,8 @@ __all__ = [
 GRIP_HEIGHT = 6
 
 #: Width of the header's right-hand control column, in pixels. MATLAB's
-#: rightWidth: the "+" square plus the Refresh button.
-REFRESH_WIDTH = 108
+#: rightWidth: the "+" square, 4 px, and the refresh-symbol square.
+REFRESH_WIDTH = 56
 
 #: Width of the compact "+" button, in pixels.
 PLUS_WIDTH = 26
@@ -178,7 +178,7 @@ class DatasetsPane(NavPane):
         self.tree: Any = None
         self.grip: Any = None
         self.add_button: Any = None
-        self.refresh_button: Any = None
+        self.refresh_btn: Any = None
         #: Cached QMenu, built lazily on first "+" click and reused thereafter.
         self._add_menu: Any = None
 
@@ -186,6 +186,10 @@ class DatasetsPane(NavPane):
         #: whatever the workspace scan finds.
         self.user_datasets: list[Any] = []
         self.user_sessions: list[Any] = []
+
+        #: Ids of datasets the user chose "Remove from list" on. They stay out
+        #: of the tree (even if a variable holds them) until added again.
+        self.hidden_dataset_ids: list[str] = []
 
         #: object id -> the user's variable names holding it. Rebuilt on each
         #: tree build, and used only to decorate node labels.
@@ -197,7 +201,7 @@ class DatasetsPane(NavPane):
         self.launched_apps: list[Any] = []
 
         #: Windows opened from this pane's menus (DAQ system browser, cloud
-        #: status dialog), held for the same reason as ``launched_apps``.
+        #: info dialog, comparison window, dataset browser), held for the same reason as ``launched_apps``.
         self.open_windows: list[Any] = []
 
     def has_body(self) -> bool:
@@ -237,7 +241,7 @@ class DatasetsPane(NavPane):
         self.populate_tree()
 
     def build_header_right(self, layout: Any) -> None:
-        """The header's right-hand controls: [+] then Refresh."""
+        """The header's right-hand controls: [+] then the refresh symbol."""
         from PySide6 import QtWidgets
 
         self.add_button = QtWidgets.QPushButton("+")
@@ -250,11 +254,10 @@ class DatasetsPane(NavPane):
         self.accent_button(self.add_button)
         layout.addWidget(self.add_button)
 
-        self.refresh_button = QtWidgets.QPushButton("Refresh")
-        self.refresh_button.setToolTip("Rebuild the list of datasets and sessions")
-        self.refresh_button.clicked.connect(self.refresh)
-        self.accent_button(self.refresh_button)
-        layout.addWidget(self.refresh_button)
+        self.refresh_btn = self.refresh_button(
+            "Rebuild the list of datasets and sessions", self.refresh
+        )
+        layout.addWidget(self.refresh_btn)
 
     # ------------------------------------------------------------------
     # the "+" add menu and its flows
@@ -285,7 +288,30 @@ class DatasetsPane(NavPane):
         menu.addSeparator()
         menu.addAction("Open Public Cloud dataset...", lambda: self.open_cloud_dataset(True))
         menu.addAction("Open Private Cloud dataset...", lambda: self.open_cloud_dataset(False))
+        menu.addAction("Browse my Cloud datasets...", self.browse_cloud_datasets)
         return menu
+
+    def browse_cloud_datasets(self) -> Any:
+        """Open the cloud dataset browser (MATLAB: ``browseCloudDatasets``).
+
+        Its Open button downloads the chosen dataset into a folder and adds it
+        here, through :meth:`open_cloud_dataset_by_id`.
+        """
+        from .cloud_dataset_browser import CloudDatasetBrowser
+
+        try:
+            browser = CloudDatasetBrowser(
+                parent=self._parent_widget(),
+                open_fcn=lambda cloud_id, name: self.open_cloud_dataset_by_id(
+                    cloud_id, f"Open Cloud dataset: {name}"
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._alert(str(exc), "NDI Cloud Datasets", success=False)
+            return None
+        self.open_windows.append(browser)
+        browser.show()
+        return browser
 
     def new_blank_dataset(self) -> Any:
         """Create a new dataset from a reference and a folder."""
@@ -343,6 +369,13 @@ class DatasetsPane(NavPane):
         index = self._ask_choice(labels, "Select a dataset to open:", title)
         if index is None:
             return None
+        return self.open_cloud_dataset_by_id(ids[index], title)
+
+    def open_cloud_dataset_by_id(self, cloud_id: str, title: str) -> Any:
+        """Ask for a folder, download CLOUD_ID's documents there, and list it.
+
+        Shared by "Open ... Cloud dataset..." and the cloud dataset browser.
+        """
         folder = self._ask_folder("Choose a folder to download the dataset into")
         if not folder:
             return None
@@ -350,7 +383,7 @@ class DatasetsPane(NavPane):
         try:
             from ...cloud.orchestration import downloadDataset
 
-            dataset = downloadDataset(ids[index], folder, sync_files=False, verbose=False)
+            dataset = downloadDataset(cloud_id, folder, sync_files=False, verbose=False)
         except Exception as exc:  # noqa: BLE001
             self._alert(f"Download failed: {exc}", title, success=False)
             return None
@@ -360,6 +393,11 @@ class DatasetsPane(NavPane):
         """Add a dataset to the user list, de-duplicated by path, and refresh."""
         if dataset is None:
             return None
+        # Adding a dataset again un-hides it if it was removed earlier.
+        ident = datasets_model.obj_id(dataset)
+        if ident in self.hidden_dataset_ids:
+            self.hidden_dataset_ids.remove(ident)
+            self.refresh()
         new_path = datasets_model.dataset_path(dataset)
         if new_path and any(datasets_model.dataset_path(d) == new_path for d in self.user_datasets):
             return dataset  # already listed
@@ -530,7 +568,7 @@ class DatasetsPane(NavPane):
         ]
 
         for row in datasets_model.dataset_rows(
-            self.user_datasets, dataset_cls, None, self.ws_var_index
+            self.user_datasets, dataset_cls, None, self.ws_var_index, self.hidden_dataset_ids
         ):
             rows.append(
                 {
@@ -678,53 +716,68 @@ class DatasetsPane(NavPane):
         return menu
 
     def _dataset_menu(self, node: Any, dataset: Any) -> Any:
+        """Assign / Remove from list, then Cloud: info, upload, comparison.
+
+        The direct sync items (check/download/upload/two-way/mirror) were
+        removed with VH-Lab/NDI-matlab#1230: syncing happens only in the Cloud
+        comparison window, where both sides are visible first.
+        """
         from PySide6 import QtWidgets
 
         menu = QtWidgets.QMenu(self.tree)
         menu.addAction(
             "Assign to workspace...", lambda: self.assign_to_workspace(dataset, "D", node)
         )
+        menu.addAction("Remove from list", lambda: self.remove_dataset_from_list(dataset))
+        menu.addSeparator()
         cloud = menu.addMenu("Cloud")
 
-        cloud.addAction(
-            "Check Cloud status", lambda: self._run_cloud(node, "check_status", dataset)
-        )
+        cloud.addAction("Cloud info...", lambda: self._run_cloud(node, "info", dataset))
+        cloud.addSeparator()
         upload_item = cloud.addAction(
             "Upload to Cloud", lambda: self._run_cloud(node, "upload", dataset)
         )
-        upload_item.setSeparator(False)
-        cloud.addSeparator()
-
-        linked = [
-            cloud.addAction(
-                "Check Cloud for New",
-                lambda: self._run_cloud(node, "check_new_remote", dataset),
-            ),
-            cloud.addAction(
-                "Check Local for New",
-                lambda: self._run_cloud(node, "check_new_local", dataset),
-            ),
-        ]
-        cloud.addSeparator()
-        for label, mode in (
-            ("Download New from Cloud", "download_new"),
-            ("Upload New to Cloud", "upload_new"),
-            ("Two Way Sync", "two_way_sync"),
-        ):
-            linked.append(cloud.addAction(label, lambda m=mode: self._run_sync(node, dataset, m)))
-        cloud.addSeparator()
-        for label, direction in (
-            ("Mirror from Cloud", "from_remote"),
-            ("Mirror to Cloud", "to_remote"),
-        ):
-            linked.append(
-                cloud.addAction(label, lambda d=direction: self._run_mirror(node, dataset, d))
-            )
+        linked = [cloud.addAction("Cloud comparison...", lambda: self.cloud_compare(dataset))]
 
         # Grey out the inapplicable items from the state CACHED on the node.
         # No database query on menu open, so opening it stays instant.
         self.update_dataset_menu_enable(node, upload_item, linked)
         return menu
+
+    def remove_dataset_from_list(self, dataset: Any) -> None:
+        """Hide DATASET from the tree. Nothing on disk or in the cloud changes.
+
+        MATLAB counterpart: ``datasetsPane/removeDatasetFromList``. The
+        dataset leaves the user-added list and its id is remembered, so it
+        stays hidden even if a variable or the search path would list it
+        again; adding it back with "+" un-hides it.
+        """
+        ident = datasets_model.obj_id(dataset)
+        path = datasets_model.dataset_path(dataset)
+        self.user_datasets = [
+            d
+            for d in self.user_datasets
+            if not (
+                (ident and datasets_model.obj_id(d) == ident)
+                or (path and datasets_model.dataset_path(d) == path)
+            )
+        ]
+        if ident and ident not in self.hidden_dataset_ids:
+            self.hidden_dataset_ids.append(ident)
+        self.refresh()
+
+    def cloud_compare(self, dataset: Any) -> Any:
+        """Open the Cloud comparison window (MATLAB: ``cloudCompare``)."""
+        from .cloud_comparison import CloudComparison
+
+        try:
+            window = CloudComparison(dataset, parent=self._parent_widget())
+        except Exception as exc:  # noqa: BLE001
+            self._alert(str(exc), "Cloud Comparison", success=False)
+            return None
+        self.open_windows.append(window)
+        window.show()
+        return window
 
     def update_dataset_menu_enable(
         self, node: Any, upload_item: Any, linked_items: list[Any]
@@ -747,38 +800,37 @@ class DatasetsPane(NavPane):
     # cloud commands
     # ------------------------------------------------------------------
     def _run_cloud(self, node: Any, action: str, dataset: Any) -> Any:
-        if action == "check_status":
-            return self._report_cloud_status(node, datasets_cloud.check_cloud_status(dataset))
-        if action == "upload":
-            result = datasets_cloud.upload_dataset(
-                dataset,
-                organization_chooser=lambda labels, prompt: self._ask_choice(
-                    labels, prompt, "Select organization"
-                ),
-            )
-        elif action == "check_new_remote":
-            result = datasets_cloud.check_for_new(dataset, "remote")
-        else:
-            result = datasets_cloud.check_for_new(dataset, "local")
+        if action == "info":
+            return self._report_cloud_info(node, dataset, datasets_cloud.cloud_info(dataset))
+        if action != "upload":
+            raise ValueError(f"Unknown cloud action {action!r}.")
+        result = datasets_cloud.upload_dataset(
+            dataset,
+            organization_chooser=lambda labels, prompt: self._ask_choice(
+                labels, prompt, "Select organization"
+            ),
+        )
         return self._report(node, result)
 
-    def _report_cloud_status(self, node: Any, result: Any) -> Any:
-        """Show "Check Cloud status" in its own window, with the cloud id.
+    def _report_cloud_info(self, node: Any, dataset: Any, result: Any) -> Any:
+        """Show "Cloud info..." in its own window: name, local path, cloud id.
 
-        The window shows the NDI Cloud dataset id with a Copy button (disabled
-        when the dataset is not in the cloud). A failed check is reported as
-        an ordinary alert, since there is no status to show.
+        Each value has a Copy button (the id's is disabled when the dataset is
+        not in the cloud). A failed check is reported as an ordinary alert,
+        since there is no status to show.
         """
         if not result.ok:
             return self._report(node, result)
         if result.state is not None and node is not None:
             self.set_dataset_cloud_state(node, result.state)
-        from .cloud_status_dialog import CloudStatusDialog
+        from .cloud_info_dialog import CloudInfoDialog
 
         try:
-            dialog = CloudStatusDialog(
+            dialog = CloudInfoDialog(
                 result.state == "incloud",
                 result.cloud_dataset_id,
+                dataset_name=datasets_model.dataset_label(dataset),
+                local_path=datasets_model.dataset_path(dataset),
                 parent=self._parent_widget(),
             )
         except Exception as exc:  # noqa: BLE001
@@ -787,21 +839,6 @@ class DatasetsPane(NavPane):
         self.open_windows.append(dialog)
         dialog.show()
         return result
-
-    def _run_sync(self, node: Any, dataset: Any, mode: str) -> Any:
-        return self._report(node, datasets_cloud.sync_dataset(dataset, mode))
-
-    def _run_mirror(self, node: Any, dataset: Any, direction: str) -> Any:
-        """Confirm, then mirror. Both directions delete documents for good.
-
-        The confirmation is obtained HERE rather than inside
-        ``mirror_dataset``, so the destructive call cannot be reached without
-        a user having seen the warning that names which side loses documents.
-        """
-        title, prompt = datasets_cloud.mirror_prompt(direction)
-        if not self._confirm(title, prompt, accept="Continue"):
-            return None
-        return self._report(node, datasets_cloud.mirror_dataset(dataset, direction))
 
     def _report(self, node: Any, result: Any) -> Any:
         """Show a cloud action's outcome and record any state it established."""

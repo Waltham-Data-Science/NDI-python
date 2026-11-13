@@ -476,46 +476,54 @@ class TestIngestConfirmation:
         assert node.data(0, 32)["status"] == {"ingestion": "ingested"}
 
 
-class TestMirrorConfirmation:
-    def test_declining_never_calls_the_destructive_operation(self):
-        """Both mirror directions delete documents permanently; the call must
-        be unreachable without the user having seen the warning."""
-        _qt_or_skip()
-        from ndi.gui.nav import datasets_cloud
+class TestRemoveFromList:
+    """ "Remove from list" hides a dataset from the tree; it deletes nothing."""
 
-        nav, pane = _built_pane(user_datasets=[FakeDataset("d")])
-        pane.populate_tree()
-        node = pane.dataset_nodes()[0]
+    @pytest.fixture(autouse=True)
+    def workspace(self, monkeypatch):
+        """A throwaway workspace module, with the fakes as the scanned classes."""
+        import sys
+        import types
 
-        calls = []
-        original = datasets_cloud.mirror_dataset
-        datasets_cloud.mirror_dataset = lambda ds, d: calls.append((ds, d))
-        try:
-            pane._confirm = lambda *a, **k: False
-            assert pane._run_mirror(node, FakeDataset("d"), "to_remote") is None
-        finally:
-            datasets_cloud.mirror_dataset = original
-        assert calls == []
-
-    def test_accepting_runs_it(self):
-        _qt_or_skip()
-        from ndi.gui.nav import datasets_cloud
-
-        nav, pane = _built_pane(user_datasets=[FakeDataset("d")])
-        pane.populate_tree()
-        node = pane.dataset_nodes()[0]
-
-        original = datasets_cloud.mirror_dataset
-        datasets_cloud.mirror_dataset = lambda ds, d: datasets_cloud.CloudActionResult(
-            True, "Mirror to Cloud", "Done. 1 document uploaded", "success", None
+        module = types.ModuleType("_ndi_test_workspace_remove")
+        monkeypatch.setitem(sys.modules, module.__name__, module)
+        monkeypatch.setattr(datasets_model, "WORKSPACE_MODULE", module.__name__)
+        monkeypatch.setattr(
+            "ndi.gui.nav.datasets_pane._model_classes", lambda: (FakeSession, FakeDataset)
         )
-        try:
-            pane._confirm = lambda *a, **k: True
-            result = pane._run_mirror(node, FakeDataset("d"), "to_remote")
-        finally:
-            datasets_cloud.mirror_dataset = original
-        assert result.ok
-        assert nav.alerts[0][1] == "Mirror to Cloud"
+        return module.__dict__
+
+    def test_removed_dataset_leaves_the_tree_and_the_user_list(self):
+        ds, other = FakeDataset("d"), FakeDataset("e")
+        pane = _pane(user_datasets=[ds, other])
+        pane.remove_dataset_from_list(ds)
+        assert pane.user_datasets == [other]
+        assert pane.hidden_dataset_ids == ["d"]
+        ids = [row.get("id") for row in pane.tree_rows()[1:]]
+        assert ids == ["e"]
+
+    def test_a_workspace_variable_does_not_bring_it_back(self, workspace):
+        ds = FakeDataset("d")
+        workspace["D"] = ds
+        pane = _pane(user_datasets=[ds])
+        pane.remove_dataset_from_list(ds)
+        assert [row.get("id") for row in pane.tree_rows()[1:]] == []
+
+    def test_adding_it_again_unhides_it(self):
+        ds = FakeDataset("d")
+        pane = _pane(user_datasets=[ds])
+        pane.remove_dataset_from_list(ds)
+        pane.add_user_dataset(ds)
+        assert pane.hidden_dataset_ids == []
+        assert [row.get("id") for row in pane.tree_rows()[1:]] == ["d"]
+
+    def test_nothing_is_deleted(self):
+        """The pane has no handle on the dataset's files; removal only edits
+        the pane's own lists."""
+        ds = FakeDataset("d")
+        pane = _pane(user_datasets=[ds])
+        pane.remove_dataset_from_list(ds)
+        assert ds.getpath() == "/data/d"
 
 
 class TestMenusAreBuilt:
@@ -644,20 +652,15 @@ class TestMenusAreBuilt:
         nav, pane = _built_pane(user_datasets=[FakeDataset("d")])
         pane.populate_tree()
         menu = pane.build_node_menu(pane.dataset_nodes()[0])
-        assert [a.text() for a in menu.actions()] == ["Assign to workspace...", "Cloud"]
-        cloud = menu.actions()[1].menu()
-        labels = [a.text() for a in cloud.actions() if a.text()]
-        assert labels == [
-            "Check Cloud status",
-            "Upload to Cloud",
-            "Check Cloud for New",
-            "Check Local for New",
-            "Download New from Cloud",
-            "Upload New to Cloud",
-            "Two Way Sync",
-            "Mirror from Cloud",
-            "Mirror to Cloud",
+        assert [a.text() for a in menu.actions() if a.text()] == [
+            "Assign to workspace...",
+            "Remove from list",
+            "Cloud",
         ]
+        cloud = [a for a in menu.actions() if a.text() == "Cloud"][0].menu()
+        labels = [a.text() for a in cloud.actions() if a.text()]
+        # Syncing lives only in the Cloud comparison window (NDI-matlab#1230).
+        assert labels == ["Cloud info...", "Upload to Cloud", "Cloud comparison..."]
 
     def test_the_unaffiliated_root_offers_create_and_open_session(self):
         _qt_or_skip()
@@ -690,6 +693,7 @@ class TestAddMenuFlows:
             "Open dataset...",
             "Open Public Cloud dataset...",
             "Open Private Cloud dataset...",
+            "Browse my Cloud datasets...",
         ]
 
     def test_cancelling_the_reference_prompt_creates_nothing(self, monkeypatch):
@@ -1094,18 +1098,20 @@ class TestAssignToWorkspace:
         assert "D" not in workspace
 
 
-class TestCheckCloudStatusWindow:
+class TestCloudInfoWindow:
     def test_the_status_window_shows_the_cloud_id(self, monkeypatch):
         _qt_or_skip()
         ds = FakeDataset("d", in_cloud=True)
         nav, pane = _built_pane(user_datasets=[ds])
         pane.populate_tree()
         node = pane.dataset_nodes()[0]
-        result = pane._run_cloud(node, "check_status", ds)
+        result = pane._run_cloud(node, "info", ds)
         assert result.cloud_dataset_id == "cid"
         dialog = pane.open_windows[-1]
         assert dialog.id_field.text() == "cid"
         assert dialog.copy_button.isEnabled()
+        assert dialog.name_field.text() == "ds-d"
+        assert dialog.path_field.text() == "/data/d"
         assert node.data(0, 32)["cloud"] == "incloud"
         assert nav.alerts == []  # the window replaces the alert
 
@@ -1114,7 +1120,7 @@ class TestCheckCloudStatusWindow:
         ds = FakeDataset("d", in_cloud=False)
         nav, pane = _built_pane(user_datasets=[ds])
         pane.populate_tree()
-        pane._run_cloud(pane.dataset_nodes()[0], "check_status", ds)
+        pane._run_cloud(pane.dataset_nodes()[0], "info", ds)
         assert not pane.open_windows[-1].copy_button.isEnabled()
 
 

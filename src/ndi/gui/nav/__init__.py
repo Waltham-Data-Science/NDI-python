@@ -22,8 +22,8 @@ appearance is not.
 from __future__ import annotations
 
 from . import datasets_cloud, datasets_model, datasets_text
+from .cloud_info_dialog import CloudInfoDialog
 from .cloud_pane import CloudPane
-from .cloud_status_dialog import CloudStatusDialog
 from .daq_system_browser import DaqSystemBrowser
 from .datasets_pane import DatasetsPane
 from .jobs_pane import JobsPane
@@ -39,7 +39,7 @@ __all__ = [
     "datasets_model",
     "datasets_text",
     "CloudPane",
-    "CloudStatusDialog",
+    "CloudInfoDialog",
     "DaqSystemBrowser",
     "DatasetsPane",
     "JobsPane",

@@ -56,6 +56,7 @@ __all__ = [
     "unaffiliated_rows",
     "check_all_cloud_status",
     "unique_by_id",
+    "without_ids",
     "assign_workspace_var",
     "workspace_has_var",
     "UNKNOWN_STATUS",
@@ -370,18 +371,20 @@ def dataset_rows(
     dataset_class: type | tuple[type, ...],
     namespace: Mapping[str, Any] | None = None,
     index: Mapping[str, Sequence[str]] | None = None,
+    hidden_ids: Sequence[str] | None = None,
 ) -> list[dict[str, Any]]:
     """One row per dataset to show: label, node payload and session rows.
 
     The order is MATLAB's: the datasets the user added with "+", then the
-    search path, then the workspace.
+    search path, then the workspace. Datasets whose id is in HIDDEN_IDS (the
+    ones the user chose "Remove from list" on) are left out.
     """
     datasets = list(user_datasets or [])
     datasets += search_path_datasets()
     datasets += scan_workspace(dataset_class, namespace)
     # A dataset can come from more than one source (added with "+" and also
     # assigned to a variable), so each id is listed once.
-    datasets = unique_by_id(datasets)
+    datasets = without_ids(unique_by_id(datasets), hidden_ids)
 
     rows: list[dict[str, Any]] = []
     for ds in datasets:
@@ -396,6 +399,18 @@ def dataset_rows(
             }
         )
     return rows
+
+
+def without_ids(objs: Sequence[Any], hidden_ids: Sequence[str] | None) -> list[Any]:
+    """OBJS without the objects whose id is in HIDDEN_IDS.
+
+    MATLAB counterpart: ``ndi.gui.nav.datasetsPane.withoutIds``. Objects whose
+    id cannot be read are always kept.
+    """
+    hidden = set(hidden_ids or ())
+    if not hidden:
+        return list(objs)
+    return [o for o in objs if not obj_id(o) or obj_id(o) not in hidden]
 
 
 def unique_by_id(objs: Sequence[Any]) -> list[Any]:
