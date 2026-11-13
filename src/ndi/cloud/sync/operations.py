@@ -69,7 +69,12 @@ def _ingest_downloaded_docs(dataset: Any, saved_properties: list[dict[str, Any]]
     from ..download import structsToNdiDocuments
 
     try:
-        add(structsToNdiDocuments(saved_properties))
+        # restore_deleted_id: a document fetched from the cloud is the same
+        # document the remote holds, so if it was once here and was deleted
+        # locally, bringing it back is a restore, not a re-use of its id.
+        # Without it DID refuses the add and a mirror after a local delete
+        # fails (NDI-matlab#1238; downloadNdiDocuments does the same).
+        add(structsToNdiDocuments(saved_properties), restore_deleted_id=True)
     except Exception as exc:  # noqa: BLE001 - the JSON is already written
         logger.warning(
             "Downloaded %d document(s) but could not add them to the database: %s",

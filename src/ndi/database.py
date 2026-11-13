@@ -56,6 +56,19 @@ def _cloud_file_handler(dest_path, source_path, context=None):
     download_file_from_cloud(dest_path, source_path, context)
 
 
+def _on_deleted_id_kwargs(restore_deleted_id: bool) -> dict:
+    """DID's ``OnDeletedId`` argument for a RestoreDeletedId request.
+
+    DID retires the id of a document removed from every branch and refuses
+    it ever after (``did.database.add_docs`` raises). A caller restoring that
+    same document -- the cloud sync re-downloading one deleted locally,
+    NDI-matlab#1238 -- asks for ``OnDeletedId="restore"``. Passed only when
+    requested, as NDI-matlab's didsqlite/do_add does, so the default call is
+    unchanged.
+    """
+    return {"OnDeletedId": "restore"} if restore_deleted_id else {}
+
+
 class SQLiteDriver:
     """SQLite database driver using DID-python's SQLiteDB.
 
@@ -109,11 +122,13 @@ class SQLiteDriver:
                 f"{sorted(existing_branches)} but not {branch_id!r}."
             )
 
-    def add(self, document: dict, *, validate: bool = True) -> None:
+    def add(
+        self, document: dict, *, validate: bool = True, restore_deleted_id: bool = False
+    ) -> None:
         """Add a document to the database.
 
-        ``validate`` is passed to ``did.database.add_docs``; see
-        :meth:`ndi_database.add`.
+        ``validate`` and ``restore_deleted_id`` are passed to
+        ``did.database.add_docs``; see :meth:`ndi_database.add`.
         """
         doc_id = document.get("base", {}).get("id", "")
         if not doc_id:
@@ -131,6 +146,7 @@ class SQLiteDriver:
             self._branch_id,
             validate=validate,
             custom_file_handler=_cloud_file_handler,
+            **_on_deleted_id_kwargs(restore_deleted_id),
         )
 
     def bulk_add(self, documents: list[dict]) -> tuple[int, int]:
@@ -313,7 +329,13 @@ class ndi_database:
 
     # === CRUD Operations ===
 
-    def add(self, document: ndi_document, *, validate: bool = True) -> ndi_document:
+    def add(
+        self,
+        document: ndi_document,
+        *,
+        validate: bool = True,
+        restore_deleted_id: bool = False,
+    ) -> ndi_document:
         """Add a document to the database.
 
         Args:
@@ -323,6 +345,12 @@ class ndi_database:
                 documents already known to be valid, such as those downloaded
                 from NDI Cloud. Mirrors MATLAB ``ndi.database/add``'s
                 ``'Validate'`` name/value pair.
+            restore_deleted_id: If True, a document whose id was previously
+                removed from the database is restored rather than refused
+                (DID retires deleted ids). Use only when the document is the
+                same document coming back, e.g. re-downloaded from the cloud
+                (NDI-matlab#1238). Mirrors MATLAB ``ndi.database/add``'s
+                ``'RestoreDeletedId'`` name/value pair.
 
         Returns:
             The added document.
@@ -335,7 +363,11 @@ class ndi_database:
             db.add(doc)
         """
         try:
-            self._driver.add(document.document_properties, validate=validate)
+            self._driver.add(
+                document.document_properties,
+                validate=validate,
+                restore_deleted_id=restore_deleted_id,
+            )
         except FileExistsError as exc:
             raise ValueError(
                 f"ndi_document with ID {document.id} already exists. "
@@ -530,7 +562,11 @@ class ndi_database:
     # === Batch Operations ===
 
     def add_many(
-        self, documents: list[ndi_document], *, validate: bool = True
+        self,
+        documents: list[ndi_document],
+        *,
+        validate: bool = True,
+        restore_deleted_id: bool = False,
     ) -> list[ndi_document]:
         """Add multiple documents.
 
@@ -541,6 +577,7 @@ class ndi_database:
                 for documents already known to be valid, such as those
                 downloaded from NDI Cloud. Mirrors MATLAB ``ndi.database/add``'s
                 ``'Validate'`` name/value pair.
+            restore_deleted_id: As in :meth:`add`.
 
         Returns:
             List of added Documents.
@@ -569,6 +606,7 @@ class ndi_database:
                 self._driver._branch_id,
                 validate=validate,
                 custom_file_handler=_cloud_file_handler,
+                **_on_deleted_id_kwargs(restore_deleted_id),
             )
         return list(documents)
 

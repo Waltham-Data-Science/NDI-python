@@ -409,12 +409,23 @@ class ndi_session(ABC):
     # ndi_database Methods
     # =========================================================================
 
-    def database_add(self, document: ndi_document | list[ndi_document]) -> ndi_session:
+    def database_add(
+        self,
+        document: ndi_document | list[ndi_document],
+        *,
+        restore_deleted_id: bool = False,
+    ) -> ndi_session:
         """
         Add a document to the session database.
 
+        MATLAB equivalent: ``ndi.session/database_add``
+
         Args:
             document: ndi_document or list of Documents to add
+            restore_deleted_id: Allow a document whose id was previously
+                deleted from this session to be added again. Use only when
+                restoring that same document, e.g. from the cloud
+                (NDI-matlab#1238). MATLAB's ``'RestoreDeletedId'``.
 
         Returns:
             self for chaining
@@ -440,7 +451,7 @@ class ndi_session(ABC):
             if not session_id or session_id == empty_id():
                 doc = doc.set_session_id(self.id())
 
-            self._database.add(doc)
+            self._database.add(doc, restore_deleted_id=restore_deleted_id)
 
         return self
 

@@ -984,7 +984,9 @@ def _sync_download_new(
     failures: list[tuple[str, str]] = []
     for doc in documents:
         try:
-            dataset.database_add(doc)
+            # A cloud document is the same document coming back, so restore
+            # one that was deleted locally (NDI-matlab#1238).
+            dataset.database_add(doc, restore_deleted_id=True)
             added += 1
         except Exception as exc:
             doc_id = getattr(doc, "id", None) or "<unknown>"

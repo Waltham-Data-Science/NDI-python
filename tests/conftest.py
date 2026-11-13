@@ -120,7 +120,7 @@ class FakeDataset:
     def database_search(self, query=None):
         return list(self.documents)
 
-    def database_add(self, document):
+    def database_add(self, document, *, restore_deleted_id=False):
         """Ingest downloaded documents, as ndi.dataset.database_add does.
 
         A download that never reaches the database is not local, so without
