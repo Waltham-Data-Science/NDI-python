@@ -430,6 +430,10 @@ classes:
         decision_log: >
           Python constructor supports MATLAB calling conventions:
           dir(path), dir(reference, path), dir(reference, path, docs).
+          The docs form adds the documents without schema validation
+          (add_many(..., validate=False)), as MATLAB does since
+          NDI-matlab#1240: they were validated when first added.
+          Synchronized 2026-11-13.
 
     static_methods:
       - name: dataset_erase

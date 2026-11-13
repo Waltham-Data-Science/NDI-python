@@ -90,6 +90,10 @@ classes:
             type_matlab: "logical (name-value)"
             type_python: "bool"
             default: "True"
+          - name: Validate
+            type_matlab: "logical (name-value)"
+            type_python: "bool (keyword-only, spelled validate)"
+            default: "True"
         output_arguments:
           - name: ndi_database_obj
             type_python: "ndi_database"
@@ -98,6 +102,11 @@ classes:
           that controls whether an existing document is updated or errors.
           Python separates this into add() (error on duplicate) and
           add_or_replace() (upsert). Synchronized 2026-03-13.
+          MATLAB's 'Validate' name-value pair (default 1, NDI-matlab#1240)
+          is Python's keyword-only validate=True, spelled to match the
+          validate parameter of DID-python's add_docs that it is passed to.
+          False skips schema validation, for documents already known to be
+          valid (e.g. downloaded from NDI Cloud). Synchronized 2026-11-13.
 
       - name: read
         input_arguments:
@@ -273,12 +282,18 @@ classes:
         input_arguments:
           - name: documents
             type_python: "list[ndi_document]"
+          - name: validate
+            type_python: "bool (keyword-only)"
+            default: "True"
         output_arguments:
           - name: added_docs
             type_python: "list[ndi_document]"
         decision_log: >
           Python convenience. Batch add. Stops on first error.
           Synchronized 2026-03-13.
+          validate mirrors add()'s; ndi_dataset_dir(..., documents=...)
+          passes False, as MATLAB's ndi.dataset.dir(reference, path, docs)
+          does (NDI-matlab#1240). Synchronized 2026-11-13.
 
       - name: remove_many
         input_arguments:
