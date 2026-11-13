@@ -870,7 +870,7 @@ ported_late:
 
   - name: datasetsPane
     matlab_path: "+ndi/+gui/+nav/datasetsPane.m"
-    matlab_last_sync_hash: "666a0ddfa"
+    matlab_last_sync_hash: "c5174ab"
     python_path: "ndi/gui/nav/datasets_pane.py"
     decision_log: >
       The navigator's elastic pane, ported across #103, #109, #110 and
@@ -911,6 +911,12 @@ ported_late:
       the refresh symbol (rightWidth 108 -> 56; REFRESH_WIDTH follows). The
       attribute is refresh_btn because refresh_button is now the NavPane
       factory method.
+      2026-11-13: NDI-matlab c5174ab (VH-Lab/NDI-matlab#1243): the session
+      menu's "Session" submenu gains "Tables" (Elements..., Epochs...,
+      Probes..., Subjects..., Treatments...), each opening a sessionTable
+      window (showSessionTable -> show_session_table). MATLAB shows an
+      indeterminate progress dialog while the table is built; Python, like
+      its ingest_session_node, builds it without one.
 
   - name: cloudComparison
     matlab_path: "+ndi/+gui/+nav/cloudComparison.m"
@@ -979,6 +985,27 @@ ported_late:
       Ported in #103. 2026-10-24: synchronized with NDI-matlab b1da61b
       (VH-Lab/NDI-matlab#1058): DAQ systems are loaded with daqsystem_load()
       and no name regexp, which is slow on large databases.
+
+  - name: sessionTable
+    matlab_path: "+ndi/+gui/+nav/sessionTable.m"
+    matlab_last_sync_hash: "c5174ab"
+    python_path: "ndi/gui/nav/session_table.py"
+    decision_log: >
+      Added with VH-Lab/NDI-matlab#1243: the window behind the navigator's
+      "Session > Tables" submenu, showing one ndi.fun.docTable summary table
+      (element, epoch, probe, subject, treatment) with "Assign to
+      workspace..." and "Export CSV...". Class SessionTable; snake_case like
+      the rest of ndi.gui.nav. MATLAB's static helpers are module functions
+      (tableKinds -> table_kinds plus the TABLE_KINDS constant, kindInfo ->
+      kind_info, computeTable -> compute_table, summaryText -> summary_text,
+      tableCells -> table_cells, cellText -> cell_text, sessionRef ->
+      session_ref); properties Session/Kind/Table/Figure/UITable ->
+      session/kind/table/figure/ui_table, where table is a pandas DataFrame
+      from ndi.fun.doc_table. kind_info raises ValueError where MATLAB raises
+      ndi:gui:nav:sessionTable:unknownKind. The workspace is __main__'s
+      globals, as for datasetsPane's "Assign to workspace...".
+      assign_to_workspace and export_csv take an optional name / path so
+      they can run without dialogs.
 
   - name: daqSystemBrowser
     matlab_path: "+ndi/+gui/+nav/daqSystemBrowser.m"

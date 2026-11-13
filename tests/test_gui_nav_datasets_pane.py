@@ -645,7 +645,37 @@ class TestMenusAreBuilt:
             "Info...",
             "Ingest",
             "Ingestion Status",
+            "Tables",
         ]
+
+    def test_the_tables_submenu_lists_the_session_tables(self):
+        """VH-Lab/NDI-matlab#1243: Session > Tables exposes the doc tables."""
+        _qt_or_skip()
+        nav, pane = _built_pane()
+        pane.user_sessions = [FakeSession("a", path="/s/a")]
+        pane.populate_tree()
+        menu = pane.build_node_menu(pane.tree.topLevelItem(0).child(0))
+        session_menu = menu.actions()[2].menu()
+        tables = [a for a in session_menu.actions() if a.text() == "Tables"][0].menu()
+        assert [a.text() for a in tables.actions()] == [
+            "Elements...",
+            "Epochs...",
+            "Probes...",
+            "Subjects...",
+            "Treatments...",
+        ]
+
+    def test_a_session_table_that_fails_is_reported_not_raised(self, monkeypatch):
+        _qt_or_skip()
+        import ndi.gui.nav.session_table as st
+
+        nav, pane = _built_pane()
+        pane.user_sessions = [FakeSession("a", path="/s/a")]
+        pane.populate_tree()
+        node = pane.tree.topLevelItem(0).child(0)
+        monkeypatch.setattr(st, "compute_table", _raise("no stimulators"))
+        assert pane.show_session_table(node, "epoch") is None
+        assert any("no stimulators" in m for m, _, _ in nav.alerts)
 
     def test_a_dataset_node_gets_the_cloud_menu_in_matlabs_order(self):
         _qt_or_skip()
