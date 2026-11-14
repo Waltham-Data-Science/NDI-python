@@ -242,6 +242,7 @@ class TestState:
         assert [r.path for r in state.rows()] == [
             "Cloud.Download.Max_Document_Batch_Count",
             "Cloud.Upload.Max_Document_Batch_Count",
+            "Cloud.Upload.Max_Document_Batch_Size",
             "Cloud.Upload.Max_File_Batch_Size",
             "Cloud.Upload.Send_Batches_As_Zip",
             "Cloud.Upload.Parallel_Uploads",
@@ -252,6 +253,7 @@ class TestState:
         state.select("Cloud", "Upload")
         assert [r.label for r in state.rows()] == [
             "Max_Document_Batch_Count",
+            "Max_Document_Batch_Size",
             "Max_File_Batch_Size",
             "Send_Batches_As_Zip",
             "Parallel_Uploads",

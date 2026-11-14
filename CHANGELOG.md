@@ -294,6 +294,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Bulk document uploads are split by size, and a failed ingestion is
+  reported** (`ndi.cloud.upload.uploadDocumentCollection`, MATLAB
+  VH-Lab/NDI-matlab#1247). A 100,000-document upload went out as one 638 MB
+  JSON file in one zip; the server's ingestion Lambda ran out of scratch disk
+  and ingested nothing, while the upload reported success. Batches now also
+  end at `max_bytes` of JSON (new preference
+  `Cloud.Upload.Max_Document_Batch_Size`, default 50 MB; helper
+  `documentBatchRanges`), each document is encoded once, and if the server
+  lists none of the stored documents when the ingestion wait ends, the report
+  says so: `status` `'partial'`, `uploaded` 0, the ids in `not_ingested`
+  instead of `manifest`, and `ingestion['state']` `'failed'`, so a sync does
+  not record them as uploaded.
+
 - **Recomputing stimulus responses replaced nothing** when the prestimulus
   parameters were empty (the default): the parameter document lookup never
   matched, so each run added new responses beside the old ones. Empty

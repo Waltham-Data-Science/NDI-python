@@ -897,7 +897,7 @@ functions:
   # --- upload.py functions ---
   - name: uploadDocumentCollection
     matlab_path: "+ndi/+cloud/+upload/uploadDocumentCollection.m"
-    matlab_last_sync_hash: "004585c"
+    matlab_last_sync_hash: "ec25d3c"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: dataset_id
@@ -912,6 +912,10 @@ functions:
         default: "True"
       - name: max_chunk
         type_python: "int | None"
+        default: "None"
+      - name: max_bytes
+        type_matlab: "double (maxDocumentBytes)"
+        type_python: "float | None"
         default: "None"
       - name: wait_for_ingestion
         type_matlab: "logical"
@@ -967,6 +971,21 @@ functions:
       the others -- resolved to "", so the manifest came back as a list of empty
       strings and no caller could tell which documents had landed. Found wiring
       the sync path to send real documents (NDI-python#232).
+      2026-11-14: synchronized with NDI-matlab ec25d3c (VH-Lab/NDI-matlab#1247). A 100,000-document
+      upload went out as ONE 638 MB JSON file in one zip; the server's ingestion
+      Lambda ran out of scratch disk (ENOSPC) and ingested nothing, and the client
+      only warned that the server "may still be ingesting". Two changes, as in
+      MATLAB: (1) batches also end at max_bytes of encoded JSON (MATLAB
+      maxDocumentBytes; default the new preference Cloud.Upload.Max_Document_Batch_Size,
+      50 MB), split by documentBatchRanges; each document is encoded once and the
+      JSON passed to zip_documents_for_upload. max_bytes is keyword-only so the
+      existing positional order is unchanged. (2) If the ingestion wait ends with
+      the server listing no more documents than before, the ingestion is treated
+      as failed: MATLAB marks the stored batches 'failure' and returns b=false;
+      here status is 'partial', uploaded 0, manifest emptied (ids moved to
+      not_ingested -- sync's _upload_documents reads the manifest, as MATLAB's
+      uploadedDocumentIds reads the statuses), ingestion['state'] 'failed', and
+      the reason goes to errors and the log. A partial count still only warns.
 
   - name: zipForUpload
     matlab_path: "+ndi/+cloud/+upload/zipForUpload.m"
@@ -1932,9 +1951,36 @@ porting_deferred:
       Python CLI session has no UI). The MATLAB profileEditor GUI is a
       separate workstream.
 
+  - name: documentBatchRanges
+    matlab_path: "+ndi/+cloud/+upload/+internal/documentBatchRanges.m"
+    matlab_last_sync_hash: "ec25d3c"
+    python_path: "ndi/cloud/upload.py"
+    input_arguments:
+      - name: document_sizes
+        type_matlab: "double (1,:)"
+        type_python: "list[float]"
+      - name: max_count
+        type_matlab: "double"
+        type_python: "float"
+      - name: max_bytes
+        type_matlab: "double"
+        type_python: "float"
+    output_arguments:
+      - name: ranges
+        type_matlab: "cell (1,N) of index row vectors"
+        type_python: "list[list[int]]"
+    decision_log: >
+      2026-11-14: new in NDI-matlab ec25d3c (VH-Lab/NDI-matlab#1247). Splits a
+      bulk document upload into batches capped by count and by encoded JSON
+      size; an oversized document gets a batch of its own. Lives in
+      ndi.cloud.upload beside its one caller, like zip_documents_for_upload.
+      Indexes are 0-based here (internal data structure) where MATLAB's are
+      1-based; the batches themselves are identical. Non-positive caps raise
+      ValueError (MATLAB's arguments block rejects them with mustBePositive).
+
   - name: zip_documents_for_upload
     matlab_path: "+ndi/+cloud/+upload/+internal/zip_documents_for_upload.m"
-    matlab_last_sync_hash: "c6aef552"
+    matlab_last_sync_hash: "ec25d3c"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: documents
@@ -1946,6 +1992,10 @@ porting_deferred:
       - name: target_folder
         type_matlab: "string"
         type_python: "str | Path | None"
+        default: "None"
+      - name: document_json
+        type_matlab: "cell (DocumentJson)"
+        type_python: "list[str] | None"
         default: "None"
     output_arguments:
       - name: zip_path
@@ -1963,6 +2013,11 @@ porting_deferred:
       an internal subpackage, next to its one caller. Python's own zip entry
       name is random hex rather than ndi.file.temp_name's; the server reads
       the archive's single .json, whatever it is called.
+      2026-11-14: NDI-matlab ec25d3c (VH-Lab/NDI-matlab#1247) adds the DocumentJson option;
+      ported as keyword-only document_json (list[str]): the documents' already-
+      encoded JSON, joined into the same top-level array instead of encoding
+      again. A length mismatch raises ValueError (MATLAB: an assert with id
+      NDI:Cloud:Upload:DocumentJsonMismatch).
   # =======================================================================
   # +ndi/+cloud/+ui - MATLAB's cloud dialogs.
   #
