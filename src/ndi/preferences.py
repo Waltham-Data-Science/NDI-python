@@ -209,6 +209,16 @@ class ndi_preferences:
         self._add_item(
             "Cloud",
             "Upload",
+            "Max_Document_Batch_Size",
+            50_000_000,
+            "float",
+            "Maximum size in bytes of the document JSON in one bulk document upload "
+            "batch (default 50 MB). Batches end at this size or at "
+            "Max_Document_Batch_Count documents, whichever comes first.",
+        )
+        self._add_item(
+            "Cloud",
+            "Upload",
             "Max_File_Batch_Size",
             250_000_000,
             "float",
