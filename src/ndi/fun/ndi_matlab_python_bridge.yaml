@@ -178,12 +178,12 @@ functions:
   - name: readngrid
     type: function
     matlab_path: "+ndi/+fun/+data/readngrid.m"
-    matlab_last_sync_hash: "b33d8ce64"
+    matlab_last_sync_hash: "e3744121e"
     python_path: "ndi/fun/data.py"
     input_arguments:
       - name: file_path
-        type_matlab: "char (fileName_or_fileObj)"
-        type_python: "str | Path"
+        type_matlab: "char | string | did.file.fileobj (fileName_or_fileObj)"
+        type_python: "str | Path | did.file.Fileobj | binary file object"
       - name: data_size
         type_matlab: "double (vector)"
         type_python: "Sequence[int]"
@@ -215,6 +215,15 @@ functions:
       reachable. Fixing it means packing bits, and MATLAB's bit order within a
       byte is not something to infer without a MATLAB to test against;
       recorded here for whoever has one.
+      2026-11-14: synchronized with NDI-matlab e3744121e, which lets readngrid
+      read from a did.file.fileobj (what database_openbinarydoc returns) and
+      accepts string paths and 3+-D sizes. Ported: file_path may be a
+      did.file.Fileobj or any open binary file object (Python's
+      database_openbinarydoc returns a plain file). An open object is read
+      from its current position for exactly prod(data_size) elements and left
+      open for its owner; an unopened Fileobj is opened 'rb' and closed after.
+      Paths and N-D sizes already worked here. The two divergences above
+      (raise rather than warn) are unchanged.
 
   - name: writengrid
     type: function
