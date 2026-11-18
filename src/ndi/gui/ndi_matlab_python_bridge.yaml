@@ -938,7 +938,7 @@ ported_late:
 
   - name: cloudDatasetBrowser
     matlab_path: "+ndi/+gui/+nav/cloudDatasetBrowser.m"
-    matlab_last_sync_hash: "ffee1bc"
+    matlab_last_sync_hash: "3f56952"
     python_path: "ndi/gui/nav/cloud_dataset_browser.py"
     decision_log: >
       Browse, open and delete the user's NDI Cloud datasets
@@ -950,6 +950,14 @@ ported_late:
       array; unknown counts are NaN as in MATLAB. delete_selected takes the
       confirmation as a callable for the same testability reason as
       CloudComparison.run_action.
+      2026-11-18: NDI-matlab 3f56952 adds a Published (Yes/No) column from the
+      record's isPublished flag (absent -> unpublished), "Include published"
+      / "Include unpublished" checkboxes, and a "N of M dataset(s) shown."
+      status. Ported 1:1 in snake_case: filterEntries -> filter_entries,
+      countStatusText -> count_status_text, setFilter -> set_filter,
+      AllEntries -> all_entries, IncludePublished/IncludeUnpublished ->
+      include_published/include_unpublished, toFlag -> to_flag (public
+      static here; private in MATLAB), yesNoText -> yes_no_text.
 
   - name: cloudPane
     matlab_path: "+ndi/+gui/+nav/cloudPane.m"

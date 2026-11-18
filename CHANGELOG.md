@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Navigator: filter the cloud dataset browser by published state**
+  (`ndi.gui.nav.cloud_dataset_browser`, MATLAB VH-Lab/NDI-matlab@3f56952). The
+  "Browse my Cloud datasets..." window gains a Published (Yes/No) column, read
+  from each dataset's `isPublished` flag, and "Include published" / "Include
+  unpublished" checkboxes (both ticked at first). The status line says how
+  many datasets are shown out of how many while a filter hides any.
+
 - **Navigator: Cloud comparison, Cloud info and a cloud dataset browser**
   (`ndi.gui.nav`, MATLAB VH-Lab/NDI-matlab#1230 and #1231). A dataset's Cloud
   menu is now "Cloud info...", "Upload to Cloud" and "Cloud comparison...".

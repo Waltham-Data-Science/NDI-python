@@ -4,12 +4,17 @@ MATLAB counterpart: ``src/ndi/+ndi/+gui/+nav/cloudDatasetBrowser.m``
 (VH-Lab/NDI-matlab#1231)
 
 Lists every NDI Cloud dataset in every organization the signed-in user
-belongs to, with Name, Organization, Documents, Files, Created and Last
-changed. "Created" is when the dataset was created on NDI Cloud, which is
+belongs to, with Name, Organization, Documents, Files, Created, Last changed
+and Published. "Created" is when the dataset was created on NDI Cloud, which is
 when its first documents were added; "Last changed" is its last update time.
 Selecting a row shows the details, including the cloud dataset id with a
 Copy button; counts or dates the list did not include are then fetched with
 :func:`ndi.cloud.api.datasets.getDataset`.
+
+"Published" is Yes when the dataset's ``isPublished`` flag is true and No
+otherwise (an absent flag counts as unpublished). The "Include published" and
+"Include unpublished" boxes show or hide those datasets; both start ticked,
+and the status line says how many are shown out of how many there are.
 
 "Sort by" orders the list by any column, either direction; Refresh reloads.
 
@@ -44,7 +49,15 @@ from .datasets_text import first_field, normalize_cloud_list
 __all__ = ["CloudDatasetBrowser", "COLUMN_NAMES"]
 
 #: The table's columns, in order; also the "Sort by" choices.
-COLUMN_NAMES = ["Name", "Organization", "Documents", "Files", "Created", "Last changed"]
+COLUMN_NAMES = [
+    "Name",
+    "Organization",
+    "Documents",
+    "Files",
+    "Created",
+    "Last changed",
+    "Published",
+]
 
 
 class CloudDatasetBrowser:
@@ -60,6 +73,9 @@ class CloudDatasetBrowser:
     ):
         self.open_fcn = open_fcn
         self.entries: list[dict[str, Any]] = []
+        self.all_entries: list[dict[str, Any]] = []
+        self.include_published = True
+        self.include_unpublished = True
         self.organizations: list[dict[str, Any]] = []
         self.selected_index: int | None = None
         self.sort_column = "Name"
@@ -74,6 +90,8 @@ class CloudDatasetBrowser:
         self.delete_button: Any = None
         self.status_label: Any = None
         self.sort_dir_button: Any = None
+        self.published_checkbox: Any = None
+        self.unpublished_checkbox: Any = None
         if build:
             self.build(parent)
             if load:
@@ -95,6 +113,17 @@ class CloudDatasetBrowser:
             except ValueError:
                 return math.nan
         return math.nan
+
+    @staticmethod
+    def to_flag(value: Any) -> bool:
+        """A true/false record field; absent or unreadable is False."""
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return not math.isnan(value) and value != 0
+        if isinstance(value, str):
+            return value.strip().lower() in ("true", "1", "yes")
+        return False
 
     @staticmethod
     def entry_from_record(record: Any) -> dict[str, Any]:
@@ -120,6 +149,7 @@ class CloudDatasetBrowser:
             "fileCount": CloudDatasetBrowser.to_count(f(["fileCount", "numberOfFiles"])),
             "createdAt": str(f(["createdAt", "created"]) or ""),
             "updatedAt": str(f(["updatedAt", "lastModified", "modifiedAt"]) or ""),
+            "isPublished": CloudDatasetBrowser.to_flag(f(["isPublished", "published"])),
         }
         if not entry["name"]:
             entry["name"] = entry["id"]
@@ -148,7 +178,27 @@ class CloudDatasetBrowser:
         for key in ("documentCount", "fileCount"):
             if math.isnan(out.get(key, math.nan)):
                 out[key] = full.get(key, math.nan)
+        # An absent flag reads as False, so a True from either wins.
+        out["isPublished"] = bool(out.get("isPublished")) or bool(full.get("isPublished"))
         return out
+
+    @staticmethod
+    def filter_entries(
+        entries: list[dict[str, Any]], include_published: bool, include_unpublished: bool
+    ) -> list[dict[str, Any]]:
+        """Keep the published and/or unpublished ENTRIES (absent flag = unpublished)."""
+        return [
+            e
+            for e in entries
+            if (include_published if e.get("isPublished") else include_unpublished)
+        ]
+
+    @staticmethod
+    def count_status_text(n_shown: int, n_all: int) -> str:
+        """Status line: how many datasets are shown of how many."""
+        if n_shown == n_all:
+            return f"{n_all} dataset(s)."
+        return f"{n_shown} of {n_all} dataset(s) shown."
 
     @staticmethod
     def sort_entries(
@@ -164,6 +214,7 @@ class CloudDatasetBrowser:
             "Last changed": ("updatedAt", False),
             "Documents": ("documentCount", False),
             "Files": ("fileCount", False),
+            "Published": ("isPublished", False),
         }
         if column not in keys:
             raise ValueError(f"Unknown column {column!r}. Use one of: {', '.join(COLUMN_NAMES)}.")
@@ -171,6 +222,8 @@ class CloudDatasetBrowser:
 
         def missing(e: dict[str, Any]) -> bool:
             v = e.get(field)
+            if isinstance(v, bool):
+                return False
             return v in (None, "") or (isinstance(v, float) and math.isnan(v))
 
         known = [e for e in entries if not missing(e)]
@@ -196,6 +249,7 @@ class CloudDatasetBrowser:
                 b.count_text(e["fileCount"]),
                 b.date_text(e["createdAt"]),
                 b.date_text(e["updatedAt"]),
+                b.yes_no_text(e.get("isPublished")),
             ]
             for e in entries
         ]
@@ -214,6 +268,7 @@ class CloudDatasetBrowser:
             f"Last changed:  {b.date_text(entry['updatedAt'])}",
             f"Documents:     {b.count_text(entry['documentCount'])}",
             f"Files:         {b.count_text(entry['fileCount'])}",
+            f"Published:     {b.yes_no_text(entry.get('isPublished'))}",
         ]
 
     @staticmethod
@@ -225,6 +280,10 @@ class CloudDatasetBrowser:
         if len(value) >= 16 and value[10] == "T":
             return f"{value[:10]} {value[11:16]} UTC"
         return value
+
+    @staticmethod
+    def yes_no_text(flag: Any) -> str:
+        return "Yes" if flag else "No"
 
     @staticmethod
     def count_text(n: Any) -> str:
@@ -277,17 +336,40 @@ class CloudDatasetBrowser:
     # model actions
     # ------------------------------------------------------------------
     def set_entries(self, entries: list[dict[str, Any]]) -> None:
-        """Show ENTRIES, sorted by the current sort choice."""
-        self.entries = self.sort_entries(entries, self.sort_column, self.sort_descending)
+        """Show ENTRIES, filtered and sorted by the current choices.
+
+        ENTRIES is every listed dataset; the published/unpublished choices
+        decide which of them are shown.
+        """
+        self.all_entries = list(entries)
+        shown = self.filter_entries(
+            self.all_entries, self.include_published, self.include_unpublished
+        )
+        self.entries = self.sort_entries(shown, self.sort_column, self.sort_descending)
         self._redraw()
         self.select(None)
 
     def set_sort(self, column: str, descending: bool = False) -> None:
         self.sort_column = column
         self.sort_descending = bool(descending)
-        self.set_entries(self.entries)
+        self.set_entries(self.all_entries)
         if self.sort_dir_button is not None:
             self.sort_dir_button.setText("Descending" if descending else "Ascending")
+
+    def set_filter(self, include_published: bool, include_unpublished: bool) -> None:
+        """Choose whether published and unpublished datasets are shown."""
+        self.include_published = bool(include_published)
+        self.include_unpublished = bool(include_unpublished)
+        for box, value in (
+            (self.published_checkbox, self.include_published),
+            (self.unpublished_checkbox, self.include_unpublished),
+        ):
+            if box is not None and box.isChecked() != value:
+                box.blockSignals(True)
+                box.setChecked(value)
+                box.blockSignals(False)
+        self.set_entries(self.all_entries)
+        self._set_status(self.count_status_text(len(self.entries), len(self.all_entries)))
 
     def refresh(self) -> None:
         """Reload the dataset list from NDI Cloud."""
@@ -306,7 +388,7 @@ class CloudDatasetBrowser:
         except Exception:  # noqa: BLE001 - only refines the group check
             self.organizations = []
         self.set_entries(self.entries_from_list(answer))
-        self._set_status(f"{len(self.entries)} dataset(s).")
+        self._set_status(self.count_status_text(len(self.entries), len(self.all_entries)))
 
     def organization_of(self, entry: dict[str, Any]) -> dict[str, Any]:
         for org in self.organizations:
@@ -332,6 +414,10 @@ class CloudDatasetBrowser:
             pass
         entry["detailed"] = True
         self.entries[index] = entry
+        for k, e in enumerate(self.all_entries):
+            if e["id"] == entry["id"]:
+                self.all_entries[k] = entry
+                break
         self._redraw()
         return entry
 
@@ -513,6 +599,22 @@ class CloudDatasetBrowser:
             lambda: self.set_sort(self.sort_column, not self.sort_descending)
         )
         sort_row.addWidget(self.sort_dir_button)
+        self.published_checkbox = QtWidgets.QCheckBox("Include published")
+        self.published_checkbox.setObjectName("ndiBrowserIncludePublished")
+        self.published_checkbox.setToolTip("Show datasets that are published on NDI Cloud")
+        self.published_checkbox.setChecked(self.include_published)
+        self.published_checkbox.toggled.connect(
+            lambda v: self.set_filter(v, self.include_unpublished)
+        )
+        sort_row.addWidget(self.published_checkbox)
+        self.unpublished_checkbox = QtWidgets.QCheckBox("Include unpublished")
+        self.unpublished_checkbox.setObjectName("ndiBrowserIncludeUnpublished")
+        self.unpublished_checkbox.setToolTip("Show datasets that are not published on NDI Cloud")
+        self.unpublished_checkbox.setChecked(self.include_unpublished)
+        self.unpublished_checkbox.toggled.connect(
+            lambda v: self.set_filter(self.include_published, v)
+        )
+        sort_row.addWidget(self.unpublished_checkbox)
         sort_row.addStretch(1)
         outer.addLayout(sort_row)
 
