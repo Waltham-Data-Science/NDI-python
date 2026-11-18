@@ -246,6 +246,10 @@ KNOWN_UNVALIDATABLE_FROM_DEPENDENCIES = {
     # Inherits ngrid, which its schema omits.
     "neuro/hartley_reverse_correlation": "DID:Database:ValidationSuperClasses",
     "neuro/reverse_correlation": "DID:Database:ValidationFieldInteger",
+    # NDIcalc-vis-matlab 93a1fe7 (merged in VH-Lab/NDIcalc-vis-matlab#109,
+    # 2026-11-13) made it inherit ngrid to store every bootstrap fit; it
+    # fails with ngrid's own blank-template error (data/ngrid, above).
+    "vision/speed_tuning_bootstrap": "DID:Database:ValidationFieldInteger",
 }
 
 #: Files that are not valid JSON and cannot be fixed from this repository.
