@@ -215,15 +215,17 @@ functions:
       reachable. Fixing it means packing bits, and MATLAB's bit order within a
       byte is not something to infer without a MATLAB to test against;
       recorded here for whoever has one.
-      2026-11-14: synchronized with NDI-matlab e3744121e, which lets readngrid
-      read from a did.file.fileobj (what database_openbinarydoc returns) and
-      accepts string paths and 3+-D sizes. Ported: file_path may be a
-      did.file.Fileobj or any open binary file object (Python's
-      database_openbinarydoc returns a plain file). An open object is read
-      from its current position for exactly prod(data_size) elements and left
-      open for its owner; an unopened Fileobj is opened 'rb' and closed after.
-      Paths and N-D sizes already worked here. The two divergences above
-      (raise rather than warn) are unchanged.
+
+      2026-11-18: synced to NDI-matlab e3744121e (VH-Lab/NDI-matlab#1229),
+      which accepts a did.file.fileobj as well as a path and reads N-D sizes
+      by element count then reshapes. Ported: a did.file.Fileobj that is not
+      open is opened 'rb' and closed after; one already open, or any open
+      binary file object (what ndi_session.database_openbinarydoc returns),
+      is read from its current position and left open. An object carrying
+      only fullpathfilename (cloud CachedBinaryFile) is read by that path.
+      From a file object only prod(data_size) elements are read, as MATLAB
+      does; a path still reads the whole file, so a file with extra elements
+      is refused there (the existing mismatch divergence above).
 
   - name: writengrid
     type: function

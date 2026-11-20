@@ -938,7 +938,7 @@ ported_late:
 
   - name: cloudDatasetBrowser
     matlab_path: "+ndi/+gui/+nav/cloudDatasetBrowser.m"
-    matlab_last_sync_hash: "ffee1bc"
+    matlab_last_sync_hash: "3f56952"
     python_path: "ndi/gui/nav/cloud_dataset_browser.py"
     decision_log: >
       Browse, open and delete the user's NDI Cloud datasets
@@ -950,10 +950,18 @@ ported_late:
       array; unknown counts are NaN as in MATLAB. delete_selected takes the
       confirmation as a callable for the same testability reason as
       CloudComparison.run_action.
+      2026-11-18: NDI-matlab 3f56952 adds a Published (Yes/No) column from the
+      record's isPublished flag (absent -> unpublished), "Include published"
+      / "Include unpublished" checkboxes, and a "N of M dataset(s) shown."
+      status. Ported 1:1 in snake_case: filterEntries -> filter_entries,
+      countStatusText -> count_status_text, setFilter -> set_filter,
+      AllEntries -> all_entries, IncludePublished/IncludeUnpublished ->
+      include_published/include_unpublished, toFlag -> to_flag (public
+      static here; private in MATLAB), yesNoText -> yes_no_text.
 
   - name: cloudPane
     matlab_path: "+ndi/+gui/+nav/cloudPane.m"
-    matlab_last_sync_hash: "666a0ddfa"
+    matlab_last_sync_hash: "579176c88"
     python_path: "ndi/gui/nav/cloud_pane.py"
     decision_log: >
       Cloud status and actions pane. Ported in #112. NDI-matlab 293ec411 (VH-Lab/NDI-matlab#1037)
@@ -965,6 +973,18 @@ ported_late:
       follow.
       2026-11-12: NDI-matlab 666a0ddfa: the reload button is built by the
       shared pane.refreshButton; same icon and tooltip.
+      2026-11-20: NDI-matlab 579176c88 adds the NDI Cloud login indicator
+      (green logged in / yellow ready to log in / red not configured, with
+      hover text; a click opens the profile editor). Ported 1:1 in
+      snake_case: describeLogin -> describe_login, loginStatus ->
+      login_status, durationText -> duration_text, updateLoginIndicator ->
+      update_login_indicator, LoginIndicator/LoginState/LoginTimer ->
+      login_indicator/login_state/login_timer, LoginRefreshSeconds -> module
+      constant LOGIN_REFRESH_SECONDS. describe_login returns a dict rather
+      than a struct and accepts a ProfileEntry or a mapping. MATLAB's timer
+      is a QTimer parented to the indicator (it goes with the navigator);
+      MATLAB re-reads on the editor figure's ObjectBeingDestroyed, Python on
+      the editor window's Close event (the window is hidden, not destroyed).
 
   - name: progressPane
     matlab_path: "+ndi/+gui/+nav/progressPane.m"
@@ -1092,7 +1112,7 @@ ported_late:
 
   - name: cloudColors
     matlab_path: "+ndi/+gui/cloudColors.m"
-    matlab_last_sync_hash: "b9ccf47b"
+    matlab_last_sync_hash: "579176c88"
     python_path: "ndi/gui/cloud_colors.py"
     python_class: "CloudColors"
     decision_log: >
@@ -1101,6 +1121,8 @@ ported_late:
       NamedTuple's snake_case fields, so both spellings already resolve
       and an alias would be a third name for one value. That exemption is
       itself tested, in TestCloudColorsIsExemptForAReason.
+      2026-11-20: NDI-matlab 579176c88 adds alertRed (#CC2626) for the login
+      indicator; mirrored as alert_red with an alertRed property.
 
   - name: jrclust
     matlab_path: "+ndi/+gui/+app/jrclust.m"

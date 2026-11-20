@@ -101,62 +101,54 @@ class TestNgridByteLayout:
         with pytest.raises(ValueError, match="mismatch"):
             readngrid(f, (5,), "double")
 
-    def test_an_unknown_type_is_refused(self, tmp_path):
-        """MATLAB warns and lets fread try; this refuses up front."""
-        with pytest.raises(ValueError, match="Unknown data type"):
-            writengrid(np.array([1]), tmp_path / "g.bin", "complex128")
+    def test_a_did_fileobj_not_yet_open_is_opened_and_closed(self, tmp_path):
+        """MATLAB counterpart: readngrid's readFromFileObj (NDI-matlab e3744121)."""
+        from did.file import Fileobj
 
-
-class TestReadNgridFromFileObjects:
-    """MATLAB counterpart: NDI-matlab e3744121e, ``TestReadNgrid``.
-
-    readngrid takes a file object as well as a path: an open one (what
-    ``database_openbinarydoc`` returns) is read from its current position
-    and left open for its owner; an unopened ``did.file.Fileobj`` is opened
-    read-only and closed again.
-    """
-
-    def test_an_open_binary_file_is_read_and_left_open(self, tmp_path):
         data = np.arange(24, dtype="<f8").reshape((2, 3, 4))
         f = tmp_path / "g.bin"
         writengrid(data, f, "double")
-        with open(f, "rb") as fh:
-            np.testing.assert_array_equal(readngrid(fh, (2, 3, 4), "double"), data)
-            assert not fh.closed
-
-    def test_an_open_file_is_read_from_its_position(self, tmp_path):
-        f = tmp_path / "g.bin"
-        f.write_bytes(b"HDR!" + np.array([7, 8], dtype="<i2").tobytes())
-        with open(f, "rb") as fh:
-            fh.read(4)
-            np.testing.assert_array_equal(readngrid(fh, (2,), "int16"), [7, 8])
-
-    def test_an_unopened_did_fileobj_is_opened_and_closed(self, tmp_path):
-        from did.file import Fileobj
-
-        data = np.array([[1, 2], [3, 4]], dtype="<i4")
-        f = tmp_path / "g.bin"
-        writengrid(data, f, "int32")
         fo = Fileobj(str(f))
-        np.testing.assert_array_equal(readngrid(fo, (2, 2), "int32"), data)
-        assert not fo.fid
+        np.testing.assert_array_equal(readngrid(fo, (2, 3, 4), "double"), data)
+        assert fo.fid is None  # closed again
+
+    def test_an_open_file_is_read_from_its_position_and_left_open(self, tmp_path):
+        f = tmp_path / "g.bin"
+        f.write_bytes(b"\xff" + np.arange(6, dtype="<i2").tobytes())
+        with open(f, "rb") as fh:
+            fh.read(1)
+            got = readngrid(fh, (2, 3), "int16")
+            assert not fh.closed
+        np.testing.assert_array_equal(got, np.arange(6).reshape((2, 3), order="F"))
 
     def test_an_open_did_fileobj_is_left_open(self, tmp_path):
         from did.file import Fileobj
 
-        data = np.array([1.5, 2.5])
         f = tmp_path / "g.bin"
-        writengrid(data, f, "double")
-        fo = Fileobj(str(f))
-        fo.fopen("rb")
+        writengrid(np.array([1.0, 2.0, 3.0]), f, "double")
+        fo = Fileobj(str(f)).fopen("rb")
         try:
-            np.testing.assert_array_equal(readngrid(fo, (2,), "double"), data)
-            assert fo.fid
+            np.testing.assert_array_equal(readngrid(fo, (3,), "double"), [1.0, 2.0, 3.0])
+            assert fo.fid is not None
         finally:
             fo.fclose()
 
     def test_a_short_file_object_is_refused(self, tmp_path):
         f = tmp_path / "g.bin"
-        writengrid(np.array([1.0]), f, "double")
+        writengrid(np.array([1.0, 2.0]), f, "double")
         with open(f, "rb") as fh, pytest.raises(ValueError, match="mismatch"):
-            readngrid(fh, (3,), "double")
+            readngrid(fh, (5,), "double")
+
+    def test_a_cached_binary_file_is_read_by_its_path(self, tmp_path):
+        from types import SimpleNamespace
+
+        f = tmp_path / "g.bin"
+        writengrid(np.array([4.0, 5.0]), f, "double")
+        np.testing.assert_array_equal(
+            readngrid(SimpleNamespace(fullpathfilename=str(f)), (2,), "double"), [4.0, 5.0]
+        )
+
+    def test_an_unknown_type_is_refused(self, tmp_path):
+        """MATLAB warns and lets fread try; this refuses up front."""
+        with pytest.raises(ValueError, match="Unknown data type"):
+            writengrid(np.array([1]), tmp_path / "g.bin", "complex128")

@@ -54,6 +54,7 @@ class TestPalette:
             ("ok_green", "#2e9e47"),
             ("warn_amber", "#e69f21"),
             ("neutral_grey", "#8c949e"),
+            ("alert_red", "#cc2626"),
             ("white", "#ffffff"),
         ],
     )
@@ -80,6 +81,7 @@ class TestPalette:
         assert c.okGreen == c.ok_green
         assert c.warnAmber == c.warn_amber
         assert c.neutralGrey == c.neutral_grey
+        assert c.alertRed == c.alert_red
         assert cloudColors is cloud_colors
 
     def test_palette_is_a_singleton(self):

@@ -37,19 +37,21 @@ def readngrid(
     data_size: Sequence[int],
     data_type: str = "double",
 ) -> np.ndarray:
-    """Read n-dimensional binary matrix from file.
+    """Read n-dimensional binary matrix from a file path or a file object.
 
     MATLAB equivalent: ndi.fun.data.readngrid
 
     Args:
         file_path: Path to the binary file, OR a file object: a
-            ``did.file.Fileobj`` or an open binary file such as the one
-            :meth:`ndi_session.database_openbinarydoc` returns. A file object
-            that is already open is read from its current position and left
-            open, so its owner can close it (e.g. with
-            ``database_closebinarydoc``); a ``did.file.Fileobj`` that is not
-            open is opened read-only here and closed again after reading.
-        data_size: Shape tuple, e.g. ``(100, 3)``.
+            :class:`did.file.Fileobj`, or an open binary file such as the one
+            ``ndi_session.database_openbinarydoc`` returns. A file object that
+            is already open is read from its current position and left open,
+            so the caller can close it (e.g. with ``database_closebinarydoc``).
+            A ``did.file.Fileobj`` that is not open yet is opened read-only
+            here and closed again after reading. An object that only carries
+            ``fullpathfilename`` (a cloud ``CachedBinaryFile``) is read by
+            that path.
+        data_size: Shape tuple, e.g. ``(100, 3)``; any number of dimensions.
         data_type: ndi_element type name (``'double'``, ``'int16'``, etc.).
 
     Returns:
@@ -57,7 +59,8 @@ def readngrid(
 
     Raises:
         ValueError: If data type is unknown or data count mismatches.
-        FileNotFoundError: If file does not exist.
+        FileNotFoundError: If the file does not exist or cannot be opened.
+        TypeError: If ``file_path`` is neither a path nor a file object.
     """
     dtype = _TYPE_MAP.get(data_type)
     if dtype is None:
@@ -68,12 +71,9 @@ def readngrid(
         expected *= d
 
     if isinstance(file_path, (str, Path)):
-        p = Path(file_path)
-        if not p.exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
-        raw = np.fromfile(str(p), dtype=dtype)
+        raw = _read_ngrid_path(Path(file_path), dtype)
     else:
-        raw = np.frombuffer(_read_from_fileobj(file_path, expected * dtype.itemsize), dtype=dtype)
+        raw = _read_ngrid_fileobj(file_path, expected, dtype)
 
     if raw.size != expected:
         raise ValueError(f"ndi_gui_Data count mismatch: expected {expected}, got {raw.size}")
@@ -82,35 +82,45 @@ def readngrid(
     return raw.reshape(data_size, order="F")
 
 
-def _read_from_fileobj(file_obj: Any, num_bytes: int) -> bytes:
-    """Read *num_bytes* from a file object for :func:`readngrid`.
+def _read_ngrid_path(p: Path, dtype: np.dtype) -> np.ndarray:
+    """Every element in the file at P."""
+    if not p.exists():
+        raise FileNotFoundError(f"File not found: {p}")
+    return np.fromfile(str(p), dtype=dtype)
 
-    An object that is already open -- a plain binary file, or a
-    ``did.file.Fileobj`` whose ``fid`` is set -- is read as it is and left
-    open for its owner to close, as MATLAB's readngrid does (NDI-matlab
-    e3744121e): reopening it would close the caller's handle first. A
-    ``did.file.Fileobj`` that is not open is opened ``'rb'`` here and closed
-    after.
+
+def _read_ngrid_fileobj(fobj: Any, count: int, dtype: np.dtype) -> np.ndarray:
+    """COUNT elements from a file object (see :func:`readngrid`).
+
+    MATLAB (readFromFileObj) reads an already-open object as it is and leaves
+    it open for its owner; reopening would close the caller's handle first.
     """
-    if hasattr(file_obj, "fread") and hasattr(file_obj, "fopen"):  # did.file.Fileobj
-        if getattr(file_obj, "fid", None):
-            return bytes(file_obj.fread(num_bytes))
-        file_obj.fopen("rb")
-        if not getattr(file_obj, "fid", None):
-            raise FileNotFoundError(
-                f"Could not open file '{getattr(file_obj, 'fullpathfilename', file_obj)}' "
-                "for reading."
-            )
+    from did.file import Fileobj
+
+    nbytes = count * dtype.itemsize
+    if isinstance(fobj, Fileobj):
+        opened_here = False
+        if fobj.fid is None:
+            fobj.fopen("rb")
+            if fobj.fid is None:
+                raise FileNotFoundError(
+                    f"Could not open file '{fobj.fullpathfilename}' for reading. "
+                    "Ensure the path is correct and the file exists."
+                )
+            opened_here = True
         try:
-            return bytes(file_obj.fread(num_bytes))
+            data = fobj.fid.read(nbytes)
         finally:
-            file_obj.fclose()
-    if hasattr(file_obj, "read"):
-        return bytes(file_obj.read(num_bytes))
-    raise TypeError(
-        "readngrid needs a file path, a did.file.Fileobj or an open binary file, "
-        f"not {type(file_obj).__name__}"
-    )
+            if opened_here:
+                fobj.fclose()
+    elif callable(getattr(fobj, "read", None)):
+        data = fobj.read(nbytes)
+    elif getattr(fobj, "fullpathfilename", None):
+        return _read_ngrid_path(Path(fobj.fullpathfilename), dtype)
+    else:
+        raise TypeError(f"readngrid needs a file path or a file object, not {type(fobj).__name__}.")
+    usable = len(data) - len(data) % dtype.itemsize
+    return np.frombuffer(data[:usable], dtype=dtype).copy()
 
 
 def writengrid(
