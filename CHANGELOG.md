@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Navigator: NDI Cloud login indicator** (`ndi.gui.nav.cloud_pane`, MATLAB
+  VH-Lab/NDI-matlab@579176c88). The NDI Cloud pane gains a small button that is
+  green when logged in (an unexpired `NDI_CLOUD_TOKEN`), yellow when a profile
+  with a stored password (or `NDI_CLOUD_USERNAME`/`NDI_CLOUD_PASSWORD`) is ready
+  to log in, and red when nothing is configured. Hovering explains the state;
+  clicking opens the profile editor. It re-checks every 30 seconds.
+  `cloud_colors` gains `alert_red`.
+
 - **Navigator: filter the cloud dataset browser by published state**
   (`ndi.gui.nav.cloud_dataset_browser`, MATLAB VH-Lab/NDI-matlab@3f56952). The
   "Browse my Cloud datasets..." window gains a Published (Yes/No) column, read

@@ -44,6 +44,9 @@ class CloudColors(NamedTuple):
     warn_amber: tuple[float, float, float] = (0.9020, 0.6235, 0.1294)
     #: #8C949E status: not yet / absent (e.g. an un-ingested on-disk session).
     neutral_grey: tuple[float, float, float] = (0.5490, 0.5804, 0.6196)
+    #: #CC2626 status: not working / needs setting up (e.g. the navigator's
+    #: NDI Cloud login indicator when no login is configured).
+    alert_red: tuple[float, float, float] = (0.8000, 0.1500, 0.1500)
 
     # MATLAB-cased aliases, so code written against either convention reads
     # naturally -- the same dual-naming used across this port.
@@ -70,6 +73,10 @@ class CloudColors(NamedTuple):
     @property
     def neutralGrey(self) -> tuple[float, float, float]:  # noqa: N802
         return self.neutral_grey
+
+    @property
+    def alertRed(self) -> tuple[float, float, float]:  # noqa: N802
+        return self.alert_red
 
 
 _PALETTE = CloudColors()

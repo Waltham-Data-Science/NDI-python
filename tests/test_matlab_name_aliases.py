@@ -285,6 +285,7 @@ class TestCloudColorsIsExemptForAReason:
             ("okGreen", "ok_green"),
             ("warnAmber", "warn_amber"),
             ("neutralGrey", "neutral_grey"),
+            ("alertRed", "alert_red"),
         ],
     )
     def test_both_spellings_resolve_to_the_same_value(self, camel, snake):
