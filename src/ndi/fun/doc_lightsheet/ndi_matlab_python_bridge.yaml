@@ -80,7 +80,7 @@ functions:
 
   - name: makePyramid
     matlab_path: "+ndi/+fun/+doc/+lightsheet/makePyramid.m"
-    matlab_last_sync_hash: "a3fcbbc48"
+    matlab_last_sync_hash: "a469501c1"
     python_path: "ndi/fun/doc_lightsheet/makePyramid.py"
     decision_log: >-
       The worker fromOMEZarr calls; writes one lightsheetZarrPyramid

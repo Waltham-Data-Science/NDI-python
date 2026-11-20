@@ -405,6 +405,56 @@ class TestAStreamedBuild:
         for key, d in zip(ORDER, levelDocs):
             np.testing.assert_array_equal(cloud.level(d), exp[key], err_msg=key)
 
+    def test_a_resume_rebuilds_only_lost_chunks_and_skips_complete_reduced_levels(
+        self, vol, capsys
+    ):
+        # A finished build loses three level-0 chunks (a dropped upload
+        # batch). The resume sends exactly those back, declares no new level
+        # documents, and skips each level reduced from a stored level whose
+        # chunks are all present without opening the level it reduces.
+        s, subj = new_session()
+        cloud = FakeCloud(s)
+        pyr, src, exp = ladder(vol, write_slices(vol), toCloud=True)
+        args = dict(subjectID=subj, materializeChunks=True, levelSources=src,
+                    codec="blosc-zstd", numWorkers=2, **BUILD)  # fmt: skip
+        pyramidDoc, firstDocs, _ = makePyramid(cloud, pyr, ["mean", "max"], **args)
+        level0 = firstDocs[0]
+        lost = [1, 2, 3]
+        for i in lost:
+            del cloud.members[level0.id][i]
+
+        def levelIds():
+            return {k for k, d in cloud.declared.items() if d.doc_class() == "lightsheetZarrLevel"}
+
+        levelsBefore = levelIds()
+        assert len(levelsBefore) == 5
+
+        resume = {"pyramidDoc": pyramidDoc, "levelDocs": list(cloud.declared.values())}
+        resent, opened = [], []
+        origStream, origOpen = cloud.streamMembers, cloud.database_openbinarydoc
+
+        def spyStream(doc, name, idxs, paths, retain):
+            resent.extend((doc.id, int(i)) for i in idxs)
+            origStream(doc, name, idxs, paths, retain)
+
+        def spyOpen(doc, filename):
+            opened.append(doc.id)
+            return origOpen(doc, filename)
+
+        cloud.streamMembers = spyStream
+        cloud.database_openbinarydoc = spyOpen
+        capsys.readouterr()
+        _, levelDocs, _ = makePyramid(cloud, pyr, ["mean", "max"], resume=resume, **args)
+        out = capsys.readouterr().out
+
+        assert sorted(resent) == [(level0.id, i) for i in lost]
+        assert levelIds() == levelsBefore, "no new level documents"
+        assert opened == [], "a skipped level does not open the level it reduces"
+        assert out.count("every chunk is already in the cloud; skipped.") == 2
+        assert f"Resuming: {len(lost)} of " in out
+        for key, d in zip(ORDER, levelDocs):
+            np.testing.assert_array_equal(cloud.level(d), exp[key], err_msg=key)
+
     def test_resume_needs_a_streaming_target(self, vol):
         s, subj = new_session()
         pyr, src, _ = ladder(vol, write_slices(vol), toCloud=False)

@@ -309,6 +309,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **A lightsheet build resumes from documents read back from the cloud**
+  (`ndi.cloud.session_writer.SessionWriter`,
+  `ndi.fun.doc_lightsheet.makePyramid`, MATLAB VH-Lab/NDI-matlab#1296).
+  DID strips series `ingest_locations` before storing, so an adopted
+  document downloaded from NDI Cloud showed no member uids:
+  `missingMembers` reported every chunk present and nothing lost was
+  rebuilt, and a level reduced from an adopted level could not open its
+  chunks. The writer now rebuilds the uids from each series' manifest
+  (downloaded into the cache; an error if it is missing or unreadable), and
+  a resumed build skips a reduced level whose chunks are all in the cloud
+  before resolving its source.
+
 - **Bulk document uploads are split by size, and a failed ingestion is
   reported** (`ndi.cloud.upload.uploadDocumentCollection`, MATLAB
   VH-Lab/NDI-matlab#1247). A 100,000-document upload went out as one 638 MB

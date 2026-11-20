@@ -1492,6 +1492,31 @@ def makePyramid(
                 totalChunks,
                 f"Level {idx + 1}/{len(po)} ({entry['name']}, {reductionFn}): starting",
             )
+            # RESUMING a level reduced from another stored level: when the
+            # level the earlier run declared already has every chunk, adopt
+            # it and move on BEFORE resolving its source. Resolving a
+            # 'reduce' source opens every chunk of the level it is reduced
+            # from -- through the writer, which can only serve files this run
+            # sent or adopted -- to build nothing. (Such a level has no folded
+            # or twin levels, which only slice-read levels carry.)
+            fromLevel = _reducedFrom(levelSources, p)
+            if resuming and streaming and fromLevel:
+                existingLevel = _resumedLevel(resume, idx, reductionFn)
+                if existingLevel is not None:
+                    session.adopt(existingLevel)
+                    if not session.missingMembers(existingLevel, "chunk.bin"):
+                        _say(
+                            f"Level {idx + 1}/{len(po)} ({entry['name']}, {reductionFn}): "
+                            "every chunk is already in the cloud; skipped."
+                        )
+                        levelDocs[idx] = existingLevel
+                        docByPath[p] = existingLevel
+                        built[idx] = True
+                        doneChunks += int(np.prod(b.levelGrids[idx]))
+                        readers[fromLevel] -= 1
+                        if readers[fromLevel] == 0:
+                            session.releaseMembers(docByPath[fromLevel])
+                        continue
             source = b.resolveLevelSource(p, entry, level, docByPath) if materializeChunks else None
             stream = b.newStream(p, idx, reductionFn, readers) if streaming else None
 

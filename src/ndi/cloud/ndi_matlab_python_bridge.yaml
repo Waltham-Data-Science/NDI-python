@@ -2265,7 +2265,7 @@ porting_deferred:
   - name: SessionWriter
     type: class
     matlab_path: "+ndi/+cloud/+upload/SessionWriter.m"
-    matlab_last_sync_hash: "dab56894c"
+    matlab_last_sync_hash: "a469501c1"
     python_path: "ndi/cloud/session_writer.py"
     python_class: "SessionWriter"
     properties:
