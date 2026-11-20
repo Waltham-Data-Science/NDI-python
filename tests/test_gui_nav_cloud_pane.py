@@ -16,6 +16,7 @@ import pytest
 from ndi.gui.nav.cloud_pane import (
     BUTTON_SPACING,
     CHECK_WIDTH,
+    LOGIN_WIDTH,
     LOGOUT_MESSAGE,
     NO_DATASETS_PANE,
     PROFILE_WIDTH,
@@ -69,9 +70,17 @@ class TestPaneShape:
         assert not nav_layout.is_elastic(CloudPane())
 
     def test_right_width_matches_matlabs_arithmetic(self):
-        """26 (reload) + 4 + 26 (C) + 4 + 62 (Profile) = 122."""
-        assert CloudPane().right_width() == 122
-        assert (RELOAD_WIDTH + BUTTON_SPACING + CHECK_WIDTH + BUTTON_SPACING + PROFILE_WIDTH) == 122
+        """26 (login) + 4 + 26 (reload) + 4 + 26 (C) + 4 + 62 (Profile) = 152."""
+        assert CloudPane().right_width() == 152
+        assert (
+            LOGIN_WIDTH
+            + BUTTON_SPACING
+            + RELOAD_WIDTH
+            + BUTTON_SPACING
+            + CHECK_WIDTH
+            + BUTTON_SPACING
+            + PROFILE_WIDTH
+        ) == 152
 
     def test_it_has_no_body(self):
         assert CloudPane().has_body() is False
@@ -91,6 +100,142 @@ class TestReloadIcon:
         if not matlab.is_file():
             pytest.skip("NDI-matlab not available for comparison")
         assert reload_icon_file().read_bytes() == matlab.read_bytes()
+
+
+class TestLoginIndicatorDecision:
+    """MATLAB counterpart: TestCloudPane's describeLogin tests."""
+
+    PROFILE = {"UID": "u1", "Nickname": "Lab", "Email": "me@lab.org"}
+
+    def test_green_when_the_token_is_valid(self):
+        from ndi.gui.cloud_colors import cloud_colors
+
+        s = CloudPane.describe_login(3 * 3600, "me@lab.org")
+        assert s["state"] == "loggedin"
+        assert s["color"] == cloud_colors().ok_green
+        assert "Logged in to NDI Cloud as me@lab.org" in s["tooltip"]
+        assert "about 3 hours" in s["tooltip"]
+
+    def test_yellow_with_a_ready_profile_or_environment(self):
+        from ndi.gui.cloud_colors import cloud_colors
+
+        s = CloudPane.describe_login(None, "", self.PROFILE, True)
+        assert s["state"] == "ready"
+        assert s["color"] == cloud_colors().warn_amber
+        assert 'me@lab.org (profile "Lab")' in s["tooltip"]
+        # An expired token falls back to the profile, and says so.
+        s = CloudPane.describe_login(-600, "", self.PROFILE, True)
+        assert s["state"] == "ready"
+        assert "expired 10 minutes ago" in s["tooltip"]
+        s = CloudPane.describe_login(None, "env@lab.org", None, False, True)
+        assert s["state"] == "ready" and "env@lab.org" in s["tooltip"]
+
+    def test_red_when_not_configured(self):
+        from ndi.cloud.profile import ProfileEntry
+        from ndi.gui.cloud_colors import cloud_colors
+
+        s = CloudPane.describe_login(None)
+        assert s["state"] == "notconfigured"
+        assert s["color"] == cloud_colors().alert_red
+        assert "there is no NDI Cloud profile" in s["tooltip"]
+        # A profile without a stored password cannot log in (ProfileEntry too).
+        entry = ProfileEntry(UID="u1", Nickname="Lab", Email="me@lab.org")
+        s = CloudPane.describe_login(None, "", entry, False)
+        assert s["state"] == "notconfigured" and 'profile "Lab"' in s["tooltip"]
+
+    def test_the_three_states_have_distinct_glyphs(self):
+        glyphs = {
+            CloudPane.describe_login(60)["glyph"],
+            CloudPane.describe_login(None, "", self.PROFILE, True)["glyph"],
+            CloudPane.describe_login(None)["glyph"],
+        }
+        assert len(glyphs) == 3
+
+    def test_duration_text(self):
+        f = CloudPane.duration_text
+        assert f(30) == "less than 2 minutes"
+        assert f(600) == "10 minutes"
+        assert f(-600) == "10 minutes"
+        assert f(5 * 3600) == "about 5 hours"
+        assert f(3 * 86400) == "about 3 days"
+
+
+class TestLoginStatusReadsTheSession:
+    def _jwt(self, exp, email="tok@lab.org"):
+        import base64
+        import json
+
+        def b64(d):
+            return base64.urlsafe_b64encode(json.dumps(d).encode()).decode().rstrip("=")
+
+        return f"{b64({'alg': 'none'})}.{b64({'exp': exp, 'email': email})}.sig"
+
+    def _no_profile(self, monkeypatch):
+        from ndi.cloud import profile
+
+        monkeypatch.setattr(profile, "get_current", lambda: None)
+        monkeypatch.setattr(profile, "get_default", lambda: None)
+
+    def test_a_valid_token_is_green_and_names_its_user(self, monkeypatch):
+        import time
+
+        self._no_profile(monkeypatch)
+        monkeypatch.delenv("NDI_CLOUD_USERNAME", raising=False)
+        monkeypatch.setenv("NDI_CLOUD_TOKEN", self._jwt(time.time() + 7200))
+        s = CloudPane.login_status()
+        assert s["state"] == "loggedin" and "tok@lab.org" in s["tooltip"]
+
+    def test_an_expired_token_with_nothing_else_is_red(self, monkeypatch):
+        import time
+
+        self._no_profile(monkeypatch)
+        for var in ("NDI_CLOUD_USERNAME", "NDI_CLOUD_PASSWORD"):
+            monkeypatch.delenv(var, raising=False)
+        monkeypatch.setenv("NDI_CLOUD_TOKEN", self._jwt(time.time() - 60))
+        assert CloudPane.login_status()["state"] == "notconfigured"
+
+    def test_a_garbage_token_is_not_a_login(self, monkeypatch):
+        self._no_profile(monkeypatch)
+        for var in ("NDI_CLOUD_USERNAME", "NDI_CLOUD_PASSWORD"):
+            monkeypatch.delenv(var, raising=False)
+        monkeypatch.setenv("NDI_CLOUD_TOKEN", "not-a-jwt")
+        assert CloudPane.login_status()["state"] == "notconfigured"
+
+    def test_a_profile_with_a_password_is_yellow(self, monkeypatch):
+        from ndi.cloud import profile
+        from ndi.cloud.profile import ProfileEntry
+
+        entry = ProfileEntry(UID="u1", Nickname="Lab", Email="me@lab.org")
+        monkeypatch.setattr(profile, "get_current", lambda: None)
+        monkeypatch.setattr(profile, "get_default", lambda: entry)
+        monkeypatch.setattr(profile, "get_password", lambda uid: "pw")
+        monkeypatch.delenv("NDI_CLOUD_TOKEN", raising=False)
+        assert CloudPane.login_status()["state"] == "ready"
+
+    def test_an_unreadable_secret_counts_as_no_password(self, monkeypatch):
+        from ndi.cloud import profile
+        from ndi.cloud.profile import ProfileEntry
+
+        def boom(uid):
+            raise RuntimeError("cannot decrypt")
+
+        entry = ProfileEntry(UID="u1", Nickname="Lab", Email="me@lab.org")
+        monkeypatch.setattr(profile, "get_current", lambda: entry)
+        monkeypatch.setattr(profile, "get_password", boom)
+        for var in ("NDI_CLOUD_TOKEN", "NDI_CLOUD_USERNAME", "NDI_CLOUD_PASSWORD"):
+            monkeypatch.delenv(var, raising=False)
+        assert CloudPane.login_status()["state"] == "notconfigured"
+
+    def test_logout_updates_the_state(self, monkeypatch):
+        from ndi.cloud import auth
+
+        self._no_profile(monkeypatch)
+        monkeypatch.setattr(auth, "logout", lambda *a, **k: None)
+        for var in ("NDI_CLOUD_TOKEN", "NDI_CLOUD_USERNAME", "NDI_CLOUD_PASSWORD"):
+            monkeypatch.delenv(var, raising=False)
+        pane = CloudPane(RecordingNavigator())
+        pane.refresh_login()
+        assert pane.login_state == "notconfigured"
 
 
 class TestCheckAllCloud:
@@ -218,6 +363,33 @@ class TestCloudPaneQt:
         assert pane.check_button.width() == CHECK_WIDTH
         assert pane.profile_button.text() == "Profile"
         assert pane.profile_button.width() == PROFILE_WIDTH
+
+    def test_the_login_indicator_is_built_coloured_and_timed(self, monkeypatch):
+        _qt_or_skip()
+        from ndi.gui.navigator import Navigator
+
+        pane = Navigator().panes[1]
+        btn = pane.login_indicator
+        expected = CloudPane.login_status()
+        assert btn.width() == LOGIN_WIDTH
+        assert btn.objectName() == "ndiNavigatorCloudLoginIndicator"
+        assert btn.text() == expected["glyph"]
+        assert btn.toolTip() == expected["tooltip"]
+        assert pane.login_timer.isActive()
+        # Clicking opens the profile editor.
+        from ndi.gui import profile_editor as pe
+
+        opened = []
+
+        class FakeEditor:
+            figure = None
+
+            def show(self):
+                opened.append(True)
+
+        monkeypatch.setattr(pe, "ProfileEditor", FakeEditor)
+        btn.click()
+        assert opened == [True]
 
     def test_the_reload_button_carries_the_icon_not_the_fallback_glyph(self):
         """The glyph is only for a Qt build with no SVG support; if it shows

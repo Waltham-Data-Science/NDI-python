@@ -131,6 +131,54 @@ class TestDeleteChecks:
         assert "group organization" in text
 
 
+class TestPublished:
+    def _entries(self):
+        return B.entries_from_list(
+            [
+                {"id": "p", "name": "pub", "isPublished": True},
+                {"id": "u", "name": "unpub", "isPublished": False},
+                {"id": "x", "name": "unknown"},
+            ]
+        )
+
+    def test_is_published_is_read(self):
+        f = B.entry_from_record
+        assert f({"id": "d", "isPublished": True})["isPublished"] is True
+        assert f({"id": "d", "isPublished": False})["isPublished"] is False
+        assert f({"id": "d", "isPublished": "true"})["isPublished"] is True
+        assert f({"id": "d"})["isPublished"] is False  # absent -> unpublished
+        m = B.merge_entry(f({"id": "d"}), f({"id": "d", "isPublished": True}))
+        assert m["isPublished"] is True
+        text = "\n".join(B.details_text(f({"id": "d", "isPublished": True}), False))
+        assert "Published:     Yes" in text
+        assert B.entries_to_rows([f({"id": "d"})])[0][COLUMN_NAMES.index("Published")] == "No"
+
+    def test_filter_sort_and_status(self):
+        e = self._entries()
+
+        def kept(p, u):
+            return [x["id"] for x in B.filter_entries(e, p, u)]
+
+        assert kept(True, True) == ["p", "u", "x"]
+        assert kept(True, False) == ["p"]
+        assert kept(False, True) == ["u", "x"]
+        assert kept(False, False) == []
+        assert [x["id"] for x in B.sort_entries(e, "Published", False)] == ["u", "x", "p"]
+        assert [x["id"] for x in B.sort_entries(e, "Published", True)] == ["p", "u", "x"]
+        assert B.count_status_text(3, 3) == "3 dataset(s)."
+        assert B.count_status_text(1, 3) == "1 of 3 dataset(s) shown."
+
+    def test_set_filter_keeps_all_entries(self):
+        b = CloudDatasetBrowser(build=False)
+        b.set_entries(self._entries())
+        b.set_filter(False, True)
+        assert [x["id"] for x in b.entries] == ["x", "u"]  # by Name: unknown, unpub
+        b.set_sort("Name", True)  # sorting keeps the filter
+        assert [x["id"] for x in b.entries] == ["u", "x"]
+        b.set_filter(True, True)
+        assert len(b.entries) == 3
+
+
 class TestDeleteSelected:
     def _browser(self, monkeypatch, deleted):
         from ndi.cloud.api import datasets as datasets_api
@@ -203,6 +251,27 @@ class TestWindow:
         assert b.id_field.text() == "d1"
         assert b.delete_button.isEnabled()
         assert b.table.item(0, 2).text() == "7"  # fetched by getDataset
+
+    def test_include_checkboxes_filter_the_table(self):
+        _qt_or_skip()
+        b = CloudDatasetBrowser(load=False)
+        b.set_entries(
+            B.entries_from_list(
+                [
+                    {"id": "p", "name": "a", "isPublished": True},
+                    {"id": "u", "name": "b", "isPublished": False},
+                ]
+            )
+        )
+        assert b.table.columnCount() == len(COLUMN_NAMES)
+        assert b.table.item(0, COLUMN_NAMES.index("Published")).text() == "Yes"
+        assert b.published_checkbox.isChecked() and b.unpublished_checkbox.isChecked()
+        b.published_checkbox.setChecked(False)
+        assert b.table.rowCount() == 1 and b.table.item(0, 0).text() == "b"
+        assert "1 of 2" in b.status_label.text()
+        b.set_filter(True, False)
+        assert b.published_checkbox.isChecked() and not b.unpublished_checkbox.isChecked()
+        assert b.table.rowCount() == 1 and b.table.item(0, 0).text() == "a"
 
     def test_sort_control_reorders(self):
         _qt_or_skip()
