@@ -10,10 +10,13 @@ MATLAB equivalents: +ndi/+cloud/+upload/*.m, uploadSingleFile.m
 from __future__ import annotations
 
 import logging
+import math
 import tempfile
 import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from pydantic import NonNegativeFloat, validate_call
 
 from .client import _auto_client
 
@@ -49,6 +52,7 @@ def uploadDocumentCollection(
     only_missing: bool = True,
     max_chunk: int | None = None,
     *,
+    max_bytes: float | None = None,
     wait_for_ingestion: bool = True,
     ingestion_timeout: float = 300.0,
     client: CloudClient | None = None,
@@ -59,7 +63,9 @@ def uploadDocumentCollection(
 
     By default the documents go up in bulk: each chunk is written as one
     JSON array, zipped (:func:`zip_documents_for_upload`) and PUT to the URL
-    from :func:`ndi.cloud.api.documents.getBulkUploadURL`. If the environment
+    from :func:`ndi.cloud.api.documents.getBulkUploadURL`. A chunk ends at
+    *max_chunk* documents or *max_bytes* bytes of JSON, whichever comes
+    first (:func:`documentBatchRanges`). If the environment
     variable ``NDI_CLOUD_UPLOAD_NO_ZIP`` is ``'true'``, they are sent one at
     a time with :func:`ndi.cloud.api.documents.addDocument` instead.
 
@@ -70,6 +76,13 @@ def uploadDocumentCollection(
         max_chunk: Maximum documents per chunk. ``None`` (default) reads the
             preference ``Cloud.Upload.Max_Document_Batch_Count``; ``0`` or a
             negative value means all at once.
+        max_bytes: Maximum bytes of encoded document JSON per bulk chunk;
+            a single document larger than this goes in a chunk of its own.
+            ``None`` (default) reads the preference
+            ``Cloud.Upload.Max_Document_Batch_Size`` (50 MB); ``0`` or a
+            negative value means no size cap. The server ingests each zip in
+            a Lambda with limited scratch disk, so one very large JSON file
+            can fail to ingest at all.
         wait_for_ingestion: If True (default), a bulk upload does not return
             until the server lists the uploaded documents, or until
             *ingestion_timeout* elapses. A bulk upload returns once each zip
@@ -77,7 +90,14 @@ def uploadDocumentCollection(
             listing made straight afterwards can miss documents. Serial
             uploads are not affected.
         ingestion_timeout: Seconds to wait for ingestion. Default 300. A
-            timeout is logged as a warning and does not change ``status``.
+            timeout is logged as a warning and does not change ``status``,
+            unless the server lists NONE of the stored documents when the
+            wait ends: then the server-side ingestion is treated as failed --
+            ``status`` is ``'partial'``, ``uploaded`` is 0, ``manifest`` is
+            emptied (its ids move to ``not_ingested``), ``ingestion['state']``
+            is ``'failed'`` and the reason is in ``errors``, so a sync does
+            not record those documents as present. Uploading again with
+            *only_missing* sends only what the server still lacks.
         client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
@@ -86,7 +106,8 @@ def uploadDocumentCollection(
         documents sent), ``status`` (``'ok'`` or ``'partial'``) and, on a
         failure, ``errors``. When a bulk upload waited for ingestion,
         ``ingestion`` holds the result of
-        :func:`ndi.cloud.api.documents.waitForDocumentCount`.
+        :func:`ndi.cloud.api.documents.waitForDocumentCount` plus
+        ``countBefore``.
     """
     import os
 
@@ -165,10 +186,37 @@ def uploadDocumentCollection(
                 exc,
             )
 
-    for n, chunk in enumerate(chunks, start=1):
+    # Encode each document once, both to size the batches and to write the
+    # zips. Batches end at max_chunk documents or max_bytes of JSON,
+    # whichever comes first.
+    from did.datastructures import json_encode_nan
+
+    if max_bytes is None:
+        from .. import preferences
+
+        max_bytes = float(preferences.get("Cloud.Upload.Max_Document_Batch_Size"))
+
+    document_json = [json_encode_nan(doc) for doc in documents]
+    ranges = documentBatchRanges(
+        [len(j.encode("utf-8")) for j in document_json],
+        max_chunk if max_chunk and max_chunk > 0 else math.inf,
+        max_bytes if max_bytes and max_bytes > 0 else math.inf,
+    )
+    if len(ranges) > 1:
+        logger.info(
+            "Sending %d documents (%.1f MB of JSON) in %d batches.",
+            len(documents),
+            sum(len(j) for j in document_json) / 1e6,
+            len(ranges),
+        )
+
+    for n, indexes in enumerate(ranges, start=1):
+        chunk = [documents[i] for i in indexes]
         zip_path: Path | None = None
         try:
-            zip_path, id_manifest = zip_documents_for_upload(chunk, dataset_id)
+            zip_path, id_manifest = zip_documents_for_upload(
+                chunk, dataset_id, document_json=[document_json[i] for i in indexes]
+            )
             url = docs_api.getBulkUploadURL(dataset_id, client=client)
             if not url:
                 raise RuntimeError("no bulk upload URL returned")
@@ -200,8 +248,37 @@ def uploadDocumentCollection(
                 "elapsed": float("nan"),
                 "message": str(exc),
             }
+        ingestion["countBefore"] = count_before
         report["ingestion"] = ingestion
-        if ingestion.get("state") != "complete":
+        count_after = ingestion.get("count")
+        nothing_ingested = (
+            ingestion.get("state") != "complete"
+            and isinstance(count_after, (int, float))
+            and math.isfinite(count_after)
+            and count_after <= count_before
+        )
+        if nothing_ingested:
+            # The server stored the zips but listed none of their documents
+            # by the deadline: its ingestion failed (or has not started at
+            # all). Report the upload as failed so callers (e.g. sync) do not
+            # record these documents as present; uploading again sends only
+            # what is missing.
+            ingestion["state"] = "failed"
+            stored = report["uploaded"]
+            report["not_ingested"] = report["manifest"]
+            report["manifest"] = []
+            report["uploaded"] = 0
+            message = (
+                f"Dataset {dataset_id} still lists {count_after:g} documents "
+                f"{float(ingestion.get('elapsed') or 0):.0f} s after {stored} documents were "
+                f"uploaded: the server ingested none of them. The server-side ingestion "
+                f"failed or is badly delayed; the upload is reported as failed. Run the "
+                f"upload again later (only missing documents are sent), and if it fails "
+                f"again ask an NDI Cloud administrator to check the bulk document upload logs."
+            )
+            _fail(message)
+            logger.warning(message)
+        elif ingestion.get("state") != "complete":
             logger.warning(
                 "Dataset %s lists %s of the %d documents expected after this upload "
                 "(state: %s). The upload succeeded; the server may still be ingesting "
@@ -215,11 +292,62 @@ def uploadDocumentCollection(
     return report
 
 
+@validate_call
+def documentBatchRanges(
+    document_sizes: list[NonNegativeFloat],
+    max_count: float,
+    max_bytes: float,
+) -> list[list[int]]:
+    """Split documents into upload batches by count and by JSON size.
+
+    MATLAB equivalent: +ndi/+cloud/+upload/+internal/documentBatchRanges.m
+
+    Walks the documents in order and starts a new batch whenever adding the
+    next document would put the current batch over *max_count* documents or
+    over *max_bytes* bytes of JSON. A document that is by itself larger than
+    *max_bytes* gets a batch of its own (it is never dropped).
+
+    A bulk document upload is ingested by a server Lambda with limited
+    scratch disk; one very large JSON file per zip (100,000 documents,
+    638 MB) failed there with nothing ingested. Capping each batch's size
+    keeps every zip small and limits what one failed batch can lose.
+
+    Args:
+        document_sizes: Encoded JSON size of each document, in bytes, in
+            upload order.
+        max_count: Maximum documents per batch (positive; ``math.inf`` for
+            no cap).
+        max_bytes: Maximum JSON bytes per batch (positive; ``math.inf`` for
+            no cap).
+
+    Returns:
+        One list per batch of the 0-based indexes into *document_sizes* of
+        its documents. Empty when *document_sizes* is empty. (MATLAB returns
+        the same batches with 1-based indexes.)
+    """
+    if max_count <= 0 or max_bytes <= 0:
+        raise ValueError("max_count and max_bytes must be positive")
+    ranges: list[list[int]] = []
+    current: list[int] = []
+    current_bytes = 0.0
+    for i, size in enumerate(document_sizes):
+        if current and (len(current) + 1 > max_count or current_bytes + size > max_bytes):
+            ranges.append(current)
+            current = []
+            current_bytes = 0.0
+        current.append(i)
+        current_bytes += size
+    if current:
+        ranges.append(current)
+    return ranges
+
+
 def zip_documents_for_upload(
     documents: list[dict[str, Any]],
     dataset_id: str,
     *,
     target_folder: str | Path | None = None,
+    document_json: list[str] | None = None,
 ) -> tuple[Path, list[str]]:
     """Write documents as one JSON array and zip it for a bulk upload.
 
@@ -236,6 +364,10 @@ def zip_documents_for_upload(
         dataset_id: Cloud dataset ID (used in the zip's name).
         target_folder: Where to write the zip. Defaults to the system's
             temporary folder.
+        document_json: Optional. The already-encoded JSON of each document
+            (from ``json_encode_nan``), one per entry of *documents*. When
+            given, the documents are not encoded again; the file holds the
+            same JSON array either way. (MATLAB's ``DocumentJson``.)
 
     Returns:
         ``(zip_path, id_manifest)``: the zip's path, which the caller must
@@ -246,7 +378,15 @@ def zip_documents_for_upload(
     from did.datastructures import json_encode_nan
 
     folder = Path(target_folder) if target_folder is not None else Path(tempfile.gettempdir())
-    json_text = json_encode_nan(list(documents))
+    if document_json is None:
+        json_text = json_encode_nan(list(documents))
+    else:
+        if len(document_json) != len(documents):
+            raise ValueError(
+                f"document_json has {len(document_json)} entries but documents "
+                f"has {len(documents)}."
+            )
+        json_text = "[" + ",".join(document_json) + "]"
     id_manifest = [document_id(doc) for doc in documents]
     zip_path = folder / f"{dataset_id}.{uuid.uuid4().hex}.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:

@@ -554,6 +554,9 @@ class SessionWriter:
         self._lagging: list[dict] = []
         self._warnedUrls = False
         self._declaredUids: dict[str, list[str]] = {}
+        # docid -> series_info with member uids rebuilt from the manifests,
+        # for adopted documents read back from the cloud (see _seriesWithUids).
+        self._adoptedSeries: dict[str, list[dict]] = {}
         self._retainedPaths: dict[str, list[str]] = {}
         self._replaceAtCommit: list[Any] = []
         self._fresh: set[str] = set()
@@ -770,10 +773,14 @@ class SessionWriter:
     def adopt(self, doc: Any) -> None:
         """Take on a document an earlier run already put in the cloud.
 
-        For resuming: DOC (as it was declared or added, series member uids
-        included) is treated as uploaded -- a dependency other documents
-        may name and, if it has a series, a declared document whose members
-        streamMembers may send and COMMIT will check. Nothing is uploaded.
+        For resuming: DOC is treated as uploaded -- a dependency other
+        documents may name and, if it has a series, a declared document
+        whose members streamMembers may send, COMMIT will check and
+        database_openbinarydoc can download. Nothing is uploaded. DOC may be
+        the document as the earlier run declared it, or as read back from
+        the cloud: a stored document has its series' ingest_locations
+        stripped, so its member uids are rebuilt from each series' manifest
+        (see _seriesWithUids).
         """
         doc = self._ownSession(doc)
         self._registerSeries(doc)
@@ -785,7 +792,7 @@ class SessionWriter:
         Returns the one-based member indices whose uid the dataset does not
         report as uploaded. A resumed run builds only these.
         """
-        si = next((s for s in _series_info_of(doc) if str(s.get("name")) == seriesName), None)
+        si = next((s for s in self._seriesWithUids(doc) if str(s.get("name")) == seriesName), None)
         if si is None:
             return []
         locs = [L for L in _as_list(si.get("ingest_locations")) if isinstance(L, dict)]
@@ -901,7 +908,7 @@ class SessionWriter:
         """Record a document's series member uids as promised (declare, adopt)."""
         docId = _doc_id(doc)
         promised: list[str] = []
-        for si in _series_info_of(doc):
+        for si in self._seriesWithUids(doc):
             for L in _as_list(si.get("ingest_locations")):
                 if not isinstance(L, dict):
                     continue
@@ -909,6 +916,70 @@ class SessionWriter:
                 self._fileUids[f"{docId}|{si.get('name')}_{int(L['index'])}"] = uid
                 promised.append(uid)
         self._declaredUids[docId] = promised
+
+    def _seriesWithUids(self, doc: Any) -> list[dict]:
+        """DOC's series_info with every present member's uid.
+
+        A document as declared carries them in ingest_locations; a document
+        read back from the cloud does not (DID strips ingest_locations
+        before storing), so for each series that has members but no uids
+        the manifest is downloaded into the cache and read, as a dataset
+        download does (:func:`ndi.cloud.filehandler.reconstructSeriesIngestLocations`).
+        Without this a resumed run saw no member uids, so missingMembers
+        reported every member present and nothing missing was rebuilt.
+        Raises rather than guess when a manifest cannot be read.
+        """
+        si = _series_info_of(doc)
+        if not si:
+            return si
+        docId = _doc_id(doc)
+        if docId in self._adoptedSeries:
+            return self._adoptedSeries[docId]
+
+        def nPresent(s: dict) -> int:
+            try:
+                return int(s.get("n_present", 0) or 0)
+            except (TypeError, ValueError):
+                return 0
+
+        needs = [nPresent(s) > 0 and not s.get("ingest_locations") for s in si]
+        if not any(needs):
+            return si
+        from .filehandler import _manifest_uid, reconstructSeriesIngestLocations
+
+        props = copy.deepcopy(_props(doc))
+        fileInfo = _as_list(props.get("files", {}).get("file_info"))
+        for s, need in zip(si, needs):
+            if not need:
+                continue
+            name = str(s.get("name", ""))
+            manifestUid = _manifest_uid(fileInfo, name)
+            if not manifestUid:
+                raise SessionWriterError(
+                    "NDI:cloud:SessionWriter:noManifest",
+                    f"Series {name} of document {docId} has {nPresent(s)} member(s) but no "
+                    "manifest in its file_info, so which members exist cannot be known.",
+                )
+            p = os.path.join(self.cacheDir, manifestUid)
+            if not os.path.isfile(p):
+                ok, msg = self._api["downloadFile"](self.cloudDatasetId, manifestUid, p)
+                if not ok or not os.path.isfile(p):
+                    raise SessionWriterError(
+                        "NDI:cloud:SessionWriter:downloadFailed",
+                        f"Could not download the manifest {manifestUid} of series {name} of "
+                        f"document {docId}: {_describe(msg)}",
+                    )
+        reconstructSeriesIngestLocations(props, self.cacheDir, self.cloudDatasetId)
+        rebuilt = _series_info_of(props)
+        for s, need in zip(rebuilt, needs):
+            if need and not s.get("ingest_locations"):
+                raise SessionWriterError(
+                    "NDI:cloud:SessionWriter:manifestUnreadable",
+                    f"The manifest of series {s.get('name', '')} of document {docId} "
+                    "could not be read.",
+                )
+        self._adoptedSeries[docId] = rebuilt
+        return rebuilt
 
     def _addNow(self, doc: Any, k: int, n: int) -> None:
         """Upload one document's JSON (series member paths stripped)."""

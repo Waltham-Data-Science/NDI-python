@@ -320,3 +320,133 @@ class TestWaitForDocumentCount:
 
         with pytest.raises(ValidationError):
             docs_api.waitForDocumentCount(CLOUD_ID, -1, client=_make_client())
+
+
+# ---------------------------------------------------------------------------
+# Size-capped batches (documentBatchRanges.m, DocumentBatchRangesTest.m)
+#
+# A 100,000-document upload went out as one 638 MB JSON file in one zip; the
+# server's ingestion Lambda ran out of scratch disk and ingested nothing,
+# while the client reported success.
+# ---------------------------------------------------------------------------
+
+
+class TestDocumentBatchRanges:
+    def test_empty_input_gives_no_batches(self):
+        assert upload.documentBatchRanges([], 10, 100) == []
+
+    def test_count_cap_only(self):
+        assert upload.documentBatchRanges([1] * 5, 2, math.inf) == [[0, 1], [2, 3], [4]]
+
+    def test_byte_cap_only(self):
+        assert upload.documentBatchRanges([40, 40, 40, 40], math.inf, 100) == [[0, 1], [2, 3]]
+
+    def test_byte_cap_is_inclusive(self):
+        assert upload.documentBatchRanges([50, 50, 1], math.inf, 100) == [[0, 1], [2]]
+
+    def test_whichever_cap_comes_first(self):
+        assert upload.documentBatchRanges([10, 10, 10, 95, 10], 3, 100) == [[0, 1, 2], [3], [4]]
+
+    def test_oversized_document_gets_its_own_batch(self):
+        assert upload.documentBatchRanges([10, 500, 10], math.inf, 100) == [[0], [1], [2]]
+
+    def test_every_document_appears_once_in_order(self):
+        import random
+
+        rng = random.Random(7)
+        sizes = [rng.randint(1, 300) for _ in range(1000)]
+        ranges = upload.documentBatchRanges(sizes, 37, 2000)
+        assert [i for r in ranges for i in r] == list(range(1000))
+        for r in ranges:
+            assert len(r) <= 37
+            if len(r) > 1:
+                assert sum(sizes[i] for i in r) <= 2000
+
+    def test_non_positive_caps_are_rejected(self):
+        with pytest.raises(ValueError):
+            upload.documentBatchRanges([1], 0, 100)
+
+
+class TestZipWithDocumentJson:
+    def test_precomputed_json_writes_the_same_array(self, tmp_path):
+        from did.datastructures import json_encode_nan
+
+        docs = [{"base": {"id": "a"}, "x": float("nan")}, {"base": {"id": "b"}, "y": [1, 2]}]
+        p1, ids1 = upload.zip_documents_for_upload(docs, CLOUD_ID, target_folder=tmp_path)
+        p2, ids2 = upload.zip_documents_for_upload(
+            docs,
+            CLOUD_ID,
+            target_folder=tmp_path,
+            document_json=[json_encode_nan(d) for d in docs],
+        )
+        assert ids1 == ids2 == ["a", "b"]
+        with zipfile.ZipFile(p1) as z1, zipfile.ZipFile(p2) as z2:
+            a = json.loads(z1.read(z1.namelist()[0]))
+            b = json.loads(z2.read(z2.namelist()[0]))
+        assert isinstance(b, list) and len(b) == 2
+        assert math.isnan(b[0]["x"]) and b[1] == a[1]
+
+    def test_count_mismatch_is_an_error(self, tmp_path):
+        with pytest.raises(ValueError):
+            upload.zip_documents_for_upload(
+                _docs("a", "b"), CLOUD_ID, target_folder=tmp_path, document_json=["{}"]
+            )
+
+
+class TestSizeCappedBulkUpload:
+    def test_byte_cap_splits_the_zips(self, bulk, monkeypatch):
+        monkeypatch.setattr(docs_api, "countDocuments", _ScriptedCount([0, 4]))
+        docs = [{"base": {"id": i}, "pad": "x" * 100} for i in "abcd"]
+        report = upload.uploadDocumentCollection(
+            CLOUD_ID, docs, only_missing=False, max_chunk=100, max_bytes=350, client=_make_client()
+        )
+        assert bulk.batches == [docs[0:2], docs[2:4]]
+        assert report["status"] == "ok" and report["uploaded"] == 4
+
+    def test_default_size_cap_is_the_preference(self):
+        from ndi import preferences
+
+        assert float(preferences.get("Cloud.Upload.Max_Document_Batch_Size")) == 50_000_000
+
+    def test_nothing_ingested_is_a_failure(self, bulk, monkeypatch, caplog):
+        monkeypatch.setattr(docs_api, "countDocuments", _ScriptedCount([3]))
+        monkeypatch.setattr(
+            docs_api,
+            "waitForDocumentCount",
+            lambda d, expected, **k: {
+                "state": "timeout",
+                "count": 3,
+                "expectedCount": expected,
+                "elapsed": 300.0,
+            },
+        )
+        with caplog.at_level("WARNING", logger="ndi.cloud.upload"):
+            report = upload.uploadDocumentCollection(
+                CLOUD_ID, _docs("a", "b"), only_missing=False, client=_make_client()
+            )
+        assert report["status"] == "partial"
+        assert report["ingestion"]["state"] == "failed"
+        assert report["ingestion"]["countBefore"] == 3
+        assert report["uploaded"] == 0
+        assert report["manifest"] == []
+        assert report["not_ingested"] == ["a", "b"]
+        assert "ingested none of them" in report["errors"][0]
+        assert "ingested none of them" in caplog.text
+
+    def test_unknown_final_count_is_only_a_timeout(self, bulk, monkeypatch):
+        monkeypatch.setattr(docs_api, "countDocuments", _ScriptedCount([3]))
+        monkeypatch.setattr(
+            docs_api,
+            "waitForDocumentCount",
+            lambda d, expected, **k: {
+                "state": "timeout",
+                "count": float("nan"),
+                "expectedCount": expected,
+            },
+        )
+        report = upload.uploadDocumentCollection(
+            CLOUD_ID, _docs("a"), only_missing=False, client=_make_client()
+        )
+        assert report["status"] == "ok"
+        assert report["ingestion"]["state"] == "timeout"
+        assert report["manifest"] == ["a"]

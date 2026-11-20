@@ -227,6 +227,21 @@ class FakeCloudDataset:
         with open(os.path.join(self.fileDir, uid), "rb") as f:
             return f.read()
 
+    def dropFile(self, uid):
+        """Lose a stored file, as a dropped upload batch did in prod:
+        lookupFiles no longer reports it."""
+        p = os.path.join(self.fileDir, uid)
+        if os.path.isfile(p):
+            os.remove(p)
+
+    def storedDocument(self, ndiId):
+        """The document as stored (series ingest_locations stripped), as a
+        download from NDI Cloud returns it."""
+        for d in self.docs:
+            if d["base"]["id"] == ndiId:
+                return ndi_document(copy.deepcopy(d))
+        return None
+
     def _store(self, uid, p):
         dest = os.path.join(self.fileDir, uid)
         shutil.copyfile(p, dest)
@@ -753,6 +768,72 @@ def test_adopt_and_missing_members_for_a_resume(cloud, make_writer, series_doc):
     W2.commit()
     assert len(cloud.docsOfClass("lightsheetZarrLevel")) == 1, "adopt does not re-upload"
     assert W2.missingMembers(d, "nope") == []
+
+
+def test_adopting_a_document_read_back_from_the_cloud_finds_its_missing_members(
+    cloud, make_writer, series_doc
+):
+    # A resume usually adopts documents downloaded from the cloud, whose
+    # series ingest_locations DID stripped before storing. Their member uids
+    # must be rebuilt from the manifest: without them every member looked
+    # present, and a resume rebuilt nothing (a prod pyramid kept 327 lost
+    # chunks this way).
+    W = make_writer()
+    d, data = series_doc(W, cloud.subjectId, 3)
+    W.declare(d)
+    L = locs_of(d)
+    W.streamMembers(d, "chunk.bin", [L[1]["index"]], [L[1]["location"]])
+    W.streamMembers(d, "chunk.bin", [], [])
+
+    stored = cloud.storedDocument(d.id)
+    storedSeries = stored.document_properties["files"]["series_info"]
+    storedSeries = storedSeries[0] if isinstance(storedSeries, list) else storedSeries
+    assert not storedSeries.get("ingest_locations"), "the stored document carries no member uids"
+    W2 = make_writer()
+    W2.adopt(stored)
+    missing = W2.missingMembers(stored, "chunk.bin")
+    assert sorted(missing) == sorted([L[0]["index"], L[2]["index"]])
+    W2.streamMembers(
+        stored, "chunk.bin", [L[0]["index"], L[2]["index"]], [L[0]["location"], L[2]["location"]]
+    )
+    W2.commit()
+    for x in L:
+        assert cloud.fileBytes(x["uid"]) == data[int(x["index"]) - 1]
+    assert len(cloud.docsOfClass("lightsheetZarrLevel")) == 1, "adopt does not re-upload"
+
+
+def test_a_member_of_an_adopted_stored_document_can_be_opened(cloud, make_writer, series_doc):
+    # A later level reads an adopted level's chunks through
+    # database_openbinarydoc; for a document read back from the cloud that
+    # needs the rebuilt member uids too.
+    W = make_writer()
+    d, data = series_doc(W, cloud.subjectId, 2)
+    W.declare(d)
+    L = locs_of(d)
+    W.streamMembers(d, "chunk.bin", [x["index"] for x in L], [x["location"] for x in L])
+    W.commit()
+
+    stored = cloud.storedDocument(d.id)
+    W2 = make_writer()
+    W2.adopt(stored)
+    assert W2.missingMembers(stored, "chunk.bin") == []
+    i = int(L[1]["index"])
+    f = W2.database_openbinarydoc(stored, f"chunk.bin_{i}")
+    with open(f.name, "rb") as h:
+        assert h.read() == data[i - 1]
+
+
+def test_a_stored_series_without_its_manifest_is_refused(cloud, make_writer, series_doc):
+    # Which members exist cannot be known without the manifest: an error,
+    # not a guess that every member is present.
+    W = make_writer()
+    d, _ = series_doc(W, cloud.subjectId, 2)
+    W.declare(d)
+    stored = cloud.storedDocument(d.id)
+    cloud.dropFile(manifest_uid(d))
+    W2 = make_writer()
+    with pytest.raises(SessionWriterError, match="manifest"):
+        W2.adopt(stored)
 
 
 def test_a_cached_copy_a_power_cut_shortened_is_fetched_again(cloud, make_writer, series_doc):

@@ -1159,7 +1159,7 @@ classes:
   - name: preferences
     type: class
     matlab_path: "+ndi/preferences.m"
-    matlab_last_sync_hash: "f9878d584"
+    matlab_last_sync_hash: "ec25d3c"
     python_path: "ndi/preferences.py"
     python_class: "ndi_preferences"
     inherits: ""
@@ -1237,6 +1237,10 @@ classes:
       keys, defaults and descriptions as MATLAB. Only
       GUI.LightsheetManager.ViewerLauncher stays unregistered (read only by
       the MATLAB-only LightsheetManager).
+      2026-11-14: NDI-matlab ec25d3c (VH-Lab/NDI-matlab#1247) registers
+      Cloud.Upload.Max_Document_Batch_Size (default 50 MB): the byte cap on one bulk
+      document upload batch. Ported with the same key and default (type float,
+      like Max_File_Batch_Size); ndi.cloud.upload.uploadDocumentCollection reads it.
 
     properties:
       - name: Items
