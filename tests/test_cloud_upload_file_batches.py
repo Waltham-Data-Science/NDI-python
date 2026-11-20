@@ -104,6 +104,18 @@ class _Server:
         monkeypatch.setattr(files_api, "putFiles", _put)
         monkeypatch.setattr(files_api, "waitForBulkUpload", _wait)
 
+        # The server records every file of the zips it unpacked; a test can
+        # make it drop some (self.unrecorded) to stand for a failed batch step.
+        self.unrecorded: set[str] = set()
+        self.record_waits: list[list[str]] = []
+
+        def _wait_records(dataset_id, uids, timeout=120.0, client=None, **kwargs):
+            self.record_waits.append(list(uids))
+            pending = [u for u in uids if u in self.unrecorded]
+            return {"state": "timeout" if pending else "complete", "pending": pending}
+
+        monkeypatch.setattr(files_api, "waitForFileUpload", _wait_records)
+
 
 def _zip(manifest, **kwargs):
     kwargs.setdefault("retry_pause", 0)
@@ -317,6 +329,71 @@ class TestTheStrategySwitch:
         assert report["uploaded"] == 1 and report["failed"] == 1
         assert "not recorded by NDI Cloud" in report["errors"][0]
         assert len(report["failed_document_ids"]) == 1
+
+    def _single_file_resends(self, monkeypatch, server, *, records=True):
+        """Single-file uploads (the resends) next to the server's zip PUTs."""
+        resent = []
+        zip_put = files_api.putFiles
+        monkeypatch.setattr(
+            files_api, "getFileUploadURL", lambda org, ds, uid, client=None: f"https://s3/{uid}"
+        )
+
+        def _put(url, path, **kwargs):
+            if not url.startswith("https://s3/"):
+                return zip_put(url, path, **kwargs)
+            uid = url.rsplit("/", 1)[1]
+            resent.append(uid)
+            if records:
+                server.unrecorded.discard(uid)
+            return True
+
+        monkeypatch.setattr(files_api, "putFiles", _put)
+        return resent
+
+    def test_batch_confirms_every_file_was_recorded(self, monkeypatch, tmp_path):
+        server = _Server(monkeypatch)
+        upload.uploadFilesForDatasetDocuments(
+            "org-1", CLOUD_ID, self._docs(tmp_path), client=_Client()
+        )
+        assert server.record_waits == [["uid-a", "uid-b"]]
+
+    def test_batch_resends_a_file_the_server_dropped(self, monkeypatch, tmp_path):
+        """ndi-cloud-node#175: the zip arrived, but the server never recorded uid-b."""
+        server = _Server(monkeypatch)
+        server.unrecorded = {"uid-b"}
+        resent = self._single_file_resends(monkeypatch, server)
+        report = upload.uploadFilesForDatasetDocuments(
+            "org-1", CLOUD_ID, self._docs(tmp_path), client=_Client()
+        )
+        assert resent == ["uid-b"]
+        assert report["uploaded"] == 2 and report["failed"] == 0
+        assert report["failed_document_ids"] == []
+
+    def test_batch_counts_a_file_never_recorded_as_failed(self, monkeypatch, tmp_path):
+        server = _Server(monkeypatch)
+        server.unrecorded = {"uid-b"}
+        resent = self._single_file_resends(monkeypatch, server, records=False)
+        report = upload.uploadFilesForDatasetDocuments(
+            "org-1", CLOUD_ID, self._docs(tmp_path), client=_Client()
+        )
+        assert resent == ["uid-b"]
+        assert report["uploaded"] == 1 and report["failed"] == 1
+        assert report["failed_document_ids"] == ["b"]
+        assert "not recorded by NDI Cloud" in report["errors"][-1]
+
+    def test_batch_does_not_confirm_files_of_a_failed_batch(self, monkeypatch, tmp_path):
+        server = _Server(monkeypatch, job_states=["failed"])
+        upload.uploadFilesForDatasetDocuments(
+            "org-1", CLOUD_ID, self._docs(tmp_path), client=_Client()
+        )
+        assert server.record_waits == [], "a failed batch is already reported"
+
+    def test_verification_can_be_turned_off(self, monkeypatch, tmp_path):
+        server = _Server(monkeypatch)
+        upload.uploadFilesForDatasetDocuments(
+            "org-1", CLOUD_ID, self._docs(tmp_path), verify_uploads=False, client=_Client()
+        )
+        assert server.record_waits == []
 
     def test_an_unknown_strategy_is_refused(self, tmp_path):
         with pytest.raises(ValueError):
