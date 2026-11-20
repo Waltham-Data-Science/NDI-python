@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **File uploads confirm NDI Cloud recorded every file, and resend what it
+  did not** (`ndi.cloud.upload.confirmFilesRecorded`,
+  `uploadFilesForDatasetDocuments(verify_uploads=..., verify_stall_timeout=...)`,
+  MATLAB VH-Lab/NDI-matlab#1297). A batch (zip) upload reported success once
+  the zips reached S3, but the server records their files in a later step
+  that can fail unheard (a dataset lost 327 files this way,
+  ndi-cloud-node#175). After both the `'batch'` and `'serial'` strategies the
+  sent files are now waited for while records keep arriving (up to
+  `verify_stall_timeout`, default 900 s, without progress), any still
+  unrecorded are uploaded again one at a time, and files never recorded
+  count as failed, so their documents are kept out of the sync index.
+  `'serial'` previously waited 120 s and failed without resending.
+
 - **Navigator: NDI Cloud login indicator** (`ndi.gui.nav.cloud_pane`, MATLAB
   VH-Lab/NDI-matlab@579176c88). The NDI Cloud pane gains a small button that is
   green when logged in (an unexpired `NDI_CLOUD_TOKEN`), yellow when a profile
