@@ -134,6 +134,20 @@ class TestPacking:
         assert report["uploaded"] == 3
         assert report["failed"] == 0
 
+    def test_a_batch_ends_at_the_count_limit(self, monkeypatch, tmp_path):
+        # NDI Cloud never recorded a zip of 10,165 small files (84 MB, well
+        # under the size cap); batches are capped by count too.
+        server = _Server(monkeypatch)
+        manifest = _manifest(tmp_path, dict.fromkeys("abcde", 1))
+        report = _zip(manifest, size_limit=1e9, count_limit=2)
+        assert [len(z) for z in server.zips] == [2, 2, 1]
+        assert report["uploaded"] == 5
+
+    def test_a_non_positive_count_limit_is_refused(self, monkeypatch, tmp_path):
+        _Server(monkeypatch)
+        with pytest.raises(ValueError):
+            _zip(_manifest(tmp_path, {"a": 1}), count_limit=0)
+
     def test_a_file_bigger_than_the_limit_goes_up_alone(self, monkeypatch, tmp_path):
         server = _Server(monkeypatch)
         manifest = _manifest(tmp_path, {"a": 10, "big": 500, "c": 10})
@@ -186,6 +200,21 @@ class TestTheLimitComesFromThePreference:
     def test_the_default_preference_is_250_mb(self, tmp_path):
         prefs = ndi.preferences.ndi_preferences(tmp_path / "prefs.json")
         assert prefs.get("Cloud.Upload.Max_File_Batch_Size") == 250_000_000
+
+    def test_the_default_count_preference_is_2000(self, tmp_path):
+        prefs = ndi.preferences.ndi_preferences(tmp_path / "prefs.json")
+        assert prefs.get("Cloud.Upload.Max_File_Batch_Count") == 2000
+
+    def test_no_count_limit_reads_max_file_batch_count(self, monkeypatch, tmp_path):
+        server = _Server(monkeypatch)
+        real_get = ndi.preferences.get
+        monkeypatch.setattr(
+            ndi.preferences,
+            "get",
+            lambda path: 2 if path == "Cloud.Upload.Max_File_Batch_Count" else real_get(path),
+        )
+        _zip(_manifest(tmp_path, {"a": 1, "b": 1, "c": 1}))
+        assert [sorted(z) for z in server.zips] == [["uid-a", "uid-b"], ["uid-c"]]
 
 
 class TestFailuresNameTheirDocuments:

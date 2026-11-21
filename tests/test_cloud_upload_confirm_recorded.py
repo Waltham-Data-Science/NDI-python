@@ -31,8 +31,17 @@ class FakeRecordingServer:
     in throw_on_resend (as an upload of a missing local file does).
     """
 
-    def __init__(self, schedule=(), never_record=(), refuse_resend=(), throw_on_resend=()):
+    def __init__(
+        self,
+        schedule=(),
+        never_record=(),
+        refuse_resend=(),
+        throw_on_resend=(),
+        fail_batch_resend=False,
+    ):
         self.schedule = [list(s) for s in schedule]
+        self.fail_batch_resend = fail_batch_resend
+        self.batch_resends: list[list[str]] = []
         self.never_record = set(never_record)
         self.refuse_resend = set(refuse_resend)
         self.throw_on_resend = set(throw_on_resend)
@@ -59,9 +68,25 @@ class FakeRecordingServer:
             self.recorded.add(uid)
         return True, ""
 
+    def resend_batch(self, ids, paths):
+        self.batch_resends.append(list(ids))
+        self.resent.extend(ids)
+        self.recorded.update(u for u in ids if u not in self.never_record)
+        if self.fail_batch_resend:
+            return False, "batch refused by the fake"
+        return True, ""
+
 
 def confirm(S, uids=UIDS, paths=PATHS, **kw):
-    return upload.confirmFilesRecorded("d", uids, paths, wait_fcn=S.wait, resend_fcn=S.resend, **kw)
+    return upload.confirmFilesRecorded(
+        "d",
+        uids,
+        paths,
+        wait_fcn=S.wait,
+        resend_fcn=S.resend,
+        resend_batch_fcn=S.resend_batch,
+        **kw,
+    )
 
 
 def test_everything_recorded_needs_one_look():
@@ -115,6 +140,55 @@ def test_a_resend_that_raises_is_reported_not_raised():
     assert not r["ok"]
     assert r["pending"] == ["c"]
     assert "/p/c" in r["resend_errors"][0]
+
+
+def test_many_unrecorded_files_are_resent_as_zip_batches():
+    # One at a time is far too slow at scale (10,165 files did not finish in
+    # 40 minutes); past single_file_limit they go as zips.
+    S = FakeRecordingServer(schedule=[["a"]])
+    r = confirm(S, single_file_limit=1)
+    assert r["ok"]
+    assert S.batch_resends == [["b", "c"]]
+    assert r["resent"] == ["b", "c"]
+
+
+def test_a_failed_zip_resend_is_reported_but_still_waited_for():
+    # A failed batch may have sent some files: what did arrive counts.
+    S = FakeRecordingServer(never_record=["c"], fail_batch_resend=True)
+    r = confirm(S, single_file_limit=0)
+    assert not r["ok"]
+    assert r["pending"] == ["c"]
+    assert "batch refused by the fake" in r["resend_errors"][0]
+
+
+def test_resent_files_are_waited_for_while_records_arrive():
+    S = FakeRecordingServer(schedule=[["a"], [], ["b"], ["c"]], never_record=["b", "c"])
+    r = confirm(S, stall_timeout=7, resend_timeout=3)
+    assert r["ok"]
+    assert S.wait_timeouts == [7, 7, 3, 3]
+
+
+def test_the_default_batch_resend_is_a_capped_zip_upload(monkeypatch, tmp_path):
+    for u in UIDS:
+        (tmp_path / u).write_bytes(b"x")
+    calls = []
+
+    def _zip(manifest, dataset_id, **kw):
+        calls.append(([e["file_uid"] for e in manifest], kw.get("org_id")))
+        return {"uploaded": len(manifest), "failed": 0, "errors": [], "failed_document_ids": []}
+
+    monkeypatch.setattr(upload, "zipForUpload", _zip)
+    S = FakeRecordingServer(schedule=[[], UIDS])
+    r = upload.confirmFilesRecorded(
+        "d",
+        UIDS,
+        [str(tmp_path / u) for u in UIDS],
+        org_id="org-1",
+        wait_fcn=S.wait,
+        single_file_limit=1,
+    )
+    assert r["ok"]
+    assert calls == [(UIDS, "org-1")]
 
 
 def test_duplicate_uids_are_checked_once():

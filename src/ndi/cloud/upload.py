@@ -401,6 +401,7 @@ def zipForUpload(
     *,
     org_id: str = "",
     size_limit: float | None = None,
+    count_limit: int | None = None,
     number_retries: int = 3,
     completion_timeout: float = 300.0,
     retry_pause: float = 5.0,
@@ -438,6 +439,10 @@ def zipForUpload(
             *dataset_id*, read from the dataset record.
         size_limit: Maximum batch size in bytes. ``None`` (default) reads the
             preference ``Cloud.Upload.Max_File_Batch_Size``.
+        count_limit: Maximum number of files in a batch. ``None`` (default)
+            reads the preference ``Cloud.Upload.Max_File_Batch_Count`` (2000).
+            NDI Cloud unpacks and records a batch in one time-limited step;
+            a zip of ~10,000 small files outran it.
         number_retries: Attempts at getting the upload URL and at the PUT.
         completion_timeout: Seconds to wait for each batch's server-side
             extraction job.
@@ -461,6 +466,12 @@ def zipForUpload(
         size_limit = float(preferences.get("Cloud.Upload.Max_File_Batch_Size"))
     if size_limit <= 0:
         raise ValueError(f"size_limit must be positive (got {size_limit!r})")
+    if count_limit is None:
+        from .. import preferences
+
+        count_limit = int(preferences.get("Cloud.Upload.Max_File_Batch_Count"))
+    if count_limit <= 0:
+        raise ValueError(f"count_limit must be positive (got {count_limit!r})")
 
     report: dict[str, Any] = {
         "uploaded": 0,
@@ -498,7 +509,7 @@ def zipForUpload(
     current_size = 0
     for entry in file_manifest:
         fb = _size(entry)
-        if current and current_size + fb > size_limit:
+        if current and (current_size + fb > size_limit or len(current) >= count_limit):
             batches.append(current)
             current, current_size = [], 0
         current.append(entry)
@@ -602,9 +613,11 @@ def confirmFilesRecorded(
     org_id: str = "",
     stall_timeout: float = 900.0,
     resend_timeout: float = 300.0,
+    single_file_limit: int = 20,
     verbose: bool = False,
     wait_fcn: Callable[[list[str], float], dict[str, Any]] | None = None,
     resend_fcn: Callable[[str, str], tuple[bool, str]] | None = None,
+    resend_batch_fcn: Callable[[list[str], list[str]], tuple[bool, str]] | None = None,
     client: CloudClient | None = None,
 ) -> dict[str, Any]:
     """Make sure NDI Cloud recorded every file an upload sent.
@@ -614,17 +627,21 @@ def confirmFilesRecorded(
     A batch (zip) upload succeeding only means S3 has the zip. The server
     then unpacks it and records each file in a separate step, and that step
     can fail after the client has moved on: a dataset lost 327 files this
-    way (ndi-cloud-node#175). Since that fix the server keeps such files as
-    not uploaded, so the loss is visible -- this function is where the
-    client looks.
+    way (ndi-cloud-node#175), and a zip of ~10,000 small files outran the
+    step's time limit with none recorded. Since that fix the server keeps
+    such files as not uploaded, so the loss is visible -- this function is
+    where the client looks.
 
     1. Wait until every uid is recorded as uploaded. Waiting goes on while
        the count still to record keeps falling, and stops after
        *stall_timeout* seconds in which none was recorded.
-    2. Upload each file still unrecorded again, one at a time, from *paths*
-       (``paths[k]`` is the local copy of ``uids[k]``).
-    3. Wait for those (*resend_timeout* seconds); any still unrecorded is a
-       failure, listed in ``pending``.
+    2. Upload the files still unrecorded again from *paths* (``paths[k]``
+       is the local copy of ``uids[k]``): one at a time when there are at
+       most *single_file_limit*, otherwise as zip batches
+       (:func:`zipForUpload`, capped by ``Cloud.Upload.Max_File_Batch_Count``
+       and ``Max_File_Batch_Size``).
+    3. Wait for those the same way, with *resend_timeout* as the stall
+       limit; any still unrecorded is a failure, listed in ``pending``.
 
     Args:
         dataset_id: Cloud dataset ID.
@@ -633,13 +650,17 @@ def confirmFilesRecorded(
         org_id: Organisation ID for the resend URLs; ``""`` looks it up.
         stall_timeout: Seconds without a single newly recorded file before
             resending. Default 900, the server's batch step's own time limit.
-        resend_timeout: Seconds to wait for the resent files to be recorded.
+        resend_timeout: The same, after resending. Default 300.
+        single_file_limit: Resend one at a time up to this many files; more
+            go as zip batches. Default 20.
         verbose: Print progress.
         wait_fcn: Seam for tests: ``wait_fcn(uids, timeout)`` returning a dict
             with ``state`` and ``pending``, as
             :func:`ndi.cloud.api.files.waitForFileUpload`.
         resend_fcn: Seam for tests: ``resend_fcn(uid, path)`` returning
             ``(ok, message)``; by default a single-file upload.
+        resend_batch_fcn: Seam for tests: ``resend_batch_fcn(uids, paths)``
+            returning ``(ok, message)``; by default :func:`zipForUpload`.
         client: Authenticated cloud client (auto-created if omitted).
 
     Returns:
@@ -676,9 +697,39 @@ def confirmFilesRecorded(
             files_api.putFiles(url, path)
             return True, ""
 
+    if resend_batch_fcn is None:
+
+        def resend_batch_fcn(ids: list[str], ps: list[str]) -> tuple[bool, str]:
+            # A zip entry is named by its uid, as in any batch upload.
+            sent = zipForUpload(
+                [{"file_uid": u, "file_path": p} for u, p in zip(ids, ps)],
+                dataset_id,
+                org_id=org_id,
+                verbose=verbose,
+                client=client,
+            )
+            return (not sent["failed"]), "; ".join(sent["errors"])
+
     def say(text: str) -> None:
         if verbose:
             print(f"[confirmFilesRecorded] {text}", flush=True)
+
+    def wait_while_recording(ids: list[str], timeout: float) -> list[str]:
+        # Wait for as long as the count still pending keeps falling; return
+        # those still pending after *timeout* seconds with none recorded.
+        pending = list(ids)
+        while True:
+            answer = wait_fcn(pending, timeout)
+            if answer.get("state") == "complete":
+                return []
+            still = [str(u) for u in answer.get("pending", [])]
+            if len(still) >= len(pending):
+                return still
+            pending = still
+            say(
+                f"{len(ids) - len(pending)} of {len(ids)} file(s) recorded by NDI Cloud "
+                "so far; waiting."
+            )
 
     result: dict[str, Any] = {
         "ok": True,
@@ -691,41 +742,40 @@ def confirmFilesRecorded(
         return result
 
     # 1. Wait while the server keeps recording.
-    pending = uids
-    while True:
-        answer = wait_fcn(pending, stall_timeout)
-        if answer.get("state") == "complete":
-            return result
-        still = [str(u) for u in answer.get("pending", [])]
-        if len(still) >= len(pending):
-            pending = still
-            break  # nothing recorded for stall_timeout seconds
-        pending = still
-        say(f"{len(uids) - len(pending)} of {len(uids)} uploaded file(s) recorded so far; waiting.")
+    pending = wait_while_recording(uids, stall_timeout)
+    if not pending:
+        return result
 
-    # 2. Upload the unrecorded files again, one at a time.
+    # 2. Upload the unrecorded files again.
+    sent: list[str] = []
+    how = "one at a time" if len(pending) <= single_file_limit else "in zip batches"
     say(
         f"NDI Cloud has not recorded {len(pending)} of {len(uids)} uploaded file(s) after "
-        f"{stall_timeout:.0f} s without progress; uploading them again one at a time."
+        f"{stall_timeout:.0f} s without progress; uploading them again {how}."
     )
-    sent: list[str] = []
-    for uid in pending:
+    if len(pending) <= single_file_limit:
+        for uid in pending:
+            try:
+                ok, msg = resend_fcn(uid, path_of.get(uid, ""))
+            except Exception as exc:  # noqa: BLE001 - e.g. the local copy is gone
+                ok, msg = False, str(exc)
+            if ok:
+                sent.append(uid)
+            else:
+                result["resend_errors"].append(f"{uid}: {msg}")
+    else:
         try:
-            ok, msg = resend_fcn(uid, path_of.get(uid, ""))
-        except Exception as exc:  # noqa: BLE001 - e.g. the local copy is gone
+            ok, msg = resend_batch_fcn(pending, [path_of.get(u, "") for u in pending])
+        except Exception as exc:  # noqa: BLE001
             ok, msg = False, str(exc)
-        if ok:
-            sent.append(uid)
-        else:
-            result["resend_errors"].append(f"{uid}: {msg}")
+        if not ok:
+            # A failed batch may have sent some of them; wait for all.
+            result["resend_errors"].append(f"zip batch resend: {msg}")
+        sent = list(pending)
     result["resent"] = sent
 
     # 3. Wait for the resent files.
-    still = []
-    if sent:
-        answer = wait_fcn(sent, resend_timeout)
-        if answer.get("state") != "complete":
-            still = [str(u) for u in answer.get("pending", [])]
+    still = wait_while_recording(sent, resend_timeout) if sent else []
     result["pending"] = [u for u in pending if u not in sent] + still
     result["ok"] = not result["pending"]
     if result["ok"]:

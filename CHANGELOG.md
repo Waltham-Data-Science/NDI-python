@@ -21,6 +21,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   count as failed, so their documents are kept out of the sync index.
   `'serial'` previously waited 120 s and failed without resending.
 
+- **File batch uploads are capped at 2000 files** (new preference
+  `Cloud.Upload.Max_File_Batch_Count`; `zipForUpload(count_limit=...)`, MATLAB
+  VH-Lab/NDI-matlab#1297). Batches were capped only by bytes (250 MB), so
+  10,000 small files went up as one zip, and NDI Cloud never recorded any of
+  them: it unpacks and records a batch in one time-limited step. Files still
+  unrecorded after an upload are resent as capped zip batches, or one at a
+  time when there are at most 20.
+
 - **Navigator: NDI Cloud login indicator** (`ndi.gui.nav.cloud_pane`, MATLAB
   VH-Lab/NDI-matlab@579176c88). The NDI Cloud pane gains a small button that is
   green when logged in (an unexpired `NDI_CLOUD_TOKEN`), yellow when a profile

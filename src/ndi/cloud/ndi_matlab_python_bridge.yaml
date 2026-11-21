@@ -989,7 +989,7 @@ functions:
 
   - name: zipForUpload
     matlab_path: "+ndi/+cloud/+upload/zipForUpload.m"
-    matlab_last_sync_hash: "7180cc8"
+    matlab_last_sync_hash: "0be6cfed3"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: file_manifest
@@ -1004,6 +1004,10 @@ functions:
       - name: size_limit
         type_matlab: "double (SizeLimit)"
         type_python: "float | None"
+        default: "None"
+      - name: count_limit
+        type_matlab: "double (CountLimit)"
+        type_python: "int | None"
         default: "None"
       - name: number_retries
         type_matlab: "double (numberRetries)"
@@ -1026,6 +1030,11 @@ functions:
       - name: report
         type_python: "dict[str, Any]"
     decision_log: >
+      2026-11-21: NDI-matlab 0be6cfed3 (VH-Lab/NDI-matlab#1297). A batch also ends
+      at count_limit files (None = the Cloud.Upload.Max_File_Batch_Count
+      preference, 2000): NDI Cloud never recorded a zip of 10,165 small
+      files (84 MB, under the size cap). MATLAB also dropped an unused read
+      of D.path; Python's port never took a dataset.
       2026-10-17: REPLACED. The function that lived here zipped document JSON,
       had no caller in src, and so was a port of nothing (see the 2026-09-08
       note below). It is now a port of what MATLAB's zipForUpload actually
@@ -1994,7 +2003,7 @@ porting_deferred:
 
   - name: confirmFilesRecorded
     matlab_path: "+ndi/+cloud/+upload/+internal/confirmFilesRecorded.m"
-    matlab_last_sync_hash: "63e56ae14"
+    matlab_last_sync_hash: "0be6cfed3"
     python_path: "ndi/cloud/upload.py"
     input_arguments:
       - name: dataset_id
@@ -2017,6 +2026,10 @@ porting_deferred:
         type_matlab: "double (ResendTimeout)"
         type_python: "float"
         default: "300.0"
+      - name: single_file_limit
+        type_matlab: "double (SingleFileLimit)"
+        type_python: "int"
+        default: "20"
       - name: verbose
         type_matlab: "logical (Verbose)"
         type_python: "bool"
@@ -2029,6 +2042,10 @@ porting_deferred:
         type_matlab: "function_handle (ResendFcn)"
         type_python: "Callable | None"
         default: "None"
+      - name: resend_batch_fcn
+        type_matlab: "function_handle (ResendBatchFcn)"
+        type_python: "Callable | None"
+        default: "None"
       - name: client
         type_python: "CloudClient | None"
         default: "None"
@@ -2037,6 +2054,10 @@ porting_deferred:
         type_matlab: "[ok, report]"
         type_python: "dict[str, Any]"
     decision_log: >
+      2026-11-21: NDI-matlab 0be6cfed3. More than single_file_limit unrecorded
+      files are resent as zip batches (zipForUpload, capped by count and
+      size) instead of one at a time, which did not finish 10,165 files in
+      40 minutes; after resending it waits while records keep arriving.
       2026-11-20: new in NDI-matlab 63e56ae14 (VH-Lab/NDI-matlab#1297). Waits
       while NDI Cloud keeps recording the files an upload sent, uploads again
       (one at a time) any it stops recording, and reports those still
