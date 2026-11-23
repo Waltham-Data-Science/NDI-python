@@ -1159,12 +1159,14 @@ classes:
   - name: preferences
     type: class
     matlab_path: "+ndi/preferences.m"
-    matlab_last_sync_hash: "ec25d3c"
+    matlab_last_sync_hash: "0be6cfed3"
     python_path: "ndi/preferences.py"
     python_class: "ndi_preferences"
     inherits: ""
 
     decision_log: >
+      2026-11-21: NDI-matlab 0be6cfed3 adds Cloud.Upload.Max_File_Batch_Count
+      (2000), ported with the same key and default.
       matlab and python both persist to ~/.ndi/NDI_Preferences.json on
       all platforms (synchronized 2026-05-11).
       NDI-matlab 9a9150e7c and the two commits before it add preference items:

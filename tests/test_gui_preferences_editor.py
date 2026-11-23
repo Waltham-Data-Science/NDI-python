@@ -244,6 +244,7 @@ class TestState:
             "Cloud.Upload.Max_Document_Batch_Count",
             "Cloud.Upload.Max_Document_Batch_Size",
             "Cloud.Upload.Max_File_Batch_Size",
+            "Cloud.Upload.Max_File_Batch_Count",
             "Cloud.Upload.Send_Batches_As_Zip",
             "Cloud.Upload.Parallel_Uploads",
         ]
@@ -255,6 +256,7 @@ class TestState:
             "Max_Document_Batch_Count",
             "Max_Document_Batch_Size",
             "Max_File_Batch_Size",
+            "Max_File_Batch_Count",
             "Send_Batches_As_Zip",
             "Parallel_Uploads",
         ]
@@ -442,6 +444,7 @@ class TestWindow:
         assert [lbl.text() for lbl in editor.row_labels.values()] == [
             "Max_Document_Batch_Count",
             "Max_File_Batch_Size",
+            "Max_File_Batch_Count",
             "Send_Batches_As_Zip",
             "Parallel_Uploads",
         ]

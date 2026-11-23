@@ -224,6 +224,18 @@ class ndi_preferences:
             "float",
             "Maximum size of file batch upload in bytes (default 250 MB).",
         )
+        self._add_item(
+            "Cloud",
+            "Upload",
+            "Max_File_Batch_Count",
+            2000,
+            "int",
+            "Maximum number of files in one file batch (zip) upload (default "
+            "2000). A batch ends at this many files or at Max_File_Batch_Size "
+            "bytes, whichever comes first. NDI Cloud unpacks and records each "
+            "batch in one step with a time limit; a zip of ~10,000 small files "
+            "outran it and none of its files were recorded.",
+        )
         # The two streamed-upload items NDI-matlab registers for
         # ndi.cloud.upload.SessionWriter, same keys and defaults, so one
         # setting governs either language's writer.
